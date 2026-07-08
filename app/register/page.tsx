@@ -1,19 +1,19 @@
 'use client'
-
 import { useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://znfsxpmmlxezzeasjtqa.supabase.co'
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpuZnN4cG1tbHhlenplYXNqdHFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxOTY2MTYsImV4cCI6MjA5ODc3MjYxNn0.D1VG1_3adZRcj3Bd19mJJj9lFa3-YytksaULXuWW1Pk'
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    category: ''
+    categoria: '',
+    genero: ''
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -22,33 +22,35 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError('')
     setMessage('')
+    setError('')
 
-    const { data, error } = await supabase
-      .from('players')
-      .insert([
-        {
+    try {
+      const { error } = await supabase
+        .from('players')
+        .insert([{
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
-          category: formData.category,
-        }
-      ])
+          categoria: formData.categoria,
+          genero: formData.genero
+        }])
 
-    if (error) {
-      setError('Error al registrar: ' + error.message)
-    } else {
-      setMessage('✅ ¡Registro exitoso! Bienvenido/a a la Escalera Challenger.')
-      setFormData({ name: '', email: '', phone: '', category: '' })
+      if (error) throw error
+
+      setMessage('✅ ¡Registro exitoso! Bienvenido al Club HGV Tennis')
+      setFormData({ name: '', email: '', phone: '', categoria: '', genero: '' })
+    } catch (err: any) {
+      setError('❌ Error al registrar: ' + err.message)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #1a3a5c 0%, #2d6a4f 100%)',
+      background: 'linear-gradient(135deg, #1a472a 0%, #2d5a27 50%, #1a472a 100%)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -59,138 +61,172 @@ export default function RegisterPage() {
         borderRadius: '16px',
         padding: '40px',
         width: '100%',
-        maxWidth: '480px',
+        maxWidth: '500px',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }}>
+        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h1 style={{ color: '#1a3a5c', fontSize: '28px', fontWeight: 'bold' }}>
-            HGV Tennis Club
+          <h1 style={{ color: '#1a472a', fontSize: '28px', fontWeight: 'bold' }}>
+            🎾 HGV Tennis Club
           </h1>
-          <p style={{ color: '#666', marginTop: '8px' }}>
-            Registro en la Escalera Challenger
-          </p>
+          <h2 style={{ color: '#555', fontSize: '18px', marginTop: '8px' }}>
+            Registro de Jugador
+          </h2>
         </div>
 
-        {error && (
-          <div style={{
-            background: '#fee2e2',
-            color: '#991b1b',
-            padding: '12px',
-            borderRadius: '8px',
-            marginBottom: '20px',
-            textAlign: 'center'
-          }}>
-            ❌ {error}
-          </div>
-        )}
-
-        {message && (
-          <div style={{
-            background: '#dcfce7',
-            color: '#166534',
-            padding: '12px',
-            borderRadius: '8px',
-            marginBottom: '20px',
-            textAlign: 'center'
-          }}>
-            {message}
-          </div>
-        )}
-
         <form onSubmit={handleSubmit}>
+          {/* Nombre */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>
-              Nombre completo *
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
+              👤 Nombre Completo *
             </label>
             <input
               type="text"
               required
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              placeholder="Ej: Juan García"
               style={{
                 width: '100%',
                 padding: '12px',
-                border: '2px solid #e5e7eb',
+                border: '2px solid #ddd',
                 borderRadius: '8px',
                 fontSize: '16px',
                 boxSizing: 'border-box'
               }}
-              placeholder="Tu nombre completo"
             />
           </div>
 
+          {/* Email */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>
-              Email *
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
+              📧 Email *
             </label>
             <input
               type="email"
               required
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              placeholder="Ej: juan@email.com"
               style={{
                 width: '100%',
                 padding: '12px',
-                border: '2px solid #e5e7eb',
+                border: '2px solid #ddd',
                 borderRadius: '8px',
                 fontSize: '16px',
                 boxSizing: 'border-box'
               }}
-              placeholder="tu@email.com"
             />
           </div>
 
+          {/* Teléfono */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>
-              Teléfono
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
+              📱 Teléfono *
             </label>
             <input
               type="tel"
+              required
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              placeholder="Ej: +34 612 345 678"
               style={{
                 width: '100%',
                 padding: '12px',
-                border: '2px solid #e5e7eb',
+                border: '2px solid #ddd',
                 borderRadius: '8px',
                 fontSize: '16px',
                 boxSizing: 'border-box'
               }}
-              placeholder="+34 600 000 000"
             />
           </div>
 
-          <div style={{ marginBottom: '30px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>
-              Categoría *
+          {/* Género */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
+              👥 Género *
             </label>
             <select
               required
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              value={formData.genero}
+              onChange={(e) => setFormData({...formData, genero: e.target.value})}
               style={{
                 width: '100%',
                 padding: '12px',
-                border: '2px solid #e5e7eb',
+                border: '2px solid #ddd',
                 borderRadius: '8px',
                 fontSize: '16px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                background: 'white'
               }}
             >
-              <option value="">Selecciona una categoría</option>
-              <option value="masculino">🎾 Masculino</option>
-              <option value="femenino">🎾 Femenino</option>
-              <option value="mixto">🎾 Mixto</option>
+              <option value="">-- Selecciona tu género --</option>
+              <option value="Masculino">♂️ Masculino</option>
+              <option value="Femenino">♀️ Femenino</option>
             </select>
           </div>
 
+          {/* Categoría */}
+          <div style={{ marginBottom: '30px' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
+              🏆 Categoría *
+            </label>
+            <select
+              required
+              value={formData.categoria}
+              onChange={(e) => setFormData({...formData, categoria: e.target.value})}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '2px solid #ddd',
+                borderRadius: '8px',
+                fontSize: '16px',
+                boxSizing: 'border-box',
+                background: 'white'
+              }}
+            >
+              <option value="">-- Selecciona tu categoría --</option>
+              <option value="Sexta Novato">🥉 Sexta Novato</option>
+              <option value="Sexta">🎾 Sexta</option>
+              <option value="Quinta">🥈 Quinta</option>
+              <option value="Cuarta">🥇 Cuarta</option>
+            </select>
+          </div>
+
+          {/* Mensajes */}
+          {message && (
+            <div style={{
+              background: '#d4edda',
+              color: '#155724',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              textAlign: 'center'
+            }}>
+              {message}
+            </div>
+          )}
+          {error && (
+            <div style={{
+              background: '#f8d7da',
+              color: '#721c24',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              textAlign: 'center'
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* Botón */}
           <button
             type="submit"
             disabled={loading}
             style={{
               width: '100%',
               padding: '14px',
-              background: loading ? '#94a3b8' : '#1a3a5c',
+              background: loading ? '#ccc' : '#1a472a',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -202,6 +238,13 @@ export default function RegisterPage() {
             {loading ? '⏳ Registrando...' : '✅ Registrarme'}
           </button>
         </form>
+
+        {/* Volver */}
+        <div style={{ textAlign: 'center', marginTop: '20px' }}>
+          <a href="/" style={{ color: '#1a472a', textDecoration: 'none', fontSize: '14px' }}>
+            ← Volver al inicio
+          </a>
+        </div>
       </div>
     </div>
   )
