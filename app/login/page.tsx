@@ -1,11 +1,10 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function Login() {
-  const [formData, setFormData] = useState({
-    email: '',
-    pin: ''
-  })
+  const router = useRouter()
+  const [formData, setFormData] = useState({ email: '', pin: '' })
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -19,71 +18,79 @@ export default function Login() {
     setMessage('')
 
     try {
-      // Verificar admin por ahora
-      if (formData.email === 'admin@hgvtennis.com' && formData.pin === '1234') {
-        setMessage('✅ ¡Bienvenido Administrador!')
-        setTimeout(() => {
-          window.location.href = '/admin'
-        }, 1500)
-      } else {
-        setMessage('❌ Email o PIN incorrecto')
-      }
-    } catch (error) {
-      setMessage('❌ Error al iniciar sesión. Intenta de nuevo.')
-    }
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, email: formData.email.trim().toLowerCase() }),
+      })
+      const data = await res.json()
 
-    setLoading(false)
+      if (!res.ok) {
+        setMessage('❌ ' + (data.error || 'Email o PIN incorrecto'))
+        setLoading(false)
+        return
+      }
+
+      setMessage(`✅ ¡Bienvenido ${data.nombre}!`)
+      setTimeout(() => {
+        router.push(data.role === 'admin' ? '/admin' : '/ladder')
+      }, 1000)
+    } catch {
+      setMessage('❌ Error al iniciar sesión. Intenta de nuevo.')
+      setLoading(false)
+    }
   }
 
   return (
-    <main style={{
+    <main className="court-bg" style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #1a3a5c 0%, #0d5c2e 100%)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      fontFamily: 'Arial, sans-serif',
       padding: '20px'
     }}>
-      {/* Tarjeta del formulario */}
       <div style={{
-        background: 'white',
-        borderRadius: '15px',
+        background: 'var(--color-chalk)',
+        borderRadius: '4px',
+        borderTop: '3px solid var(--color-ball)',
         padding: '40px',
         width: '100%',
         maxWidth: '400px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+        boxShadow: '0 20px 60px rgba(0,0,0,0.35)'
       }}>
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <img
+            src="/logo-hgv.png"
+            alt="Escudo HGV Tennis Club"
+            style={{ width: '72px', height: '72px', objectFit: 'contain', margin: '0 auto 14px auto', display: 'block' }}
+          />
           <h1 style={{
-            color: '#1a3a5c',
-            fontSize: '1.8rem',
-            marginBottom: '5px'
+            fontFamily: 'var(--font-display)',
+            fontWeight: 900,
+            color: 'var(--color-ink)',
+            fontSize: '30px',
+            margin: 0,
+            letterSpacing: '-0.01em',
           }}>
-            🎾 HGV Tennis Club
+            HGV Tennis Club
           </h1>
-          <h2 style={{
-            color: '#0d5c2e',
-            fontSize: '1.2rem',
-            fontWeight: 'normal'
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--color-court)',
+            fontSize: '12px',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            marginTop: '8px',
           }}>
-            Iniciar Sesión
-          </h2>
+            Iniciar sesión
+          </p>
         </div>
 
-        {/* Formulario */}
         <form onSubmit={handleSubmit}>
-          {/* Email */}
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{
-              display: 'block',
-              color: '#1a3a5c',
-              fontWeight: 'bold',
-              marginBottom: '5px'
-            }}>
-              📧 Email
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', color: 'var(--color-ink)', fontWeight: 600, marginBottom: '6px', fontSize: '14px' }}>
+              Email
             </label>
             <input
               type="email"
@@ -93,110 +100,69 @@ export default function Login() {
               placeholder="tu@email.com"
               required
               style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '2px solid #e0e0e0',
-                fontSize: '1rem',
-                boxSizing: 'border-box'
+                width: '100%', padding: '12px', borderRadius: '4px',
+                border: '1px solid rgba(15,27,38,0.2)', fontSize: '15px', boxSizing: 'border-box',
+                fontFamily: 'var(--font-body)',
               }}
             />
           </div>
 
-          {/* PIN */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              color: '#1a3a5c',
-              fontWeight: 'bold',
-              marginBottom: '5px'
-            }}>
-              🔐 PIN (4 dígitos)
+          <div style={{ marginBottom: '22px' }}>
+            <label style={{ display: 'block', color: 'var(--color-ink)', fontWeight: 600, marginBottom: '6px', fontSize: '14px' }}>
+              PIN (4 dígitos)
             </label>
             <input
               type="password"
               name="pin"
               value={formData.pin}
               onChange={handleChange}
-              placeholder="****"
+              placeholder="····"
               maxLength={4}
               required
               style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '2px solid #e0e0e0',
-                fontSize: '1rem',
-                boxSizing: 'border-box'
+                width: '100%', padding: '12px', borderRadius: '4px',
+                border: '1px solid rgba(15,27,38,0.2)', fontSize: '15px', boxSizing: 'border-box',
+                fontFamily: 'var(--font-mono)', letterSpacing: '0.3em',
               }}
             />
           </div>
 
-          {/* Mensaje */}
           {message && (
             <div style={{
-              padding: '12px',
-              borderRadius: '8px',
-              marginBottom: '15px',
-              background: message.includes('✅') ? '#d4edda' : '#f8d7da',
-              color: message.includes('✅') ? '#155724' : '#721c24',
+              padding: '12px', borderRadius: '4px', marginBottom: '16px', fontSize: '14px',
+              background: message.includes('✅') ? 'rgba(47,82,51,0.1)' : 'rgba(197,60,50,0.1)',
+              color: message.includes('✅') ? 'var(--color-net)' : '#a83226',
               textAlign: 'center'
             }}>
               {message}
             </div>
           )}
 
-          {/* Botón Submit */}
           <button
             type="submit"
             disabled={loading}
             style={{
-              width: '100%',
-              padding: '15px',
-              background: loading ? '#ccc' : '#FFD700',
-              color: '#1a3a5c',
-              border: 'none',
-              borderRadius: '10px',
-              fontSize: '1.1rem',
-              fontWeight: 'bold',
+              width: '100%', padding: '14px',
+              background: loading ? '#ccc' : 'var(--color-ball)',
+              color: 'var(--color-ink)', border: 'none', borderRadius: '4px',
+              fontSize: '15px', fontWeight: 700, fontFamily: 'var(--font-body)',
               cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {loading ? '⏳ Entrando...' : '🔐 Iniciar Sesión'}
+            {loading ? 'Entrando…' : 'Iniciar sesión'}
           </button>
         </form>
 
-        {/* Links */}
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <p style={{ color: '#666' }}>
+          <p style={{ color: 'var(--color-line)', fontSize: '14px' }}>
             ¿No tienes cuenta?{' '}
-            <a href="/register" style={{ color: '#1a3a5c', fontWeight: 'bold' }}>
-              Registrarse
+            <a href="/register" style={{ color: 'var(--color-court)', fontWeight: 700, textDecoration: 'none' }}>
+              Regístrate
             </a>
           </p>
-          <a href="/" style={{ color: '#0d5c2e', fontSize: '0.9rem' }}>
+          <a href="/" style={{ color: 'var(--color-line)', fontSize: '13px', textDecoration: 'none' }}>
             ← Volver al inicio
           </a>
-        </div>
-
-        {/* Credenciales de prueba */}
-        <div style={{
-          marginTop: '20px',
-          padding: '12px',
-          background: '#f0f8ff',
-          borderRadius: '8px',
-          border: '1px dashed #1a3a5c'
-        }}>
-          <p style={{
-            color: '#1a3a5c',
-            fontSize: '0.85rem',
-            textAlign: 'center',
-            margin: 0
-          }}>
-            🔑 <strong>Admin de prueba:</strong><br/>
-            Email: admin@hgvtennis.com<br/>
-            PIN: 1234
-          </p>
         </div>
       </div>
     </main>

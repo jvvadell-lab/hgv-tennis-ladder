@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Paleta HGV — inspirada en la cancha dura azul */
+  --color-court: #1c7ec4;
+  --color-court-deep: #0d3b5c;
+  --color-chalk: #f7f3ea;
+  --color-ink: #0f1b26;
+  --color-ball: #d4e157;
+  --color-net: #2f5233;
+  --color-line: #6e8ca0;
+
+  --background: var(--color-chalk);
+  --foreground: var(--color-ink);
+
+  --font-display: var(--font-fraunces);
+  --font-body: var(--font-inter);
+  --font-mono: var(--font-plex-mono);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
+}
+
+/* Fondo de cancha real — foto + capa de marca para legibilidad del texto */
+.court-bg {
+  background-image:
+    linear-gradient(165deg, rgba(15,27,38,0.88) 0%, rgba(18,58,92,0.82) 55%, rgba(28,126,196,0.72) 100%),
+    url('/court-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Panel de administración — layout responsive */
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.admin-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.admin-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .admin-shell {
+    flex-direction: column;
+  }
+  .admin-sidebar {
+    width: 100%;
+    padding: 12px 0 !important;
+  }
+  .admin-sidebar-header {
+    display: none !important;
+  }
+  .admin-nav {
+    display: flex !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 8px;
+  }
+  .admin-nav button {
+    flex: 0 0 auto !important;
+    white-space: nowrap;
+    border-left: none !important;
+    border-bottom: 4px solid transparent;
+  }
+  .admin-nav button[data-active="true"] {
+    border-bottom-color: var(--color-ball) !important;
+  }
+  .admin-sidebar-footer {
+    display: none !important;
+  }
+  .admin-content-inner {
+    padding: 16px !important;
+  }
+  table {
+    font-size: 13px;
+  }
+}
+
+/* Escalera — evita que las tablas se rompan en pantallas angostas */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

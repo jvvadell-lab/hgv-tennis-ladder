@@ -7,13 +7,57 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '12px',
+  border: '1px solid rgba(15,27,38,0.2)',
+  borderRadius: '4px',
+  fontSize: '15px',
+  boxSizing: 'border-box',
+  fontFamily: 'var(--font-body)',
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: '6px',
+  fontWeight: 600,
+  color: 'var(--color-ink)',
+  fontSize: '14px',
+}
+
+// Convierte "juan garcía" o "JUAN GARCÍA" a "Juan García"
+function toTitleCase(str: string) {
+  return str
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+// Da formato (XXX)-XXX-XXXX a los 10 dígitos del teléfono, mientras se escribe
+function formatTelefonoLocal(digits: string) {
+  const d = digits.replace(/\D/g, '').slice(0, 10)
+  const area = d.slice(0, 3)
+  const medio = d.slice(3, 6)
+  const final = d.slice(6, 10)
+  let out = ''
+  if (area) out += `(${area}`
+  if (area.length === 3) out += ')'
+  if (medio) out += `-${medio}`
+  if (final) out += `-${final}`
+  return out
+}
+
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     categoria: '',
-    genero: ''
+    genero: '',
+    pin: '',
+    numeroAccion: ''
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -27,19 +71,22 @@ export default function RegisterPage() {
 
     try {
       const { error } = await supabase
-        .from('players')
+        .from('jugadores')
         .insert([{
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
+          nombre: toTitleCase(formData.name.trim()),
+          email: formData.email.trim().toLowerCase(),
+          telefono: `+58 ${formatTelefonoLocal(formData.phone)}`,
           categoria: formData.categoria,
-          genero: formData.genero
+          genero: formData.genero,
+          pin: formData.pin,
+          numero_accion: formData.numeroAccion,
+          activo: true
         }])
 
       if (error) throw error
 
-      setMessage('✅ ¡Registro exitoso! Bienvenido al Club HGV Tennis')
-      setFormData({ name: '', email: '', phone: '', categoria: '', genero: '' })
+      setMessage('✅ ¡Registro exitoso! Ya puedes iniciar sesión con tu email y PIN')
+      setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
     } catch (err: any) {
       setError('❌ Error al registrar: ' + err.message)
     } finally {
@@ -48,200 +95,205 @@ export default function RegisterPage() {
   }
 
   return (
-    <div style={{
+    <div className="court-bg" style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #1a472a 0%, #2d5a27 50%, #1a472a 100%)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '20px'
     }}>
       <div style={{
-        background: 'white',
-        borderRadius: '16px',
+        background: 'var(--color-chalk)',
+        borderRadius: '4px',
+        borderTop: '3px solid var(--color-ball)',
         padding: '40px',
         width: '100%',
         maxWidth: '500px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+        boxShadow: '0 20px 60px rgba(0,0,0,0.35)'
       }}>
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h1 style={{ color: '#1a472a', fontSize: '28px', fontWeight: 'bold' }}>
-            🎾 HGV Tennis Club
+          <img
+            src="/logo-hgv.png"
+            alt="Escudo HGV Tennis Club"
+            style={{ width: '68px', height: '68px', objectFit: 'contain', margin: '0 auto 12px auto', display: 'block' }}
+          />
+          <h1 style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 900,
+            color: 'var(--color-ink)',
+            fontSize: '28px',
+            margin: 0,
+            letterSpacing: '-0.01em',
+          }}>
+            HGV Tennis Club
           </h1>
-          <h2 style={{ color: '#555', fontSize: '18px', marginTop: '8px' }}>
-            Registro de Jugador
-          </h2>
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--color-court)',
+            fontSize: '12px',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            marginTop: '8px',
+          }}>
+            Registro de jugador
+          </p>
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* Nombre */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
-              👤 Nombre Completo *
-            </label>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>Nombre completo *</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
               placeholder="Ej: Juan García"
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '2px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '16px',
-                boxSizing: 'border-box'
-              }}
+              style={inputStyle}
             />
           </div>
 
-          {/* Email */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
-              📧 Email *
-            </label>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>Email *</label>
             <input
               type="email"
               required
               value={formData.email}
               onChange={(e) => setFormData({...formData, email: e.target.value})}
               placeholder="Ej: juan@email.com"
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '2px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '16px',
-                boxSizing: 'border-box'
-              }}
+              style={inputStyle}
             />
           </div>
 
-          {/* Teléfono */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
-              📱 Teléfono *
-            </label>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>Teléfono *</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <span style={{
+                ...inputStyle,
+                width: 'auto',
+                flex: '0 0 auto',
+                background: '#f0f0f0',
+                color: 'var(--color-line)',
+                textAlign: 'center',
+                fontWeight: 600,
+              }}>
+                +58
+              </span>
+              <input
+                type="tel"
+                required
+                inputMode="numeric"
+                value={formatTelefonoLocal(formData.phone)}
+                onChange={(e) => setFormData({...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})}
+                placeholder="(xxx)-XXX-XXXX"
+                maxLength={14}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>Número de acción (socio) *</label>
             <input
-              type="tel"
+              type="text"
               required
-              value={formData.phone}
-              onChange={(e) => setFormData({...formData, phone: e.target.value})}
-              placeholder="Ej: +34 612 345 678"
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '2px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '16px',
-                boxSizing: 'border-box'
-              }}
+              value={formData.numeroAccion}
+              onChange={(e) => setFormData({...formData, numeroAccion: e.target.value})}
+              placeholder="Ej: 1234"
+              style={inputStyle}
             />
+            <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
+              La escalera es exclusiva para socios del club — se validará tu número de acción.
+            </p>
           </div>
 
-          {/* Género */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
-              👥 Género *
-            </label>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>Género *</label>
             <select
               required
               value={formData.genero}
               onChange={(e) => setFormData({...formData, genero: e.target.value})}
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '2px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '16px',
-                boxSizing: 'border-box',
-                background: 'white'
-              }}
+              style={{ ...inputStyle, background: 'white' }}
             >
               <option value="">-- Selecciona tu género --</option>
-              <option value="Masculino">♂️ Masculino</option>
-              <option value="Femenino">♀️ Femenino</option>
+              <option value="caballeros">Caballeros</option>
+              <option value="damas">Damas</option>
             </select>
           </div>
 
-          {/* Categoría */}
-          <div style={{ marginBottom: '30px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', color: '#333' }}>
-              🏆 Categoría *
-            </label>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>Crea un PIN de 4 dígitos *</label>
+            <input
+              type="password"
+              required
+              maxLength={4}
+              pattern="[0-9]{4}"
+              inputMode="numeric"
+              value={formData.pin}
+              onChange={(e) => setFormData({...formData, pin: e.target.value.replace(/\D/g, '')})}
+              placeholder="····"
+              title="El PIN debe tener exactamente 4 dígitos"
+              style={{ ...inputStyle, fontFamily: 'var(--font-mono)', letterSpacing: '0.3em' }}
+            />
+            <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
+              Lo usarás junto con tu email para iniciar sesión y gestionar tus retos.
+            </p>
+          </div>
+
+          <div style={{ marginBottom: '28px' }}>
+            <label style={labelStyle}>Categoría *</label>
             <select
               required
               value={formData.categoria}
               onChange={(e) => setFormData({...formData, categoria: e.target.value})}
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '2px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '16px',
-                boxSizing: 'border-box',
-                background: 'white'
-              }}
+              style={{ ...inputStyle, background: 'white' }}
             >
               <option value="">-- Selecciona tu categoría --</option>
-              <option value="Sexta Novato">🥉 Sexta Novato</option>
-              <option value="Sexta">🎾 Sexta</option>
-              <option value="Quinta">🥈 Quinta</option>
-              <option value="Cuarta">🥇 Cuarta</option>
+              <option value="sexta_novatos">Sexta Novato</option>
+              <option value="sexta">Sexta</option>
+              <option value="quinta">Quinta</option>
+              <option value="cuarta">Cuarta</option>
             </select>
           </div>
 
-          {/* Mensajes */}
           {message && (
             <div style={{
-              background: '#d4edda',
-              color: '#155724',
-              padding: '12px',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              textAlign: 'center'
+              background: 'rgba(47,82,51,0.1)', color: 'var(--color-net)',
+              padding: '12px', borderRadius: '4px', marginBottom: '18px', textAlign: 'center', fontSize: '14px'
             }}>
               {message}
             </div>
           )}
           {error && (
             <div style={{
-              background: '#f8d7da',
-              color: '#721c24',
-              padding: '12px',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              textAlign: 'center'
+              background: 'rgba(197,60,50,0.1)', color: '#a83226',
+              padding: '12px', borderRadius: '4px', marginBottom: '18px', textAlign: 'center', fontSize: '14px'
             }}>
               {error}
             </div>
           )}
 
-          {/* Botón */}
           <button
             type="submit"
             disabled={loading}
             style={{
               width: '100%',
               padding: '14px',
-              background: loading ? '#ccc' : '#1a472a',
-              color: 'white',
+              background: loading ? '#ccc' : 'var(--color-ball)',
+              color: 'var(--color-ink)',
               border: 'none',
-              borderRadius: '8px',
-              fontSize: '18px',
-              fontWeight: 'bold',
+              borderRadius: '4px',
+              fontSize: '15px',
+              fontWeight: 700,
+              fontFamily: 'var(--font-body)',
               cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {loading ? '⏳ Registrando...' : '✅ Registrarme'}
+            {loading ? 'Registrando…' : 'Registrarme'}
           </button>
         </form>
 
-        {/* Volver */}
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <a href="/" style={{ color: '#1a472a', textDecoration: 'none', fontSize: '14px' }}>
+          <a href="/" style={{ color: 'var(--color-line)', textDecoration: 'none', fontSize: '13px' }}>
             ← Volver al inicio
           </a>
         </div>
