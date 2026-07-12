@@ -179,7 +179,7 @@ export default function AdminPage() {
 
   const [historial, setHistorial] = useState<any[]>([])
   const [historialAbierto, setHistorialAbierto] = useState<string | null>(null)
-  const [historialPosiciones, setHistorialPosiciones] = useState<Record<string, any[]>>({})
+  const [historialPosiciones, setHistorialPosiciones] = useState<Record<string, Record<string, any[]>>>({})
   const [historialStats, setHistorialStats] = useState<Record<string, Record<string, any>>>({})
 
   const [nuevaTempNombre, setNuevaTempNombre] = useState('')
