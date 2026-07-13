@@ -73,6 +73,7 @@ export default function LadderPage() {
   const [posiciones, setPosiciones] = useState<Posicion[]>([])
   const [misRetos, setMisRetos] = useState<Reto[]>([])
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
+  const [jugadoresOcupados, setJugadoresOcupados] = useState<Set<string>>(new Set()) // cualquiera con un reto pendiente/aceptado, sin importar quién lo inició
   const [retosConResultadoPendiente, setRetosConResultadoPendiente] = useState<Set<string>>(new Set())
   const [proximosPartidos, setProximosPartidos] = useState<ProximoPartido[]>([])
   const [historial, setHistorial] = useState<any[]>([])
@@ -145,6 +146,21 @@ export default function LadderPage() {
       .order('posicion', { ascending: true })
 
     setPosiciones((pos as any) || [])
+
+    // Cualquier jugador con un reto pendiente o aceptado (sea quien lo haya iniciado)
+    // queda "ocupado" — nadie más puede retarlo hasta que se resuelva.
+    const { data: retosActivos } = await supabase
+      .from('retos')
+      .select('retador_id, retado_id')
+      .eq('temporada_id', temporadaId)
+      .in('estado', ['pendiente', 'aceptado'])
+
+    const ocupados = new Set<string>()
+    ;(retosActivos || []).forEach((r: any) => {
+      ocupados.add(r.retador_id)
+      ocupados.add(r.retado_id)
+    })
+    setJugadoresOcupados(ocupados)
 
     if (session?.role === 'jugador') {
       const { data: retos } = await supabase
@@ -412,6 +428,11 @@ export default function LadderPage() {
     setActionMsg('')
     setRetoFormMsg('')
 
+    if (!temporadaSorteada) {
+      setRetoFormMsg('❌ El sorteo de esta temporada todavía no se ha realizado.')
+      return
+    }
+
     if (!retoFecha || !retoHora) {
       setRetoFormMsg('❌ Selecciona fecha y hora propuestas')
       return
@@ -434,20 +455,26 @@ export default function LadderPage() {
     }
 
     // Verificación en vivo contra la base de datos (no contra datos ya cargados en el navegador),
-    // para evitar que dos clics rápidos generen retos duplicados.
+    // para evitar que dos clics rápidos generen retos duplicados, y para confirmar que ni yo
+    // ni el rival tengamos ya un reto pendiente/aceptado con cualquier otra persona.
     const { data: existentes, error: errCheck } = await supabase
       .from('retos')
-      .select('id, estado')
+      .select('id, estado, retador_id, retado_id')
       .eq('temporada_id', temporadaId)
-      .or(`retador_id.eq.${session.id},retado_id.eq.${session.id}`)
       .in('estado', ['pendiente', 'aceptado'])
+      .or(`retador_id.eq.${session.id},retado_id.eq.${session.id},retador_id.eq.${retandoA},retado_id.eq.${retandoA}`)
 
     if (errCheck) {
       setRetoFormMsg('❌ Error al verificar: ' + errCheck.message)
       return
     }
     if (existentes && existentes.length > 0) {
-      setActionMsg('❌ Ya tienes un reto pendiente o un partido en curso — no puedes lanzar otro.')
+      const involucraAlRival = existentes.some((r: any) => r.retador_id === retandoA || r.retado_id === retandoA)
+      setActionMsg(
+        involucraAlRival
+          ? '❌ Ese jugador ya tiene un reto pendiente o en curso con otra persona.'
+          : '❌ Ya tienes un reto pendiente o un partido en curso — no puedes lanzar otro.'
+      )
       setRetandoA(null)
       cargarDatos()
       return
@@ -685,7 +712,14 @@ export default function LadderPage() {
   }
 
   const puedoRetar = (p: Posicion) => {
-    return esElegible(p) && !bloqueado && !retandoA && !enEnfriamiento(p.jugador_id)
+    return (
+      esElegible(p) &&
+      temporadaSorteada &&
+      !bloqueado &&
+      !retandoA &&
+      !enEnfriamiento(p.jugador_id) &&
+      !jugadoresOcupados.has(p.jugador_id)
+    )
   }
 
   if (checkingSession) {
@@ -900,13 +934,22 @@ export default function LadderPage() {
                                   disabled={!puedoRetar(p)}
                                   style={puedoRetar(p) ? btnRetar : btnRetarDeshabilitado}
                                   title={
-                                    enEnfriamiento(p.jugador_id)
+                                    !temporadaSorteada
+                                      ? 'El sorteo de esta temporada todavía no se ha realizado'
+                                      : enEnfriamiento(p.jugador_id)
                                       ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES')}`
+                                      : jugadoresOcupados.has(p.jugador_id)
+                                      ? 'Este jugador ya tiene un reto pendiente o en curso con otra persona'
                                       : bloqueado ? 'Tienes un reto pendiente o un partido en curso' : ''
                                   }
                                 >
                                   ⚔️ Retar
                                 </button>
+                                {temporadaSorteada && !enEnfriamiento(p.jugador_id) && jugadoresOcupados.has(p.jugador_id) && (
+                                  <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
+                                    Ocupado en otro reto
+                                  </p>
+                                )}
                                 {enEnfriamiento(p.jugador_id) && (
                                   <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
                                     Disponible el {new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES')}
@@ -1038,7 +1081,12 @@ export default function LadderPage() {
                   )}
                 </div>
               )}
-              {session?.role === 'jugador' && bloqueado && (
+              {session?.role === 'jugador' && !temporadaSorteada && (
+                <p style={{ fontSize: '13px', color: '#c0392b', marginTop: '8px', fontWeight: 'bold' }}>
+                  🔒 El sorteo de esta temporada todavía no se ha realizado — los retos se habilitan después de que el admin lo haga.
+                </p>
+              )}
+              {session?.role === 'jugador' && temporadaSorteada && bloqueado && (
                 <p style={{ fontSize: '13px', color: '#c0392b', marginTop: '8px', fontWeight: 'bold' }}>
                   {tengoPartidoEnCurso
                     ? 'Tienes un partido aceptado en curso — no puedes retar ni aceptar otros retos hasta que se registre el resultado.'
@@ -1047,7 +1095,7 @@ export default function LadderPage() {
                     : 'Tienes un reto pendiente de respuesta — no puedes lanzar otro hasta que se resuelva.'}
                 </p>
               )}
-              {session?.role === 'jugador' && miPosicion && !bloqueado && (
+              {session?.role === 'jugador' && miPosicion && temporadaSorteada && !bloqueado && (
                 <p style={{ fontSize: '13px', color: '#777', marginTop: '12px' }}>
                   Puedes retar a jugadores hasta {RANGO_RETO} posiciones arriba de ti.
                 </p>
