@@ -756,7 +756,7 @@ export default function LadderPage() {
           )}
           {session?.role === 'jugador' && (
             <p style={{ color: '#cce5ff', marginTop: '10px' }}>
-              Conectado como <strong style={{ color: 'var(--color-chalk)' }}>{session.nombre}</strong>
+              Conectado como <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)' }}>{session.nombre}</strong>
               {' — '}
               <a href="/perfil" style={{ color: 'var(--color-ball)', textDecoration: 'underline', fontSize: 'inherit' }}>
                 Mi Perfil
@@ -806,7 +806,7 @@ export default function LadderPage() {
                 proximosPartidos.map((partido) => (
                   <div key={partido.id} style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
                     <p style={{ margin: 0 }}>
-                      <strong>{partido.retador?.nombre}</strong> vs <strong>{partido.retado?.nombre}</strong>
+                      <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retador?.nombre}</strong> vs <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retado?.nombre}</strong>
                     </p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#777' }}>
                       {new Date(partido.fecha_propuesta).toLocaleString('es-ES', {
@@ -933,7 +933,7 @@ export default function LadderPage() {
                           background: p.jugador_id === session?.id ? '#fff9e0' : 'transparent',
                         }}>
                           <td style={{ padding: '10px', fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--color-ink)', width: '40px' }}>#{p.posicion}</td>
-                          <td style={{ padding: '10px' }}>{p.jugadores?.nombre || 'Jugador'}</td>
+                          <td style={{ padding: '10px', fontFamily: 'var(--font-mono)' }}>{p.jugadores?.nombre || 'Jugador'}</td>
                           <td style={{ padding: '10px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
                             #{inicial}
                             {diferencia > 0 && <span style={{ color: '#28a745', marginLeft: '4px' }}>▲{diferencia}</span>}
@@ -1125,7 +1125,7 @@ export default function LadderPage() {
                   misRetos.map((r) => (
                     <div key={r.id} style={{ borderBottom: '1px solid #eee', padding: '12px 0' }}>
                       <p style={{ margin: '0 0 6px 0' }}>
-                        <strong>{r.retador?.nombre}</strong> vs <strong>{r.retado?.nombre}</strong>{' '}
+                        <strong style={{ fontFamily: 'var(--font-mono)' }}>{r.retador?.nombre}</strong> vs <strong style={{ fontFamily: 'var(--font-mono)' }}>{r.retado?.nombre}</strong>{' '}
                         <span style={{
                           fontSize: '12px', padding: '2px 8px', borderRadius: '10px',
                           background: r.estado === 'pendiente' ? '#fff3cd' : r.estado === 'aceptado' ? '#d1ecf1' : r.estado === 'jugado' ? '#d4edda' : '#f8d7da',
@@ -1353,7 +1353,7 @@ export default function LadderPage() {
                                       return (
                                         <tr key={p.id} style={{ borderTop: '1px solid #e5e5e5' }}>
                                           <td style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.posicion}</td>
-                                          <td style={{ padding: '4px', color: '#333' }}>{p.jugadores?.nombre || 'Jugador'}</td>
+                                          <td style={{ padding: '4px', fontFamily: 'var(--font-mono)', color: '#333' }}>{p.jugadores?.nombre || 'Jugador'}</td>
                                           <td style={{ padding: '4px', textAlign: 'center' }}>{s.jugados}</td>
                                           <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                                           <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
