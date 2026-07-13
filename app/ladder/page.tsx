@@ -741,6 +741,14 @@ export default function LadderPage() {
           <p style={{ color: 'var(--color-chalk)', marginTop: '6px' }}>
             {temporadaNombre ? `Temporada: ${temporadaNombre}` : 'No hay temporada activa'}
           </p>
+          {temporadaInicio && temporadaFin && (
+            <p style={{
+              fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '12px',
+              letterSpacing: '0.06em', marginTop: '4px',
+            }}>
+              {temporadaInicio} → {temporadaFin}
+            </p>
+          )}
           {!session && (
             <p style={{ color: '#cce5ff', marginTop: '10px' }}>
               <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Inicia sesión</a> para retar y registrar resultados.
@@ -1368,8 +1376,23 @@ export default function LadderPage() {
           )}
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: '24px' }}>
-          <a href="/" style={{ color: 'var(--color-chalk)', fontSize: '14px' }}>← Volver al inicio</a>
+        <div style={{ textAlign: 'center', marginTop: '32px', marginBottom: '20px' }}>
+          <a
+            href="/"
+            style={{
+              display: 'inline-block',
+              color: 'var(--color-chalk)',
+              fontSize: '14px',
+              fontWeight: 700,
+              fontFamily: 'var(--font-body)',
+              textDecoration: 'none',
+              border: '1px solid rgba(247,243,234,0.4)',
+              borderRadius: '4px',
+              padding: '10px 24px',
+            }}
+          >
+            ← Volver al inicio
+          </a>
         </div>
       </div>
     </main>
