@@ -87,12 +87,14 @@ export async function POST(request: Request) {
 
       const armarCorreo = (nombreDestinatario: string) => `
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+          <p style="font-size: 28px; margin: 0 0 10px 0;">🎾</p>
           <p>Hola ${nombreDestinatario || ''},</p>
-          <h2 style="color: #123a5c; margin-top: 4px;">🏆 Resultado registrado — HGV Tennis Club</h2>
+          <p>Nos complace escribirte desde <strong>HGV TENNIS CLUB</strong> para informarte el resultado de tu partido:</p>
           <p><strong>${retador?.nombre || 'Jugador'}</strong> vs <strong>${retado?.nombre || 'Jugador'}</strong></p>
           ${cuerpoResultado}
           <p>Este resultado ya fue validado y el escalafón fue actualizado.</p>
-          <p style="color: #888; font-size: 13px; margin-top: 24px;">— HGV Tennis Club 🎾</p>
+          <p style="margin-top: 24px;">Recibe un cordial saludo y nos vemos en cancha ¡¡🎾</p>
+          <p style="color: #888; font-size: 13px; margin-top: 10px;">— HGV Tennis Club 🎾</p>
         </div>
       `
 

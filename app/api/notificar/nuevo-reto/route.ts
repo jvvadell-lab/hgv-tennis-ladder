@@ -49,16 +49,17 @@ export async function POST(request: Request) {
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+        <p style="font-size: 28px; margin: 0 0 10px 0;">🎾</p>
         <p>Hola ${retado?.nombre || ''},</p>
-        <h2 style="color: #123a5c; margin-top: 4px;">🎾 Nuevo reto — HGV Tennis Club</h2>
-        <p><strong>${retador?.nombre || 'Un jugador'}</strong> te ha retado a un partido.</p>
+        <p>Nos complace escribirte desde <strong>HGV TENNIS CLUB</strong> para informarte que <strong>${retador?.nombre || 'un jugador'}</strong> te ha retado a un partido:</p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
           <tr><td style="padding: 6px 0; color: #666;">📅 Fecha propuesta</td><td style="padding: 6px 0;"><strong>${fecha}</strong></td></tr>
           <tr><td style="padding: 6px 0; color: #666;">🎾 Cancha</td><td style="padding: 6px 0;"><strong>${nombreCancha(reto.cancha, reto.nombre_cancha_foranea)}</strong></td></tr>
           ${reto.comentarios ? `<tr><td style="padding: 6px 0; color: #666;">💬 Comentario</td><td style="padding: 6px 0;">${reto.comentarios}</td></tr>` : ''}
         </table>
         <p>Entra a la escalera para aceptar o rechazar este reto.</p>
-        <p style="color: #888; font-size: 13px; margin-top: 24px;">— HGV Tennis Club 🎾</p>
+        <p style="margin-top: 24px;">Recibe un cordial saludo y nos vemos en cancha ¡¡🎾</p>
+        <p style="color: #888; font-size: 13px; margin-top: 10px;">— HGV Tennis Club 🎾</p>
       </div>
     `
 
