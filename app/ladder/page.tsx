@@ -353,6 +353,25 @@ export default function LadderPage() {
   }
 
   // Horarios de disponibilidad de las canchas del club
+  // Convierte "HH:MM" (24h) a partes de 12h para los selects, y viceversa —
+  // así el selector de hora se ve igual en cualquier navegador/dispositivo,
+  // sin depender del <input type="time"> nativo (que varía mucho entre ellos).
+  function partesDesde24(hhmm: string) {
+    if (!hhmm) return { h12: '', min: '00', ampm: 'AM' as 'AM' | 'PM' }
+    const [hStr, mStr] = hhmm.split(':')
+    const h = parseInt(hStr, 10)
+    const ampm: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM'
+    let h12 = h % 12
+    if (h12 === 0) h12 = 12
+    return { h12: String(h12), min: mStr, ampm }
+  }
+
+  function combinarA24(h12: string, min: string, ampm: string) {
+    let h = parseInt(h12, 10) % 12
+    if (ampm === 'PM') h += 12
+    return `${String(h).padStart(2, '0')}:${min}`
+  }
+
   function validarHorarioCancha(cancha: string, fechaStr: string, horaStr: string): { valido: boolean; mensaje?: string } {
     if (cancha === 'FORANEA') return { valido: true } // cancha externa, sin restricción del club
     if (!fechaStr || !horaStr) return { valido: true }
@@ -922,9 +941,42 @@ export default function LadderPage() {
                         style={inputPequeno}
                       />
                     </div>
-                    <div style={{ flex: 1, minWidth: '120px' }}>
+                    <div style={{ flex: 1, minWidth: '160px' }}>
                       <label style={labelStyle}>🕐 Hora propuesta</label>
-                      <input type="time" value={retoHora} onChange={(e) => setRetoHora(e.target.value)} style={inputPequeno} />
+                      {(() => {
+                        const { h12, min, ampm } = partesDesde24(retoHora)
+                        return (
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <select
+                              value={h12}
+                              onChange={(e) => setRetoHora(e.target.value ? combinarA24(e.target.value, min, ampm) : '')}
+                              style={{ ...inputPequeno, flex: 1 }}
+                            >
+                              <option value="">--</option>
+                              {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={min}
+                              onChange={(e) => setRetoHora(combinarA24(h12 || '12', e.target.value, ampm))}
+                              style={{ ...inputPequeno, flex: 1 }}
+                            >
+                              {['00', '15', '30', '45'].map((m) => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={ampm}
+                              onChange={(e) => setRetoHora(combinarA24(h12 || '12', min, e.target.value))}
+                              style={{ ...inputPequeno, flex: 1 }}
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
 
