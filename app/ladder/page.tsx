@@ -853,9 +853,14 @@ export default function LadderPage() {
                   <p style={{ margin: '0 0 12px 0', color: 'var(--color-ink)', fontWeight: 'bold' }}>
                     🎾 Todavía no estás anotado en {temporadaNombre}
                   </p>
-                  <p style={{ margin: '0 0 14px 0', color: '#666', fontSize: '14px' }}>
+                  <p style={{ margin: '0 0 8px 0', color: '#666', fontSize: '14px' }}>
                     Categoría: {CATEGORIAS.find(c => c.value === session.categoria)?.label} — {GENEROS.find(g => g.value === session.genero)?.label}
                   </p>
+                  {temporadaInicio && temporadaFin && (
+                    <p style={{ margin: '0 0 14px 0', color: '#666', fontSize: '14px' }}>
+                      📅 La temporada corre del <strong>{temporadaInicio}</strong> al <strong>{temporadaFin}</strong>
+                    </p>
+                  )}
 
                   {temporadaSorteada ? (
                     <p style={{ margin: '0 0 14px 0', fontSize: '13px', fontWeight: 'bold', color: '#c0392b' }}>
