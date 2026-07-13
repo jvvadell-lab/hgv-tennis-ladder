@@ -1145,7 +1145,13 @@ export default function AdminPage() {
                                 {r.retos?.retador?.nombre} vs {r.retos?.retado?.nombre}
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
-                                {r.marcador_retador} — {r.marcador_retado}
+                                {r.no_presentado ? (
+                                  <span style={{ color: '#c0392b', fontWeight: 600 }}>
+                                    ⚠️ No se presentó: {r.ganador_id === r.retos?.retador_id ? r.retos?.retado?.nombre : r.retos?.retador?.nombre}
+                                  </span>
+                                ) : (
+                                  <>{r.marcador_retador} — {r.marcador_retado}</>
+                                )}
                               </td>
                               <td style={{ padding: '12px 16px', fontWeight: '600', color: 'var(--color-ink)' }}>
                                 {r.ganador?.nombre || '—'}

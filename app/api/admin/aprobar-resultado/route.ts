@@ -77,19 +77,27 @@ export async function POST(request: Request) {
       const retado = reto.retado
       const ganadorEsRetador = resultado.ganador_id === reto.retador_id
       const nombreGanador = ganadorEsRetador ? retador?.nombre : retado?.nombre
+      const nombreAusente = ganadorEsRetador ? retado?.nombre : retador?.nombre
 
-      const html = `
+      const cuerpoResultado = resultado.no_presentado
+        ? `<p>⚠️ <strong>${nombreAusente || 'El rival'}</strong> no se presentó al partido.</p>
+           <p>🏆 Gana por walkover: <strong>${nombreGanador || '—'}</strong></p>`
+        : `<p>Marcador: <strong>${resultado.marcador_retador} — ${resultado.marcador_retado}</strong></p>
+           <p>🏆 Ganador: <strong>${nombreGanador || '—'}</strong></p>`
+
+      const armarCorreo = (nombreDestinatario: string) => `
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2 style="color: #123a5c;">🏆 Resultado registrado — HGV Tennis Club</h2>
+          <p>Hola ${nombreDestinatario || ''},</p>
+          <h2 style="color: #123a5c; margin-top: 4px;">🏆 Resultado registrado — HGV Tennis Club</h2>
           <p><strong>${retador?.nombre || 'Jugador'}</strong> vs <strong>${retado?.nombre || 'Jugador'}</strong></p>
-          <p>Marcador: <strong>${resultado.marcador_retador} — ${resultado.marcador_retado}</strong></p>
-          <p>🏆 Ganador: <strong>${nombreGanador || '—'}</strong></p>
+          ${cuerpoResultado}
           <p>Este resultado ya fue validado y el escalafón fue actualizado.</p>
+          <p style="color: #888; font-size: 13px; margin-top: 24px;">— HGV Tennis Club 🎾</p>
         </div>
       `
 
-      if (retador?.email) await enviarCorreo(retador.email, '🏆 Resultado de tu partido — HGV Tennis Club', html)
-      if (retado?.email) await enviarCorreo(retado.email, '🏆 Resultado de tu partido — HGV Tennis Club', html)
+      if (retador?.email) await enviarCorreo(retador.email, '🏆 Resultado de tu partido — HGV Tennis Club', armarCorreo(retador.nombre))
+      if (retado?.email) await enviarCorreo(retado.email, '🏆 Resultado de tu partido — HGV Tennis Club', armarCorreo(retado.nombre))
     } catch {
       // No bloqueamos la aprobación si el correo falla
     }
