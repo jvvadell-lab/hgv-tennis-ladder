@@ -74,6 +74,7 @@ export default function LadderPage() {
   const [misRetos, setMisRetos] = useState<Reto[]>([])
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
   const [jugadoresOcupados, setJugadoresOcupados] = useState<Set<string>>(new Set()) // cualquiera con un reto pendiente/aceptado, sin importar quién lo inició
+  const [rankingStats, setRankingStats] = useState<Record<string, any>>({}) // jugador_id -> { jugados, ganados, perdidos, noPresentado }
   const [retosConResultadoPendiente, setRetosConResultadoPendiente] = useState<Set<string>>(new Set())
   const [proximosPartidos, setProximosPartidos] = useState<ProximoPartido[]>([])
   const [historial, setHistorial] = useState<any[]>([])
@@ -161,6 +162,54 @@ export default function LadderPage() {
       ocupados.add(r.retado_id)
     })
     setJugadoresOcupados(ocupados)
+
+    // Estadísticas públicas del ranking (partidos jugados/ganados/perdidos/no presentado)
+    const { data: retosTemp } = await supabase
+      .from('retos')
+      .select('id, retador_id, retado_id')
+      .eq('temporada_id', temporadaId)
+
+    const retoIds = (retosTemp || []).map((r: any) => r.id)
+    const retosMap: Record<string, any> = {}
+    ;(retosTemp || []).forEach((r: any) => { retosMap[r.id] = r })
+
+    const statsCalculadas: Record<string, any> = {}
+
+    if (retoIds.length > 0) {
+      const { data: resultadosTemp } = await supabase
+        .from('resultados')
+        .select('reto_id, ganador_id, no_presentado, validado')
+        .in('reto_id', retoIds)
+        .eq('validado', true)
+
+      ;(resultadosTemp || []).forEach((res: any) => {
+        const reto = retosMap[res.reto_id]
+        if (!reto) return
+        const participantes = [reto.retador_id, reto.retado_id]
+
+        participantes.forEach((p: string) => {
+          if (!statsCalculadas[p]) statsCalculadas[p] = { jugados: 0, ganados: 0, perdidos: 0, noPresentado: 0 }
+
+          if (res.no_presentado) {
+            if (p === res.ganador_id) {
+              statsCalculadas[p].jugados += 1
+              statsCalculadas[p].ganados += 1
+            } else {
+              statsCalculadas[p].noPresentado += 1
+            }
+          } else {
+            statsCalculadas[p].jugados += 1
+            if (p === res.ganador_id) {
+              statsCalculadas[p].ganados += 1
+            } else {
+              statsCalculadas[p].perdidos += 1
+            }
+          }
+        })
+      })
+    }
+
+    setRankingStats(statsCalculadas)
 
     if (session?.role === 'jugador') {
       const { data: retos } = await supabase
@@ -920,6 +969,10 @@ export default function LadderPage() {
                       <th style={{ padding: '4px 10px', fontWeight: 'normal' }}>Actual</th>
                       <th style={{ padding: '4px 10px', fontWeight: 'normal' }}>Jugador</th>
                       <th style={{ padding: '4px 10px', fontWeight: 'normal', textAlign: 'center' }}>Inicial</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 'normal', textAlign: 'center' }}>PJ</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 'normal', textAlign: 'center' }}>G</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 'normal', textAlign: 'center' }}>P</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 'normal', textAlign: 'center' }}>NP</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -927,6 +980,7 @@ export default function LadderPage() {
                     {posiciones.map((p) => {
                       const inicial = p.posicion_inicial ?? p.posicion
                       const diferencia = inicial - p.posicion // positivo = subió, negativo = bajó
+                      const s = rankingStats[p.jugador_id] || { jugados: 0, ganados: 0, perdidos: 0, noPresentado: 0 }
                       return (
                         <tr key={p.id} style={{
                           borderBottom: '1px solid #eee',
@@ -939,6 +993,10 @@ export default function LadderPage() {
                             {diferencia > 0 && <span style={{ color: '#28a745', marginLeft: '4px' }}>▲{diferencia}</span>}
                             {diferencia < 0 && <span style={{ color: '#c0392b', marginLeft: '4px' }}>▼{Math.abs(diferencia)}</span>}
                           </td>
+                          <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{s.jugados}</td>
+                          <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
+                          <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#c0392b' }}>{s.perdidos}</td>
+                          <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#888' }}>{s.noPresentado}</td>
                           <td style={{ padding: '10px', textAlign: 'right' }}>
                             {esElegible(p) && retandoA !== p.jugador_id && (
                               <>

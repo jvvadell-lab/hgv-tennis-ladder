@@ -417,7 +417,7 @@ export default function AdminPage() {
     setLoading(true)
     const { data: temporada } = await supabase
       .from('temporadas')
-      .select('id, nombre, estado, sorteo_realizado, fecha_limite_inscripcion')
+      .select('id, nombre, estado, sorteo_realizado, fecha_limite_inscripcion, fecha_inicio, fecha_fin')
       .eq('estado', 'activa')
       .maybeSingle()
     setTemporadaActiva(temporada || null)
@@ -1324,6 +1324,32 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <>
+                  <div style={{
+                    background: 'linear-gradient(165deg, #0f1b26 0%, #123a5c 55%, #1c7ec4 100%)',
+                    borderRadius: '12px', padding: '28px 24px', marginBottom: '20px',
+                    textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                  }}>
+                    <p style={{
+                      fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '12px',
+                      letterSpacing: '0.14em', textTransform: 'uppercase', margin: 0,
+                    }}>
+                      Temporada activa
+                    </p>
+                    <h2 style={{
+                      fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-chalk)',
+                      fontSize: 'clamp(24px, 4vw, 34px)', margin: '6px 0 0 0',
+                    }}>
+                      {temporadaActiva.nombre}
+                    </h2>
+                    {temporadaActiva.fecha_inicio && temporadaActiva.fecha_fin && (
+                      <p style={{
+                        fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.8)', fontSize: '13px', marginTop: '10px',
+                      }}>
+                        {temporadaActiva.fecha_inicio} → {temporadaActiva.fecha_fin}
+                      </p>
+                    )}
+                  </div>
+
                   <div style={{
                     background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px',
                     marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)'
