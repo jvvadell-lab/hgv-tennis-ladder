@@ -142,6 +142,22 @@ export default function AdminPage() {
     }
   }, [activeSection])
 
+  const cancelarReto = async (retoId: string) => {
+    if (!confirm('¿Cancelar este reto? Ambos jugadores quedarán libres para retar de nuevo. Úsalo solo si el reto quedó trabado (por ejemplo, uno de los dos fue desactivado).')) return
+    try {
+      const res = await fetch('/api/admin/cancelar-reto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al cancelar')
+      fetchRetos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    }
+  }
+
   const fetchRetos = async () => {
     setLoadingRetos(true)
     const { data } = await supabase
@@ -1025,11 +1041,19 @@ export default function AdminPage() {
                                   ) : (
                                     <button
                                       onClick={() => autorizarAnticipado(r.id)}
-                                      style={{ background: '#e67e22', color: 'var(--color-chalk)', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                                      style={{ background: '#e67e22', color: 'var(--color-chalk)', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', marginRight: '6px', marginBottom: '4px' }}
                                     >
                                       Autorizar carga anticipada
                                     </button>
                                   )
+                                )}
+                                {['pendiente', 'aceptado'].includes(r.estado) && (
+                                  <button
+                                    onClick={() => cancelarReto(r.id)}
+                                    style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                                  >
+                                    Cancelar reto
+                                  </button>
                                 )}
                               </td>
                             </tr>

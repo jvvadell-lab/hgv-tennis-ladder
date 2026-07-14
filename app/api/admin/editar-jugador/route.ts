@@ -42,6 +42,41 @@ export async function POST(request: Request) {
       .eq('id', jugadorId)
     if (error) throw error
 
+    // Si este jugador ya está anotado en la temporada activa y le cambiamos
+    // categoría/género, su fila del escalafón queda con datos viejos — la
+    // sincronizamos, moviéndolo al final de su nuevo grupo (su posición
+    // anterior no tiene sentido en la categoría/género nuevos).
+    const { data: temporadaActivaAhora } = await db
+      .from('temporadas')
+      .select('id')
+      .eq('estado', 'activa')
+      .maybeSingle()
+
+    if (temporadaActivaAhora) {
+      const { data: posicionActual } = await db
+        .from('ladder_posiciones')
+        .select('id, categoria, genero')
+        .eq('temporada_id', temporadaActivaAhora.id)
+        .eq('jugador_id', jugadorId)
+        .maybeSingle()
+
+      if (posicionActual && (posicionActual.categoria !== categoria || posicionActual.genero !== genero)) {
+        const { count } = await db
+          .from('ladder_posiciones')
+          .select('id', { count: 'exact', head: true })
+          .eq('temporada_id', temporadaActivaAhora.id)
+          .eq('categoria', categoria)
+          .eq('genero', genero)
+
+        const nuevaPosicion = (count || 0) + 1
+
+        await db
+          .from('ladder_posiciones')
+          .update({ categoria, genero, posicion: nuevaPosicion, posicion_inicial: nuevaPosicion })
+          .eq('id', posicionActual.id)
+      }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al guardar' }, { status: 500 })
