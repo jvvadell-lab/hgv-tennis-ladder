@@ -31,6 +31,7 @@ export default function AdminPage() {
 
   const [temporadaActiva, setTemporadaActiva] = useState<any>(null)
   const [ladderPreview, setLadderPreview] = useState<Record<string, any[]>>({})
+  const [ladderStats, setLadderStats] = useState<Record<string, any>>({})
   const [sorteando, setSorteando] = useState(false)
 
   const [retos, setRetos] = useState<any[]>([])
@@ -439,6 +440,54 @@ export default function AdminPage() {
         idsAnotados.add(p.jugador_id)
       })
       setLadderPreview(agrupado)
+
+      // Estadísticas de la temporada activa (partidos jugados/ganados/perdidos/no presentado)
+      const { data: retosTemp } = await supabase
+        .from('retos')
+        .select('id, retador_id, retado_id')
+        .eq('temporada_id', temporada.id)
+
+      const retoIds = (retosTemp || []).map((r: any) => r.id)
+      const retosMap: Record<string, any> = {}
+      ;(retosTemp || []).forEach((r: any) => { retosMap[r.id] = r })
+
+      const stats: Record<string, any> = {}
+
+      if (retoIds.length > 0) {
+        const { data: resultadosTemp } = await supabase
+          .from('resultados')
+          .select('reto_id, ganador_id, no_presentado, validado')
+          .in('reto_id', retoIds)
+          .eq('validado', true)
+
+        ;(resultadosTemp || []).forEach((res: any) => {
+          const reto = retosMap[res.reto_id]
+          if (!reto) return
+          const participantes = [reto.retador_id, reto.retado_id]
+
+          participantes.forEach((p: string) => {
+            if (!stats[p]) stats[p] = { jugados: 0, ganados: 0, perdidos: 0, noPresentado: 0 }
+
+            if (res.no_presentado) {
+              if (p === res.ganador_id) {
+                stats[p].jugados += 1
+                stats[p].ganados += 1
+              } else {
+                stats[p].noPresentado += 1
+              }
+            } else {
+              stats[p].jugados += 1
+              if (p === res.ganador_id) {
+                stats[p].ganados += 1
+              } else {
+                stats[p].perdidos += 1
+              }
+            }
+          })
+        })
+      }
+
+      setLadderStats(stats)
 
       const { data: todosJugadores } = await supabase
         .from('jugadores')
@@ -1466,22 +1515,41 @@ export default function AdminPage() {
                         return (
                           <div key={key} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                             <h4 style={{ color: 'var(--color-ink)', marginTop: 0 }}>{catLabel} — {genLabel}</h4>
-                            <ol style={{ paddingLeft: '20px', margin: 0 }}>
-                              {lista.map((p: any) => {
-                                const inicial = p.posicion_inicial ?? p.posicion
-                                const diferencia = inicial - p.posicion
-                                return (
-                                  <li key={p.id} style={{ padding: '4px 0', color: '#333' }}>
-                                    {p.jugadores?.nombre || 'Jugador'}
-                                    <span style={{ color: '#999', fontSize: '12px', marginLeft: '6px' }}>
-                                      (inicial #{inicial})
-                                      {diferencia > 0 && <span style={{ color: '#28a745' }}> ▲{diferencia}</span>}
-                                      {diferencia < 0 && <span style={{ color: '#c0392b' }}> ▼{Math.abs(diferencia)}</span>}
-                                    </span>
-                                  </li>
-                                )
-                              })}
-                            </ol>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                              <thead>
+                                <tr style={{ color: '#888', textAlign: 'left' }}>
+                                  <th style={{ padding: '2px 4px' }}>#</th>
+                                  <th style={{ padding: '2px 4px' }}>Jugador</th>
+                                  <th style={{ padding: '2px 4px' }}>Inicial</th>
+                                  <th style={{ padding: '2px 4px', textAlign: 'center' }}>PJ</th>
+                                  <th style={{ padding: '2px 4px', textAlign: 'center' }}>G</th>
+                                  <th style={{ padding: '2px 4px', textAlign: 'center' }}>P</th>
+                                  <th style={{ padding: '2px 4px', textAlign: 'center' }}>NP</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {lista.map((p: any) => {
+                                  const inicial = p.posicion_inicial ?? p.posicion
+                                  const diferencia = inicial - p.posicion
+                                  const s = ladderStats[p.jugador_id] || { jugados: 0, ganados: 0, perdidos: 0, noPresentado: 0 }
+                                  return (
+                                    <tr key={p.id} style={{ borderTop: '1px solid #eee' }}>
+                                      <td style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.posicion}</td>
+                                      <td style={{ padding: '4px', color: '#333' }}>{p.jugadores?.nombre || 'Jugador'}</td>
+                                      <td style={{ padding: '4px', color: '#999', fontSize: '12px' }}>
+                                        #{inicial}
+                                        {diferencia > 0 && <span style={{ color: '#28a745' }}> ▲{diferencia}</span>}
+                                        {diferencia < 0 && <span style={{ color: '#c0392b' }}> ▼{Math.abs(diferencia)}</span>}
+                                      </td>
+                                      <td style={{ padding: '4px', textAlign: 'center' }}>{s.jugados}</td>
+                                      <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
+                                      <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
+                                      <td style={{ padding: '4px', textAlign: 'center', color: '#888' }}>{s.noPresentado}</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         )
                       })}
