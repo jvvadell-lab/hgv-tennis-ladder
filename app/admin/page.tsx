@@ -899,7 +899,7 @@ export default function AdminPage() {
 
               {/* Tabla */}
               {loading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>⏳ Cargando jugadores...</div>
+                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando jugadores...</div>
               ) : (
                 <div className="table-scroll" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1121,7 +1121,7 @@ export default function AdminPage() {
               </div>
 
               {loadingRetos ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>⏳ Cargando desafíos...</div>
+                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando desafíos...</div>
               ) : (
                 <div className="table-scroll" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1229,7 +1229,7 @@ export default function AdminPage() {
               )}
 
               {loadingResultados ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>⏳ Cargando resultados...</div>
+                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando resultados...</div>
               ) : (
                 <>
                   {/* PENDIENTES DE VALIDAR */}
@@ -1610,7 +1610,7 @@ export default function AdminPage() {
                   </div>
 
                   {loading ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>⏳ Cargando escalafón...</div>
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando escalafón...</div>
                   ) : Object.keys(ladderPreview).length === 0 ? (
                     <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#888', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                       Todavía no hay posiciones asignadas. Usa el botón de arriba para sortear.
@@ -1694,7 +1694,7 @@ export default function AdminPage() {
                         {historialAbierto === t.id && (
                           <div style={{ padding: '0 20px 20px 20px' }}>
                             {!historialPosiciones[t.id] ? (
-                              <p style={{ color: '#888' }}>⏳ Cargando...</p>
+                              <p style={{ color: '#888' }} className="loading-row"><span className="spinner" /> Cargando...</p>
                             ) : Object.keys(historialPosiciones[t.id]).length === 0 ? (
                               <p style={{ color: '#888' }}>No hubo posiciones registradas en esta temporada.</p>
                             ) : (

@@ -105,7 +105,7 @@ export default function PerfilPage() {
   if (checking || (session && loading)) {
     return (
       <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: 'var(--color-chalk)' }}>Cargando…</p>
+        <p style={{ color: 'var(--color-chalk)' }} className="loading-row"><span className="spinner spinner-chalk" /> Cargando…</p>
       </main>
     )
   }

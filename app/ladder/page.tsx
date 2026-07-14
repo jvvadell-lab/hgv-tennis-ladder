@@ -772,7 +772,7 @@ export default function LadderPage() {
   }
 
   if (checkingSession) {
-    return <CentroMensaje texto="Cargando..." />
+    return <CentroMensaje texto="Cargando..." conSpinner />
   }
 
   return (
@@ -976,7 +976,7 @@ export default function LadderPage() {
                 Ranking — {CATEGORIAS.find(c => c.value === categoria)?.label} / {GENEROS.find(g => g.value === genero)?.label}
               </h2>
               {loading ? (
-                <p>Cargando...</p>
+                <p className="loading-row"><span className="spinner" /> Cargando...</p>
               ) : posiciones.length === 0 ? (
                 <p style={{ color: '#777' }}>Todavía no hay jugadores en esta categoría.</p>
               ) : (
@@ -1399,7 +1399,7 @@ export default function LadderPage() {
                   {historialAbierto === t.id && (
                     <div style={{ padding: '0 20px 20px 20px' }}>
                       {!historialPosiciones[t.id] ? (
-                        <p style={{ color: '#888' }}>⏳ Cargando...</p>
+                        <p style={{ color: '#888' }} className="loading-row"><span className="spinner" /> Cargando...</p>
                       ) : Object.keys(historialPosiciones[t.id]).length === 0 ? (
                         <p style={{ color: '#888' }}>No hubo posiciones registradas en esta temporada.</p>
                       ) : (
@@ -1475,10 +1475,14 @@ export default function LadderPage() {
   )
 }
 
-function CentroMensaje({ texto }: { texto: string }) {
+function CentroMensaje({ texto, conSpinner }: { texto: string; conSpinner?: boolean }) {
   return (
     <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#555' }}>
-      {texto}
+      {conSpinner ? (
+        <span className="loading-row"><span className="spinner" /> {texto}</span>
+      ) : (
+        texto
+      )}
     </div>
   )
 }

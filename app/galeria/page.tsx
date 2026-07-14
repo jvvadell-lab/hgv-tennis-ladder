@@ -80,7 +80,7 @@ export default function GaleriaPage() {
         </div>
 
         {loading ? (
-          <p style={{ color: 'var(--color-chalk)', textAlign: 'center' }}>Cargando fotos…</p>
+          <p style={{ color: 'var(--color-chalk)', textAlign: 'center' }} className="loading-row"><span className="spinner spinner-chalk" /> Cargando fotos…</p>
         ) : fotos.length === 0 ? (
           <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '40px', textAlign: 'center', color: 'var(--color-line)' }}>
             Todavía no hay fotos cargadas. ¡Sube la primera al registrar el resultado de un partido en la escalera!

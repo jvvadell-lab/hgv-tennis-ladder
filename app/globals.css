@@ -99,3 +99,40 @@ body {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* Spinner de carga — un círculo girando con los colores de la marca */
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(28, 126, 196, 0.2);
+  border-top-color: var(--color-court);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+.spinner-chalk {
+  border: 2.5px solid rgba(247, 243, 234, 0.25);
+  border-top-color: var(--color-ball);
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.loading-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Accesibilidad — anillo de foco visible y consistente al navegar con teclado,
+   sobre cualquier fondo (claro u oscuro) */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-ball);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
