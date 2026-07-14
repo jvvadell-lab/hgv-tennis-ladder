@@ -63,7 +63,7 @@ export default function Login() {
           <img
             src="/logo-hgv.png"
             alt="Escudo HGV Tennis Club"
-            style={{ width: '72px', height: '72px', objectFit: 'contain', margin: '0 auto 14px auto', display: 'block' }}
+            style={{ width: '94px', height: '94px', objectFit: 'contain', margin: '0 auto 14px auto', display: 'block' }}
           />
           <h1 style={{
             fontFamily: 'var(--font-display)',

@@ -698,7 +698,7 @@ export default function AdminPage() {
         flexDirection: 'column'
       }}>
         <div className="admin-sidebar-header" style={{ textAlign: 'center', padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.2)' }}>
-          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '48px', height: '48px', objectFit: 'contain', margin: '0 auto', display: 'block' }} />
+          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '62px', height: '62px', objectFit: 'contain', margin: '0 auto', display: 'block' }} />
           <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-chalk)', fontSize: '15px', marginTop: '8px' }}>HGV Tennis</div>
           <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>Panel Admin</div>
         </div>

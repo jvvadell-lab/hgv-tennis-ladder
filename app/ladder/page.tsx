@@ -785,7 +785,7 @@ export default function LadderPage() {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '64px', height: '64px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />
+          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '83px', height: '83px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ball)', fontSize: '32px', margin: '0 0 18px 0' }}>Escalera HGV</h1>
 
           {temporadaNombre ? (

@@ -115,7 +115,7 @@ export default function RegisterPage() {
           <img
             src="/logo-hgv.png"
             alt="Escudo HGV Tennis Club"
-            style={{ width: '68px', height: '68px', objectFit: 'contain', margin: '0 auto 12px auto', display: 'block' }}
+            style={{ width: '88px', height: '88px', objectFit: 'contain', margin: '0 auto 12px auto', display: 'block' }}
           />
           <h1 style={{
             fontFamily: 'var(--font-display)',

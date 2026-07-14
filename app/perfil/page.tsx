@@ -131,7 +131,7 @@ export default function PerfilPage() {
         boxShadow: '0 20px 60px rgba(0,0,0,0.35)'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '26px' }}>
-          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '60px', height: '60px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />
+          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '78px', height: '78px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '26px', margin: 0 }}>
             Mi Perfil
           </h1>

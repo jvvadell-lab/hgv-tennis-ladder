@@ -69,8 +69,8 @@ export default function Home() {
           src="/logo-hgv.png"
           alt="Escudo HGV Tennis Club"
           style={{
-            width: '124px',
-            height: '124px',
+            width: '161px',
+            height: '161px',
             objectFit: 'contain',
             margin: '0 auto 18px auto',
             display: 'block',

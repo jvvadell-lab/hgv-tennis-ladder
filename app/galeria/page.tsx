@@ -56,7 +56,7 @@ export default function GaleriaPage() {
     }}>
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '34px' }}>
-          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '64px', height: '64px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />
+          <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '83px', height: '83px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />
           <h1 style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 900,
