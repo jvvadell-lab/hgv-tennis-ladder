@@ -39,6 +39,11 @@ export default function AdminPage() {
   const [filterEstado, setFilterEstado] = useState('')
 
   const [dashStats, setDashStats] = useState({ jugadores: 0, desafiosActivos: 0, partidosJugados: 0, esteMes: 0 })
+  const [anuncioTitulo, setAnuncioTitulo] = useState('')
+  const [anuncioDescripcion, setAnuncioDescripcion] = useState('')
+  const [anuncioActivo, setAnuncioActivo] = useState(false)
+  const [guardandoAnuncio, setGuardandoAnuncio] = useState(false)
+  const [anuncioMsg, setAnuncioMsg] = useState('')
   const [loadingDash, setLoadingDash] = useState(false)
 
   const [resultados, setResultados] = useState<any[]>([])
@@ -94,9 +99,38 @@ export default function AdminPage() {
     }
   }
 
+  const fetchAnuncio = async () => {
+    const { data } = await supabase.from('anuncio').select('titulo, descripcion, activo').eq('id', 1).maybeSingle()
+    if (data) {
+      setAnuncioTitulo(data.titulo || '')
+      setAnuncioDescripcion(data.descripcion || '')
+      setAnuncioActivo(!!data.activo)
+    }
+  }
+
+  const guardarAnuncio = async () => {
+    setGuardandoAnuncio(true)
+    setAnuncioMsg('')
+    try {
+      const res = await fetch('/api/admin/guardar-anuncio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ titulo: anuncioTitulo, descripcion: anuncioDescripcion, activo: anuncioActivo }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar')
+      setAnuncioMsg('✅ Anuncio guardado.')
+    } catch (err: any) {
+      setAnuncioMsg('❌ ' + err.message)
+    } finally {
+      setGuardandoAnuncio(false)
+    }
+  }
+
   useEffect(() => {
     if (activeSection === 'dashboard') {
       fetchDashboardStats()
+      fetchAnuncio()
     }
   }, [activeSection])
 
@@ -749,6 +783,55 @@ export default function AdminPage() {
                     <div style={{ color: '#888', fontSize: '14px' }}>{card.label}</div>
                   </div>
                 ))}
+              </div>
+              <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', marginBottom: '30px' }}>
+                <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>📢 Anuncio del club</h3>
+                <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px 0' }}>
+                  Se muestra como banner en la página de inicio cuando está activo.
+                </p>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Título</label>
+                  <input
+                    type="text"
+                    value={anuncioTitulo}
+                    onChange={(e) => setAnuncioTitulo(e.target.value)}
+                    placeholder="Ej: Torneo de aniversario — 15 de agosto"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Descripción (opcional)</label>
+                  <textarea
+                    value={anuncioDescripcion}
+                    onChange={(e) => setAnuncioDescripcion(e.target.value)}
+                    placeholder="Ej: Inscríbete antes del 10 de agosto en la recepción del club."
+                    rows={2}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }}
+                  />
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#333', marginBottom: '14px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={anuncioActivo} onChange={(e) => setAnuncioActivo(e.target.checked)} />
+                  Mostrar este anuncio en la página de inicio
+                </label>
+                <button
+                  onClick={guardarAnuncio}
+                  disabled={guardandoAnuncio}
+                  style={{
+                    background: guardandoAnuncio ? '#ccc' : 'var(--color-court)', color: 'white', border: 'none',
+                    padding: '10px 20px', borderRadius: '8px', cursor: guardandoAnuncio ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold'
+                  }}
+                >
+                  {guardandoAnuncio ? 'Guardando...' : '✅ Guardar anuncio'}
+                </button>
+                {anuncioMsg && (
+                  <div style={{
+                    marginTop: '12px', padding: '10px', borderRadius: '8px', fontSize: '13px',
+                    background: anuncioMsg.includes('✅') ? '#d4edda' : '#f8d7da',
+                    color: anuncioMsg.includes('✅') ? '#155724' : '#721c24',
+                  }}>
+                    {anuncioMsg}
+                  </div>
+                )}
               </div>
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                 <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>👋 Bienvenido al Panel de Administración</h3>

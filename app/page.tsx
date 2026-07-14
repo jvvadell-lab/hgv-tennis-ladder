@@ -1,11 +1,18 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
 
 type Session = {
   role: 'admin' | 'jugador'
   id: string
   nombre: string
+} | null
+
+type Anuncio = {
+  titulo: string
+  descripcion: string
+  activo: boolean
 } | null
 
 // Divisor de "línea de cancha" — doble línea fina, como la línea de fondo
@@ -22,12 +29,24 @@ function LineaDeCancha() {
 export default function Home() {
   const [session, setSession] = useState<Session>(null)
   const [checking, setChecking] = useState(true)
+  const [anuncio, setAnuncio] = useState<Anuncio>(null)
 
   useEffect(() => {
     fetch('/api/me')
       .then((r) => r.json())
       .then((data) => setSession(data.session))
       .finally(() => setChecking(false))
+  }, [])
+
+  useEffect(() => {
+    supabase
+      .from('anuncio')
+      .select('titulo, descripcion, activo')
+      .eq('id', 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.activo && data.titulo) setAnuncio(data as Anuncio)
+      })
   }, [])
 
   async function cerrarSesion() {
@@ -115,6 +134,33 @@ export default function Home() {
           </p>
         )}
       </div>
+
+      {/* Anuncio del club */}
+      {anuncio && (
+        <div style={{
+          background: 'linear-gradient(135deg, #d4e157 0%, #b9c93f 100%)',
+          borderRadius: '12px', padding: '18px 26px', marginBottom: '32px',
+          maxWidth: '480px', textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-mono)', color: '#1b2e10', fontSize: '11px',
+            letterSpacing: '0.14em', textTransform: 'uppercase', margin: 0, fontWeight: 700,
+          }}>
+            📢 Anuncio del club
+          </p>
+          <h3 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)',
+            fontSize: 'clamp(18px, 3.5vw, 22px)', margin: '4px 0 0 0',
+          }}>
+            {anuncio.titulo}
+          </h3>
+          {anuncio.descripcion && (
+            <p style={{ color: '#1b2e10', fontSize: '13px', margin: '6px 0 0 0' }}>
+              {anuncio.descripcion}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Tarjetas de información */}
       <div style={{
