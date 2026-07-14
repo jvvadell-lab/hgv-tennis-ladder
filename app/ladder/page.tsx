@@ -786,25 +786,43 @@ export default function LadderPage() {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '64px', height: '64px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ball)', fontSize: '32px', margin: 0 }}>Escalera HGV</h1>
-          <p style={{ color: 'var(--color-chalk)', marginTop: '6px' }}>
-            {temporadaNombre ? `Temporada: ${temporadaNombre}` : 'No hay temporada activa'}
-          </p>
-          {temporadaInicio && temporadaFin && (
-            <p style={{
-              fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '12px',
-              letterSpacing: '0.06em', marginTop: '4px',
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ball)', fontSize: '32px', margin: '0 0 18px 0' }}>Escalera HGV</h1>
+
+          {temporadaNombre ? (
+            <div style={{
+              background: 'rgba(247,243,234,0.08)', border: '1px solid rgba(247,243,234,0.15)',
+              borderTop: '3px solid var(--color-ball)', borderRadius: '12px',
+              padding: '18px 24px', maxWidth: '380px', margin: '0 auto',
             }}>
-              {temporadaInicio} → {temporadaFin}
-            </p>
+              <p style={{
+                fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px',
+                letterSpacing: '0.14em', textTransform: 'uppercase', margin: 0,
+              }}>
+                Temporada activa
+              </p>
+              <h2 style={{
+                fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-chalk)',
+                fontSize: 'clamp(20px, 4vw, 26px)', margin: '4px 0 0 0',
+              }}>
+                {temporadaNombre}
+              </h2>
+              {temporadaInicio && temporadaFin && (
+                <p style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.75)', fontSize: '12px', marginTop: '8px' }}>
+                  {temporadaInicio} → {temporadaFin}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p style={{ color: 'var(--color-chalk)', marginTop: '6px' }}>No hay temporada activa</p>
           )}
+
           {!session && (
-            <p style={{ color: '#cce5ff', marginTop: '10px' }}>
+            <p style={{ color: '#cce5ff', marginTop: '14px' }}>
               <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Inicia sesión</a> para retar y registrar resultados.
             </p>
           )}
           {session?.role === 'jugador' && (
-            <p style={{ color: '#cce5ff', marginTop: '10px' }}>
+            <p style={{ color: '#cce5ff', marginTop: '14px' }}>
               Conectado como <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)' }}>{session.nombre}</strong>
               {' — '}
               <a href="/perfil" style={{ color: 'var(--color-ball)', textDecoration: 'underline', fontSize: 'inherit' }}>
