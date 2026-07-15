@@ -38,7 +38,8 @@ export default function AdminPage() {
   const [jugadoresParaPago, setJugadoresParaPago] = useState<any[]>([])
   const [pagoJugadorId, setPagoJugadorId] = useState('')
   const [pagoTipo, setPagoTipo] = useState('pago_movil')
-  const [pagoMonto, setPagoMonto] = useState('')
+  const [pagoMontoCentavos, setPagoMontoCentavos] = useState('')
+  const [pagoReferencia, setPagoReferencia] = useState('')
   const [pagoFecha, setPagoFecha] = useState(new Date().toISOString().slice(0, 10))
   const [registrandoPago, setRegistrandoPago] = useState(false)
   const [pagoMsg, setPagoMsg] = useState('')
@@ -305,7 +306,7 @@ export default function AdminPage() {
       setPagoMsg('❌ No hay una temporada activa para registrar el pago.')
       return
     }
-    if (!pagoJugadorId || !pagoMonto) {
+    if (!pagoJugadorId || !pagoMontoCentavos) {
       setPagoMsg('❌ Selecciona el jugador y escribe el monto')
       return
     }
@@ -320,8 +321,9 @@ export default function AdminPage() {
           jugadorId: pagoJugadorId,
           temporadaId: temporadaActivaPagos.id,
           tipoPago: pagoTipo,
-          monto: pagoMonto,
+          monto: montoNumerico(pagoMontoCentavos),
           fecha: pagoFecha,
+          referencia: pagoReferencia,
         }),
       })
       const data = await res.json()
@@ -329,7 +331,8 @@ export default function AdminPage() {
 
       setPagoMsg(`✅ Pago registrado — recibo #${data.numeroRecibo}`)
       setPagoJugadorId('')
-      setPagoMonto('')
+      setPagoMontoCentavos('')
+      setPagoReferencia('')
       fetchPagos()
     } catch (err: any) {
       setPagoMsg('❌ ' + err.message)
@@ -771,6 +774,14 @@ export default function AdminPage() {
   ]
 
   const categoriaLabel = (value: string) => CATEGORIAS.find(c => c.value === value)?.label || value
+
+  // El admin escribe solo dígitos (como si tecleara centavos, ej: "150000" -> Bs. 1.500,00)
+  // y esto lo muestra formateado con punto de miles y coma decimal.
+  const formatearMontoDesdeCentavos = (digitos: string) => {
+    const num = parseInt(digitos || '0', 10)
+    return (num / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+  const montoNumerico = (digitos: string) => parseInt(digitos || '0', 10) / 100
   const generoLabel = (value: string) => GENEROS.find(g => g.value === value)?.label || value
 
   const getCategoriaColor = (cat: string) => {
@@ -1883,14 +1894,13 @@ export default function AdminPage() {
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Monto</label>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Monto (Bs.)</label>
                         <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={pagoMonto}
-                          onChange={(e) => setPagoMonto(e.target.value)}
-                          placeholder="0.00"
+                          type="text"
+                          inputMode="numeric"
+                          value={pagoMontoCentavos ? formatearMontoDesdeCentavos(pagoMontoCentavos) : ''}
+                          onChange={(e) => setPagoMontoCentavos(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                          placeholder="0,00"
                           style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
                         />
                       </div>
@@ -1900,6 +1910,18 @@ export default function AdminPage() {
                           type="date"
                           value={pagoFecha}
                           onChange={(e) => setPagoFecha(e.target.value)}
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>
+                          {pagoTipo === 'efectivo' ? 'Seriales del billete' : 'Número de referencia'}
+                        </label>
+                        <input
+                          type="text"
+                          value={pagoReferencia}
+                          onChange={(e) => setPagoReferencia(e.target.value)}
+                          placeholder={pagoTipo === 'efectivo' ? 'Ej: AB1234567' : 'Ej: 000123456789'}
                           style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
                         />
                       </div>
@@ -1942,6 +1964,7 @@ export default function AdminPage() {
                           <th style={{ padding: '10px 16px', textAlign: 'left' }}>Jugador</th>
                           <th style={{ padding: '10px 16px', textAlign: 'left' }}>Tipo</th>
                           <th style={{ padding: '10px 16px', textAlign: 'left' }}>Monto</th>
+                          <th style={{ padding: '10px 16px', textAlign: 'left' }}>Referencia</th>
                           <th style={{ padding: '10px 16px', textAlign: 'left' }}>Fecha</th>
                           <th style={{ padding: '10px 16px', textAlign: 'center' }}>Acciones</th>
                         </tr>
@@ -1952,7 +1975,8 @@ export default function AdminPage() {
                             <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>#{p.numero_recibo}</td>
                             <td style={{ padding: '10px 16px' }}>{p.jugadores?.nombre || 'Jugador'}</td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', textTransform: 'capitalize' }}>{p.tipo_pago.replace('_', ' ')}</td>
-                            <td style={{ padding: '10px 16px' }}>${Number(p.monto).toFixed(2)}</td>
+                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)' }}>Bs. {Number(p.monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style={{ padding: '10px 16px', fontSize: '13px', color: '#555' }}>{p.referencia || '—'}</td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', color: '#888' }}>{p.fecha}</td>
                             <td style={{ padding: '10px 16px', textAlign: 'center' }}>
                               <button
