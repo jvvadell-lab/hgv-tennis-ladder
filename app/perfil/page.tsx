@@ -48,6 +48,9 @@ export default function PerfilPage() {
   const [categoria, setCategoria] = useState('')
   const [genero, setGenero] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [pagos, setPagos] = useState<any[]>([])
+  const [temporadaPagos, setTemporadaPagos] = useState<any>(null)
+  const [loadingPagos, setLoadingPagos] = useState(true)
   const [mensaje, setMensaje] = useState('')
 
   useEffect(() => {
@@ -56,6 +59,19 @@ export default function PerfilPage() {
       .then((data) => setSession(data.session))
       .finally(() => setChecking(false))
   }, [])
+
+  useEffect(() => {
+    if (!session || session.role !== 'jugador') return
+    fetch('/api/jugador/mis-pagos')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) {
+          setPagos(data.pagos || [])
+          setTemporadaPagos(data.temporada || null)
+        }
+      })
+      .finally(() => setLoadingPagos(false))
+  }, [session])
 
   useEffect(() => {
     if (!session || session.role !== 'jugador') return
@@ -223,6 +239,38 @@ export default function PerfilPage() {
             {guardando ? 'Guardando…' : 'Guardar cambios'}
           </button>
         </form>
+
+        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid rgba(15,27,38,0.1)' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 4px 0' }}>
+            💳 Mis pagos
+          </h2>
+          {temporadaPagos && (
+            <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 12px 0' }}>
+              Temporada: {temporadaPagos.nombre}
+            </p>
+          )}
+          {loadingPagos ? (
+            <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
+          ) : !temporadaPagos ? (
+            <p style={{ fontSize: '13px', color: 'var(--color-line)' }}>No hay una temporada activa en este momento.</p>
+          ) : pagos.length === 0 ? (
+            <div style={{ background: 'rgba(197,60,50,0.08)', color: '#a83226', padding: '12px', borderRadius: '4px', fontSize: '13px' }}>
+              ⚠️ Todavía no tienes un pago registrado en esta temporada. Sin un pago, no puedes ser incluido en el sorteo — habla con un administrador.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {pagos.map((p) => (
+                <div key={p.id} style={{
+                  background: 'rgba(47,82,51,0.06)', border: '1px solid rgba(47,82,51,0.15)',
+                  borderRadius: '4px', padding: '10px 14px', fontSize: '13px', color: 'var(--color-ink)',
+                }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>Recibo #{p.numero_recibo}</span>
+                  {' — '}${Number(p.monto).toFixed(2)} · {p.tipo_pago.replace('_', ' ')} · {p.fecha}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <a href="/ladder" style={{ color: 'var(--color-line)', textDecoration: 'none', fontSize: '13px' }}>

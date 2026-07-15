@@ -137,10 +137,10 @@ export default function Home() {
 
       {/* Anuncio del club */}
       {anuncio && (
-        <div style={{
+        <div className="anuncio-banner" style={{
           background: 'linear-gradient(135deg, #d4e157 0%, #b9c93f 100%)',
           borderRadius: '12px', padding: '18px 26px', marginBottom: '32px',
-          maxWidth: '480px', textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          maxWidth: '480px', textAlign: 'center',
         }}>
           <p style={{
             fontFamily: 'var(--font-mono)', color: '#1b2e10', fontSize: '11px',

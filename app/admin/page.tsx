@@ -32,6 +32,16 @@ export default function AdminPage() {
   const [temporadaActiva, setTemporadaActiva] = useState<any>(null)
   const [ladderPreview, setLadderPreview] = useState<Record<string, any[]>>({})
   const [ladderStats, setLadderStats] = useState<Record<string, any>>({})
+  const [pagos, setPagos] = useState<any[]>([])
+  const [loadingPagos, setLoadingPagos] = useState(true)
+  const [temporadaActivaPagos, setTemporadaActivaPagos] = useState<any>(null)
+  const [jugadoresParaPago, setJugadoresParaPago] = useState<any[]>([])
+  const [pagoJugadorId, setPagoJugadorId] = useState('')
+  const [pagoTipo, setPagoTipo] = useState('pago_movil')
+  const [pagoMonto, setPagoMonto] = useState('')
+  const [pagoFecha, setPagoFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [registrandoPago, setRegistrandoPago] = useState(false)
+  const [pagoMsg, setPagoMsg] = useState('')
   const [sorteando, setSorteando] = useState(false)
 
   const [retos, setRetos] = useState<any[]>([])
@@ -258,7 +268,91 @@ export default function AdminPage() {
       fetchTemporadaYLadder()
       fetchHistorial()
     }
+    if (activeSection === 'payments') {
+      fetchTemporadaActivaSimple()
+      fetchJugadoresActivos()
+      fetchPagos()
+    }
   }, [activeSection])
+
+  const fetchTemporadaActivaSimple = async () => {
+    const { data } = await supabase.from('temporadas').select('id, nombre').eq('estado', 'activa').maybeSingle()
+    setTemporadaActivaPagos(data || null)
+  }
+
+  const fetchJugadoresActivos = async () => {
+    const { data } = await supabase.from('jugadores').select('id, nombre').eq('activo', true).order('nombre', { ascending: true })
+    setJugadoresParaPago(data || [])
+  }
+
+  const fetchPagos = async () => {
+    setLoadingPagos(true)
+    try {
+      const res = await fetch('/api/admin/listar-pagos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (res.ok) setPagos(data.pagos || [])
+    } finally {
+      setLoadingPagos(false)
+    }
+  }
+
+  const registrarPago = async () => {
+    if (!temporadaActivaPagos) {
+      setPagoMsg('❌ No hay una temporada activa para registrar el pago.')
+      return
+    }
+    if (!pagoJugadorId || !pagoMonto) {
+      setPagoMsg('❌ Selecciona el jugador y escribe el monto')
+      return
+    }
+
+    setRegistrandoPago(true)
+    setPagoMsg('')
+    try {
+      const res = await fetch('/api/admin/crear-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jugadorId: pagoJugadorId,
+          temporadaId: temporadaActivaPagos.id,
+          tipoPago: pagoTipo,
+          monto: pagoMonto,
+          fecha: pagoFecha,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al registrar')
+
+      setPagoMsg(`✅ Pago registrado — recibo #${data.numeroRecibo}`)
+      setPagoJugadorId('')
+      setPagoMonto('')
+      fetchPagos()
+    } catch (err: any) {
+      setPagoMsg('❌ ' + err.message)
+    } finally {
+      setRegistrandoPago(false)
+    }
+  }
+
+  const eliminarPago = async (pagoId: string) => {
+    if (!confirm('¿Eliminar este pago? Úsalo solo si fue un error de registro.')) return
+    try {
+      const res = await fetch('/api/admin/eliminar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pagoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al eliminar')
+      fetchPagos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    }
+  }
 
   const fetchHistorial = async () => {
     const { data } = await supabase
@@ -673,6 +767,7 @@ export default function AdminPage() {
     { id: 'challenges', icon: '⚔️', label: 'Desafíos' },
     { id: 'results', icon: '🏆', label: 'Resultados' },
     { id: 'ladder', icon: '🎾', label: 'Escalafón' },
+    { id: 'payments', icon: '💳', label: 'Pagos' },
   ]
 
   const categoriaLabel = (value: string) => CATEGORIAS.find(c => c.value === value)?.label || value
@@ -1743,6 +1838,134 @@ export default function AdminPage() {
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* PAGOS */}
+          {activeSection === 'payments' && (
+            <div>
+              <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>💳 Registrar pago</h3>
+                {!temporadaActivaPagos ? (
+                  <p style={{ color: '#888' }}>No hay una temporada activa en este momento.</p>
+                ) : (
+                  <>
+                    <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px 0' }}>
+                      Temporada: <strong>{temporadaActivaPagos.nombre}</strong> — solo los jugadores con pago registrado aquí entran al sorteo.
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+                      <div>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Jugador</label>
+                        <select
+                          value={pagoJugadorId}
+                          onChange={(e) => setPagoJugadorId(e.target.value)}
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                        >
+                          <option value="">-- Selecciona --</option>
+                          {jugadoresParaPago.map((j) => (
+                            <option key={j.id} value={j.id}>{j.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Tipo de pago</label>
+                        <select
+                          value={pagoTipo}
+                          onChange={(e) => setPagoTipo(e.target.value)}
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                        >
+                          <option value="pago_movil">Pago móvil</option>
+                          <option value="transferencia">Transferencia</option>
+                          <option value="efectivo">Efectivo</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Monto</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={pagoMonto}
+                          onChange={(e) => setPagoMonto(e.target.value)}
+                          placeholder="0.00"
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Fecha</label>
+                        <input
+                          type="date"
+                          value={pagoFecha}
+                          onChange={(e) => setPagoFecha(e.target.value)}
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={registrarPago}
+                      disabled={registrandoPago}
+                      style={{
+                        background: registrandoPago ? '#ccc' : 'var(--color-court)', color: 'white', border: 'none',
+                        padding: '10px 20px', borderRadius: '8px', cursor: registrandoPago ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold'
+                      }}
+                    >
+                      {registrandoPago ? 'Registrando...' : '✅ Registrar pago'}
+                    </button>
+                    {pagoMsg && (
+                      <div style={{
+                        marginTop: '12px', padding: '10px', borderRadius: '8px', fontSize: '13px',
+                        background: pagoMsg.includes('✅') ? '#d4edda' : '#f8d7da',
+                        color: pagoMsg.includes('✅') ? '#155724' : '#721c24',
+                      }}>
+                        {pagoMsg}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+                <h3 style={{ color: 'var(--color-ink)', padding: '20px 20px 0 20px' }}>📋 Pagos registrados</h3>
+                {loadingPagos ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando pagos...</div>
+                ) : pagos.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>Todavía no hay pagos registrados.</div>
+                ) : (
+                  <div className="table-scroll">
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--color-court)', color: 'var(--color-chalk)' }}>
+                          <th style={{ padding: '10px 16px', textAlign: 'left' }}>Recibo</th>
+                          <th style={{ padding: '10px 16px', textAlign: 'left' }}>Jugador</th>
+                          <th style={{ padding: '10px 16px', textAlign: 'left' }}>Tipo</th>
+                          <th style={{ padding: '10px 16px', textAlign: 'left' }}>Monto</th>
+                          <th style={{ padding: '10px 16px', textAlign: 'left' }}>Fecha</th>
+                          <th style={{ padding: '10px 16px', textAlign: 'center' }}>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagos.map((p, i) => (
+                          <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
+                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>#{p.numero_recibo}</td>
+                            <td style={{ padding: '10px 16px' }}>{p.jugadores?.nombre || 'Jugador'}</td>
+                            <td style={{ padding: '10px 16px', fontSize: '13px', textTransform: 'capitalize' }}>{p.tipo_pago.replace('_', ' ')}</td>
+                            <td style={{ padding: '10px 16px' }}>${Number(p.monto).toFixed(2)}</td>
+                            <td style={{ padding: '10px 16px', fontSize: '13px', color: '#888' }}>{p.fecha}</td>
+                            <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => eliminarPago(p.id)}
+                                style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

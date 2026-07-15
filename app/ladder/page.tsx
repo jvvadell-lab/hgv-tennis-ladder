@@ -966,6 +966,11 @@ export default function LadderPage() {
                       {anotando ? '⏳ Anotando...' : '✅ Anotarme a esta temporada'}
                     </button>
                   )}
+                  {!cerrado && (
+                    <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#888' }}>
+                      💳 Anotarte es gratis, pero recuerda: solo entran al sorteo los jugadores con el pago de inscripción registrado. Consulta a un administrador para pagar.
+                    </p>
+                  )}
                 </div>
               )
             })()}

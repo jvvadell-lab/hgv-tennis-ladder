@@ -160,6 +160,11 @@ export default function Login() {
               Regístrate
             </a>
           </p>
+          <p style={{ marginTop: '8px' }}>
+            <a href="/recuperar-pin" style={{ color: 'var(--color-court)', fontSize: '13px', textDecoration: 'underline' }}>
+              ¿Olvidaste tu PIN?
+            </a>
+          </p>
           <a href="/" style={{ color: 'var(--color-line)', fontSize: '13px', textDecoration: 'none' }}>
             ← Volver al inicio
           </a>

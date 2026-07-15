@@ -125,6 +125,25 @@ body {
   gap: 10px;
 }
 
+/* Banner de anuncio — entra con un pequeño rebote y respira con un brillo sutil */
+.anuncio-banner {
+  animation: anuncio-entrada 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+             anuncio-brillo 3s ease-in-out infinite 0.6s;
+}
+@keyframes anuncio-entrada {
+  from { opacity: 0; transform: translateY(-14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes anuncio-brillo {
+  0%, 100% { box-shadow: 0 8px 24px rgba(0,0,0,0.25), 0 0 0 rgba(212,225,87,0); }
+  50% { box-shadow: 0 8px 28px rgba(0,0,0,0.25), 0 0 18px rgba(212,225,87,0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anuncio-banner {
+    animation: none;
+  }
+}
+
 /* Accesibilidad — anillo de foco visible y consistente al navegar con teclado,
    sobre cualquier fondo (claro u oscuro) */
 a:focus-visible,
