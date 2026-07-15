@@ -144,6 +144,26 @@ body {
   }
 }
 
+/* Impresión / PDF de la tabla de pagos — oculta todo menos la tabla marcada */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .pagos-imprimible,
+  .pagos-imprimible * {
+    visibility: visible;
+  }
+  .pagos-imprimible {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+  .no-imprimir {
+    display: none !important;
+  }
+}
+
 /* Accesibilidad — anillo de foco visible y consistente al navegar con teclado,
    sobre cualquier fondo (claro u oscuro) */
 a:focus-visible,

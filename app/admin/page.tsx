@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import * as XLSX from 'xlsx'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -355,6 +356,40 @@ export default function AdminPage() {
     } catch (err: any) {
       alert('❌ ' + err.message)
     }
+  }
+
+  // El efectivo se registra en dólares; pago móvil y transferencia, en bolívares —
+  // por eso se totalizan por separado, no tiene sentido sumarlos juntos.
+  const monedaDe = (tipoPago: string) => (tipoPago === 'efectivo' ? '$' : 'Bs.')
+
+  const totalesPorMoneda = pagos.reduce(
+    (acc, p) => {
+      if (p.tipo_pago === 'efectivo') acc.dolares += Number(p.monto)
+      else acc.bolivares += Number(p.monto)
+      return acc
+    },
+    { bolivares: 0, dolares: 0 }
+  )
+
+  const exportarExcel = () => {
+    const filas = pagos.map((p) => ({
+      'N° Recibo': p.numero_recibo,
+      'Jugador': p.jugadores?.nombre || '',
+      'Tipo de pago': p.tipo_pago.replace('_', ' '),
+      'Moneda': monedaDe(p.tipo_pago),
+      'Monto': Number(p.monto),
+      'Referencia': p.referencia || '',
+      'Fecha': p.fecha,
+    }))
+    const hoja = XLSX.utils.json_to_sheet(filas)
+    const libro = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(libro, hoja, 'Pagos')
+    const nombreArchivo = `pagos-hgv-${temporadaActivaPagos?.nombre || 'temporada'}.xlsx`.replace(/\s+/g, '-')
+    XLSX.writeFile(libro, nombreArchivo)
+  }
+
+  const imprimirPagos = () => {
+    window.print()
   }
 
   const fetchHistorial = async () => {
@@ -1894,7 +1929,7 @@ export default function AdminPage() {
                         </select>
                       </div>
                       <div>
-                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Monto (Bs.)</label>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Monto ({monedaDe(pagoTipo)})</label>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -1949,8 +1984,35 @@ export default function AdminPage() {
                 )}
               </div>
 
-              <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-                <h3 style={{ color: 'var(--color-ink)', padding: '20px 20px 0 20px' }}>📋 Pagos registrados</h3>
+              <div className="pagos-imprimible" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+                <div style={{ padding: '20px 20px 0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>📋 Pagos registrados</h3>
+                    {pagos.length > 0 && (
+                      <p style={{ fontSize: '13px', color: '#555', marginTop: '6px' }}>
+                        Total Bs. (pago móvil + transferencia): <strong>Bs. {totalesPorMoneda.bolivares.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                        {' · '}
+                        Total $ (efectivo): <strong>$ {totalesPorMoneda.dolares.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                      </p>
+                    )}
+                  </div>
+                  {pagos.length > 0 && (
+                    <div className="no-imprimir" style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={exportarExcel}
+                        style={{ background: '#28a745', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                      >
+                        📊 Exportar a Excel
+                      </button>
+                      <button
+                        onClick={imprimirPagos}
+                        style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                      >
+                        🖨️ Imprimir / PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {loadingPagos ? (
                   <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando pagos...</div>
                 ) : pagos.length === 0 ? (
@@ -1966,7 +2028,7 @@ export default function AdminPage() {
                           <th style={{ padding: '10px 16px', textAlign: 'left' }}>Monto</th>
                           <th style={{ padding: '10px 16px', textAlign: 'left' }}>Referencia</th>
                           <th style={{ padding: '10px 16px', textAlign: 'left' }}>Fecha</th>
-                          <th style={{ padding: '10px 16px', textAlign: 'center' }}>Acciones</th>
+                          <th className="no-imprimir" style={{ padding: '10px 16px', textAlign: 'center' }}>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1975,10 +2037,12 @@ export default function AdminPage() {
                             <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>#{p.numero_recibo}</td>
                             <td style={{ padding: '10px 16px' }}>{p.jugadores?.nombre || 'Jugador'}</td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', textTransform: 'capitalize' }}>{p.tipo_pago.replace('_', ' ')}</td>
-                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)' }}>Bs. {Number(p.monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)' }}>
+                              {monedaDe(p.tipo_pago)} {Number(p.monto).toLocaleString(p.tipo_pago === 'efectivo' ? 'en-US' : 'es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', color: '#555' }}>{p.referencia || '—'}</td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', color: '#888' }}>{p.fecha}</td>
-                            <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                            <td className="no-imprimir" style={{ padding: '10px 16px', textAlign: 'center' }}>
                               <button
                                 onClick={() => eliminarPago(p.id)}
                                 style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}

@@ -265,7 +265,7 @@ export default function PerfilPage() {
                   borderRadius: '4px', padding: '10px 14px', fontSize: '13px', color: 'var(--color-ink)',
                 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>Recibo #{p.numero_recibo}</span>
-                  {' — '}Bs. {Number(p.monto).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {p.tipo_pago.replace('_', ' ')} · {p.fecha}
+                  {' — '}{p.tipo_pago === 'efectivo' ? '$' : 'Bs.'} {Number(p.monto).toLocaleString(p.tipo_pago === 'efectivo' ? 'en-US' : 'es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {p.tipo_pago.replace('_', ' ')} · {p.fecha}
                   {p.referencia && <> · Ref: {p.referencia}</>}
                 </div>
               ))}
