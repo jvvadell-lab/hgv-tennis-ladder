@@ -315,6 +315,27 @@ export default function AdminPage() {
     }
   }
 
+  const [notificando, setNotificando] = useState<string | null>(null)
+  const [notificados, setNotificados] = useState<Set<string>>(new Set())
+
+  const notificarPagoPendiente = async (jugadorId: string) => {
+    setNotificando(jugadorId)
+    try {
+      const res = await fetch('/api/admin/notificar-pago-pendiente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId, temporadaNombre: temporadaActivaPagos?.nombre }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al enviar')
+      setNotificados((prev) => new Set(prev).add(jugadorId))
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setNotificando(null)
+    }
+  }
+
   const registrarPago = async () => {
     if (!temporadaActivaPagos) {
       setPagoMsg('❌ No hay una temporada activa para registrar el pago.')
@@ -2046,7 +2067,23 @@ export default function AdminPage() {
                                     {pago ? (
                                       <span style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Pagado (recibo #{pago.numero_recibo})</span>
                                     ) : (
-                                      <span style={{ color: '#c0392b', fontWeight: 'bold' }}>❌ Sin pago</span>
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        <span style={{ color: '#c0392b', fontWeight: 'bold' }}>❌ Sin pago</span>
+                                        {notificados.has(j.jugador_id) ? (
+                                          <span style={{ color: '#28a745', fontSize: '12px' }}>✉️ Correo enviado</span>
+                                        ) : (
+                                          <button
+                                            onClick={() => notificarPagoPendiente(j.jugador_id)}
+                                            disabled={notificando === j.jugador_id}
+                                            style={{
+                                              background: notificando === j.jugador_id ? '#ccc' : '#e67e22', color: 'white', border: 'none',
+                                              padding: '4px 10px', borderRadius: '6px', cursor: notificando === j.jugador_id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                            }}
+                                          >
+                                            {notificando === j.jugador_id ? 'Enviando...' : '📧 Notificar'}
+                                          </button>
+                                        )}
+                                      </span>
                                     )}
                                   </td>
                                 </tr>
