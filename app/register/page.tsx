@@ -88,7 +88,11 @@ export default function RegisterPage() {
       setMessage('✅ ¡Registro exitoso! Ya puedes iniciar sesión con tu email y PIN')
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
     } catch (err: any) {
-      setError('❌ Error al registrar: ' + err.message)
+      if (err.message?.includes('jugadores_email_key')) {
+        setError('❌ Ya existe un jugador registrado con ese correo. Si es tuyo, usa "¿Olvidaste tu PIN?" en la página de inicio de sesión.')
+      } else {
+        setError('❌ Error al registrar: ' + err.message)
+      }
     } finally {
       setLoading(false)
     }
