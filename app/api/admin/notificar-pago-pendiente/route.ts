@@ -10,7 +10,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Solo un administrador puede hacer esto' }, { status: 403 })
     }
 
-    const { jugadorId, temporadaNombre } = await request.json()
+    const { jugadorId, temporadaId, temporadaNombre } = await request.json()
     if (!jugadorId) return NextResponse.json({ error: 'Falta el id del jugador' }, { status: 400 })
 
     const db = supabaseServer()
@@ -40,6 +40,10 @@ export async function POST(request: Request) {
     `
 
     await enviarCorreo(jugador.email, '🎾 Recordatorio: pago de inscripción pendiente — HGV Tennis Club', html)
+
+    if (temporadaId) {
+      await db.from('recordatorios_pago').insert([{ jugador_id: jugadorId, temporada_id: temporadaId }])
+    }
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {

@@ -290,6 +290,7 @@ export default function AdminPage() {
         .eq('temporada_id', data.id)
         .order('categoria', { ascending: true })
       setInscritos(anotados || [])
+      fetchRecordatorios(data.id)
     } else {
       setInscritos([])
     }
@@ -316,19 +317,39 @@ export default function AdminPage() {
   }
 
   const [notificando, setNotificando] = useState<string | null>(null)
-  const [notificados, setNotificados] = useState<Set<string>>(new Set())
+  const [recordatorios, setRecordatorios] = useState<any[]>([]) // {jugador_id, enviado_at}[]
+
+  const fetchRecordatorios = async (temporadaId: string) => {
+    const res = await fetch('/api/admin/listar-recordatorios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ temporadaId }),
+    })
+    const data = await res.json()
+    if (res.ok) setRecordatorios(data.recordatorios || [])
+  }
+
+  const recordatoriosDe = (jugadorId: string) =>
+    recordatorios.filter((r) => r.jugador_id === jugadorId).sort((a, b) => (a.enviado_at < b.enviado_at ? 1 : -1))
 
   const notificarPagoPendiente = async (jugadorId: string) => {
+    const previos = recordatoriosDe(jugadorId)
+    if (previos.length > 0) {
+      const ultima = new Date(previos[0].enviado_at).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' })
+      const continuar = confirm(`Ya se le enviaron ${previos.length} recordatorio(s) a este jugador — el último el ${ultima}. ¿Enviar otro de todas formas?`)
+      if (!continuar) return
+    }
+
     setNotificando(jugadorId)
     try {
       const res = await fetch('/api/admin/notificar-pago-pendiente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jugadorId, temporadaNombre: temporadaActivaPagos?.nombre }),
+        body: JSON.stringify({ jugadorId, temporadaId: temporadaActivaPagos?.id, temporadaNombre: temporadaActivaPagos?.nombre }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al enviar')
-      setNotificados((prev) => new Set(prev).add(jugadorId))
+      if (temporadaActivaPagos?.id) fetchRecordatorios(temporadaActivaPagos.id)
     } catch (err: any) {
       alert('❌ ' + err.message)
     } finally {
@@ -2069,20 +2090,23 @@ export default function AdminPage() {
                                     ) : (
                                       <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         <span style={{ color: '#c0392b', fontWeight: 'bold' }}>❌ Sin pago</span>
-                                        {notificados.has(j.jugador_id) ? (
-                                          <span style={{ color: '#28a745', fontSize: '12px' }}>✉️ Correo enviado</span>
-                                        ) : (
-                                          <button
-                                            onClick={() => notificarPagoPendiente(j.jugador_id)}
-                                            disabled={notificando === j.jugador_id}
-                                            style={{
-                                              background: notificando === j.jugador_id ? '#ccc' : '#e67e22', color: 'white', border: 'none',
-                                              padding: '4px 10px', borderRadius: '6px', cursor: notificando === j.jugador_id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
-                                            }}
-                                          >
-                                            {notificando === j.jugador_id ? 'Enviando...' : '📧 Notificar'}
-                                          </button>
+                                        {recordatoriosDe(j.jugador_id).length > 0 && (
+                                          <span style={{ color: '#e67e22', fontSize: '12px' }}>
+                                            📧 {recordatoriosDe(j.jugador_id).length} recordatorio{recordatoriosDe(j.jugador_id).length > 1 ? 's' : ''}
+                                            {' · último '}
+                                            {new Date(recordatoriosDe(j.jugador_id)[0].enviado_at).toLocaleDateString('es-ES')}
+                                          </span>
                                         )}
+                                        <button
+                                          onClick={() => notificarPagoPendiente(j.jugador_id)}
+                                          disabled={notificando === j.jugador_id}
+                                          style={{
+                                            background: notificando === j.jugador_id ? '#ccc' : '#e67e22', color: 'white', border: 'none',
+                                            padding: '4px 10px', borderRadius: '6px', cursor: notificando === j.jugador_id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                          }}
+                                        >
+                                          {notificando === j.jugador_id ? 'Enviando...' : '📧 Notificar'}
+                                        </button>
                                       </span>
                                     )}
                                   </td>
