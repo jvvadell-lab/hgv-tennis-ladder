@@ -39,6 +39,7 @@ export default function AdminPage() {
   const [loadingPagos, setLoadingPagos] = useState(true)
   const [temporadaActivaPagos, setTemporadaActivaPagos] = useState<any>(null)
   const [jugadoresParaPago, setJugadoresParaPago] = useState<any[]>([])
+  const [inscritos, setInscritos] = useState<any[]>([])
   const [pagoJugadorId, setPagoJugadorId] = useState('')
   const [pagoTipo, setPagoTipo] = useState('pago_movil')
   const [pagoMontoCentavos, setPagoMontoCentavos] = useState('')
@@ -282,6 +283,16 @@ export default function AdminPage() {
   const fetchTemporadaActivaSimple = async () => {
     const { data } = await supabase.from('temporadas').select('id, nombre').eq('estado', 'activa').maybeSingle()
     setTemporadaActivaPagos(data || null)
+    if (data) {
+      const { data: anotados } = await supabase
+        .from('ladder_posiciones')
+        .select('jugador_id, categoria, genero, jugadores:jugador_id(nombre)')
+        .eq('temporada_id', data.id)
+        .order('categoria', { ascending: true })
+      setInscritos(anotados || [])
+    } else {
+      setInscritos([])
+    }
   }
 
   const fetchJugadoresActivos = async () => {
@@ -363,6 +374,8 @@ export default function AdminPage() {
   // El efectivo se registra en dólares; pago móvil y transferencia, en bolívares —
   // por eso se totalizan por separado, no tiene sentido sumarlos juntos.
   const monedaDe = (tipoPago: string) => (tipoPago === 'efectivo' ? '$' : 'Bs.')
+
+  const pagaronSet = new Set(pagos.map((p) => p.jugador_id))
 
   const pagosFiltrados = pagos.filter((p) => {
     if (filtroFechaDesde && p.fecha < filtroFechaDesde) return false
@@ -2000,6 +2013,52 @@ export default function AdminPage() {
                   </>
                 )}
               </div>
+
+              {temporadaActivaPagos && (
+                <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                  <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>✅ Estado de pago de inscritos</h3>
+                  {inscritos.length === 0 ? (
+                    <p style={{ color: '#888', fontSize: '13px' }}>Todavía no hay jugadores anotados en esta temporada.</p>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: '13px', color: '#555', margin: '0 0 14px 0' }}>
+                        {inscritos.filter((j) => pagaronSet.has(j.jugador_id)).length} de {inscritos.length} inscritos tienen pago registrado.
+                      </p>
+                      <div className="table-scroll">
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                          <thead>
+                            <tr style={{ color: '#888', textAlign: 'left', borderBottom: '1px solid #eee' }}>
+                              <th style={{ padding: '6px 10px' }}>Jugador</th>
+                              <th style={{ padding: '6px 10px' }}>Categoría</th>
+                              <th style={{ padding: '6px 10px' }}>Estado</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {inscritos.map((j: any) => {
+                              const pago = pagos.find((p) => p.jugador_id === j.jugador_id)
+                              return (
+                                <tr key={j.jugador_id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                                  <td style={{ padding: '8px 10px' }}>{j.jugadores?.nombre || 'Jugador'}</td>
+                                  <td style={{ padding: '8px 10px', color: '#777' }}>
+                                    {categoriaLabel(j.categoria)} — {GENEROS.find(g => g.value === j.genero)?.label}
+                                  </td>
+                                  <td style={{ padding: '8px 10px' }}>
+                                    {pago ? (
+                                      <span style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Pagado (recibo #{pago.numero_recibo})</span>
+                                    ) : (
+                                      <span style={{ color: '#c0392b', fontWeight: 'bold' }}>❌ Sin pago</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="pagos-imprimible" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
                 <div style={{ padding: '20px 20px 0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
