@@ -34,6 +34,8 @@ export default function AdminPage() {
   const [ladderPreview, setLadderPreview] = useState<Record<string, any[]>>({})
   const [ladderStats, setLadderStats] = useState<Record<string, any>>({})
   const [pagos, setPagos] = useState<any[]>([])
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
   const [loadingPagos, setLoadingPagos] = useState(true)
   const [temporadaActivaPagos, setTemporadaActivaPagos] = useState<any>(null)
   const [jugadoresParaPago, setJugadoresParaPago] = useState<any[]>([])
@@ -362,7 +364,13 @@ export default function AdminPage() {
   // por eso se totalizan por separado, no tiene sentido sumarlos juntos.
   const monedaDe = (tipoPago: string) => (tipoPago === 'efectivo' ? '$' : 'Bs.')
 
-  const totalesPorMoneda = pagos.reduce(
+  const pagosFiltrados = pagos.filter((p) => {
+    if (filtroFechaDesde && p.fecha < filtroFechaDesde) return false
+    if (filtroFechaHasta && p.fecha > filtroFechaHasta) return false
+    return true
+  })
+
+  const totalesPorMoneda = pagosFiltrados.reduce(
     (acc, p) => {
       if (p.tipo_pago === 'efectivo') acc.dolares += Number(p.monto)
       else acc.bolivares += Number(p.monto)
@@ -371,8 +379,12 @@ export default function AdminPage() {
     { bolivares: 0, dolares: 0 }
   )
 
+  const rangoTexto = filtroFechaDesde || filtroFechaHasta
+    ? `Del ${filtroFechaDesde || '(inicio)'} al ${filtroFechaHasta || '(hoy)'}`
+    : 'Todos los pagos registrados'
+
   const exportarExcel = () => {
-    const filas = pagos.map((p) => ({
+    const filas = pagosFiltrados.map((p) => ({
       'N° Recibo': p.numero_recibo,
       'Jugador': p.jugadores?.nombre || '',
       'Tipo de pago': p.tipo_pago.replace('_', ' '),
@@ -381,6 +393,11 @@ export default function AdminPage() {
       'Referencia': p.referencia || '',
       'Fecha': p.fecha,
     }))
+    // Filas en blanco + totales al final del reporte
+    filas.push({ 'N° Recibo': '' as any, 'Jugador': '', 'Tipo de pago': '', 'Moneda': '', 'Monto': '' as any, 'Referencia': '', 'Fecha': '' })
+    filas.push({ 'N° Recibo': '' as any, 'Jugador': '', 'Tipo de pago': '', 'Moneda': 'Bs.', 'Monto': totalesPorMoneda.bolivares, 'Referencia': 'TOTAL bolívares', 'Fecha': '' })
+    filas.push({ 'N° Recibo': '' as any, 'Jugador': '', 'Tipo de pago': '', 'Moneda': '$', 'Monto': totalesPorMoneda.dolares, 'Referencia': 'TOTAL dólares', 'Fecha': '' })
+
     const hoja = XLSX.utils.json_to_sheet(filas)
     const libro = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(libro, hoja, 'Pagos')
@@ -1988,7 +2005,8 @@ export default function AdminPage() {
                 <div style={{ padding: '20px 20px 0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>📋 Pagos registrados</h3>
-                    {pagos.length > 0 && (
+                    <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>{rangoTexto}</p>
+                    {pagosFiltrados.length > 0 && (
                       <p style={{ fontSize: '13px', color: '#555', marginTop: '6px' }}>
                         Total Bs. (pago móvil + transferencia): <strong>Bs. {totalesPorMoneda.bolivares.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                         {' · '}
@@ -1997,7 +2015,33 @@ export default function AdminPage() {
                     )}
                   </div>
                   {pagos.length > 0 && (
-                    <div className="no-imprimir" style={{ display: 'flex', gap: '8px' }}>
+                    <div className="no-imprimir" style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', color: '#888', display: 'block', marginBottom: '2px' }}>Desde</label>
+                        <input
+                          type="date"
+                          value={filtroFechaDesde}
+                          onChange={(e) => setFiltroFechaDesde(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '11px', color: '#888', display: 'block', marginBottom: '2px' }}>Hasta</label>
+                        <input
+                          type="date"
+                          value={filtroFechaHasta}
+                          onChange={(e) => setFiltroFechaHasta(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                        />
+                      </div>
+                      {(filtroFechaDesde || filtroFechaHasta) && (
+                        <button
+                          onClick={() => { setFiltroFechaDesde(''); setFiltroFechaHasta('') }}
+                          style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                        >
+                          Limpiar
+                        </button>
+                      )}
                       <button
                         onClick={exportarExcel}
                         style={{ background: '#28a745', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
@@ -2015,8 +2059,10 @@ export default function AdminPage() {
                 </div>
                 {loadingPagos ? (
                   <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando pagos...</div>
-                ) : pagos.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>Todavía no hay pagos registrados.</div>
+                ) : pagosFiltrados.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                    {pagos.length === 0 ? 'Todavía no hay pagos registrados.' : 'No hay pagos en el rango de fechas seleccionado.'}
+                  </div>
                 ) : (
                   <div className="table-scroll">
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -2032,7 +2078,7 @@ export default function AdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {pagos.map((p, i) => (
+                        {pagosFiltrados.map((p, i) => (
                           <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
                             <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>#{p.numero_recibo}</td>
                             <td style={{ padding: '10px 16px' }}>{p.jugadores?.nombre || 'Jugador'}</td>
@@ -2053,6 +2099,16 @@ export default function AdminPage() {
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop: '2px solid var(--color-ink)', fontWeight: 'bold' }}>
+                          <td colSpan={3} style={{ padding: '12px 16px', textAlign: 'right' }}>TOTALES</td>
+                          <td colSpan={4} style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)' }}>
+                            Bs. {totalesPorMoneda.bolivares.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {'   ·   '}
+                            $ {totalesPorMoneda.dolares.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 )}
