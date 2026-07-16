@@ -123,7 +123,17 @@ export default function GaleriaPage() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: '34px' }}>
-          <a href="/" style={{ color: 'rgba(247,243,234,0.6)', fontSize: '13px', textDecoration: 'none' }}>← Volver al inicio</a>
+          <a href="/" style={{
+            display: 'inline-block',
+            color: 'var(--color-chalk)',
+            fontSize: '15px',
+            fontWeight: 700,
+            fontFamily: 'var(--font-body)',
+            textDecoration: 'none',
+            border: '1px solid var(--color-ball)',
+            borderRadius: '4px',
+            padding: '11px 26px',
+          }}>🎾 Volver al inicio</a>
         </div>
       </div>
 

@@ -943,8 +943,8 @@ export default function AdminPage() {
         </nav>
 
         <div className="admin-sidebar-footer" style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-          <a href="/" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', textDecoration: 'none' }}>
-            ← Volver al inicio
+          <a href="/" style={{ color: 'var(--color-chalk)', fontSize: '14px', fontWeight: 600, textDecoration: 'none' }}>
+            🎾 Volver al inicio
           </a>
         </div>
       </div>
@@ -967,7 +967,7 @@ export default function AdminPage() {
             {menuItems.find(m => m.id === activeSection)?.icon}{' '}
             {menuItems.find(m => m.id === activeSection)?.label}
           </h1>
-          <span style={{ color: '#888', fontSize: '14px' }}>
+          <span style={{ color: '#6b6b6b', fontSize: '14px' }}>
             🕐 {new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </span>
         </div>
@@ -993,13 +993,13 @@ export default function AdminPage() {
                   }}>
                     <div style={{ fontSize: '32px' }}>{card.icon}</div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '28px', fontWeight: 'bold', color: card.color, margin: '8px 0' }}>{card.value}</div>
-                    <div style={{ color: '#888', fontSize: '14px' }}>{card.label}</div>
+                    <div style={{ color: '#6b6b6b', fontSize: '14px' }}>{card.label}</div>
                   </div>
                 ))}
               </div>
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', marginBottom: '30px' }}>
                 <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>📢 Anuncio del club</h3>
-                <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px 0' }}>
+                <p style={{ color: '#6b6b6b', fontSize: '13px', margin: '0 0 16px 0' }}>
                   Se muestra como banner en la página de inicio cuando está activo.
                 </p>
                 <div style={{ marginBottom: '12px' }}>
@@ -1105,14 +1105,14 @@ export default function AdminPage() {
                   🔄 Actualizar
                 </button>
 
-                <span style={{ marginLeft: 'auto', color: '#888', fontSize: '14px' }}>
+                <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
                   Total: <strong>{filteredPlayers.length}</strong> jugadores
                 </span>
               </div>
 
               {/* Tabla */}
               {loading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando jugadores...</div>
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando jugadores...</div>
               ) : (
                 <div className="table-scroll" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1132,7 +1132,7 @@ export default function AdminPage() {
                     <tbody>
                       {filteredPlayers.length === 0 ? (
                         <tr>
-                          <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                          <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
                             😔 No hay jugadores registrados aún
                           </td>
                         </tr>
@@ -1143,7 +1143,7 @@ export default function AdminPage() {
                             borderBottom: '1px solid #f0f0f0',
                             background: index % 2 === 0 ? 'var(--color-chalk)' : '#fafafa'
                           }}>
-                            <td style={{ padding: '12px 16px', color: '#888', fontSize: '14px' }}>{index + 1}</td>
+                            <td style={{ padding: '12px 16px', color: '#6b6b6b', fontSize: '14px' }}>{index + 1}</td>
                             <td style={{ padding: '12px 16px', fontWeight: '600', color: '#333' }}>{player.nombre}</td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.email}</td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.telefono}</td>
@@ -1172,7 +1172,7 @@ export default function AdminPage() {
                                 {categoriaLabel(player.categoria)}
                               </span>
                             </td>
-                            <td style={{ padding: '12px 16px', color: '#888', fontSize: '13px' }}>
+                            <td style={{ padding: '12px 16px', color: '#6b6b6b', fontSize: '13px' }}>
                               {player.created_at ? new Date(player.created_at).toLocaleDateString('es-ES') : '—'}
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
@@ -1201,7 +1201,7 @@ export default function AdminPage() {
                               <td colSpan={9} style={{ padding: '16px', background: '#f8f9fa' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '10px' }}>
                                   <div>
-                                    <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Nombre</label>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Nombre</label>
                                     <input
                                       type="text"
                                       value={editJugadorForm.nombre}
@@ -1210,7 +1210,7 @@ export default function AdminPage() {
                                     />
                                   </div>
                                   <div>
-                                    <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Email</label>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Email</label>
                                     <input
                                       type="email"
                                       value={editJugadorForm.email}
@@ -1219,7 +1219,7 @@ export default function AdminPage() {
                                     />
                                   </div>
                                   <div>
-                                    <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Teléfono</label>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Teléfono</label>
                                     <input
                                       type="text"
                                       value={editJugadorForm.telefono}
@@ -1228,7 +1228,7 @@ export default function AdminPage() {
                                     />
                                   </div>
                                   <div>
-                                    <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Número de acción</label>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Número de acción</label>
                                     <input
                                       type="text"
                                       value={editJugadorForm.numeroAccion}
@@ -1237,7 +1237,7 @@ export default function AdminPage() {
                                     />
                                   </div>
                                   <div>
-                                    <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Género</label>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Género</label>
                                     <select
                                       value={editJugadorForm.genero}
                                       onChange={(e) => setEditJugadorForm({ ...editJugadorForm, genero: e.target.value })}
@@ -1247,7 +1247,7 @@ export default function AdminPage() {
                                     </select>
                                   </div>
                                   <div>
-                                    <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Categoría</label>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Categoría</label>
                                     <select
                                       value={editJugadorForm.categoria}
                                       onChange={(e) => setEditJugadorForm({ ...editJugadorForm, categoria: e.target.value })}
@@ -1257,7 +1257,7 @@ export default function AdminPage() {
                                     </select>
                                   </div>
                                   <div>
-                                    <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Activo</label>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Activo</label>
                                     <select
                                       value={editJugadorForm.activo ? 'si' : 'no'}
                                       onChange={(e) => setEditJugadorForm({ ...editJugadorForm, activo: e.target.value === 'si' })}
@@ -1328,13 +1328,13 @@ export default function AdminPage() {
                 >
                   🔄 Actualizar
                 </button>
-                <span style={{ marginLeft: 'auto', color: '#888', fontSize: '14px' }}>
+                <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
                   Total: <strong>{filteredRetos.length}</strong> desafíos
                 </span>
               </div>
 
               {loadingRetos ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando desafíos...</div>
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando desafíos...</div>
               ) : (
                 <div className="table-scroll" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1352,7 +1352,7 @@ export default function AdminPage() {
                     <tbody>
                       {filteredRetos.length === 0 ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
                             😔 No hay desafíos que coincidan con el filtro
                           </td>
                         </tr>
@@ -1426,7 +1426,7 @@ export default function AdminPage() {
                 >
                   🔄 Actualizar
                 </button>
-                <span style={{ marginLeft: 'auto', color: '#888', fontSize: '14px' }}>
+                <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
                   Total: <strong>{resultados.length}</strong> resultados
                 </span>
               </div>
@@ -1442,13 +1442,13 @@ export default function AdminPage() {
               )}
 
               {loadingResultados ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando resultados...</div>
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando resultados...</div>
               ) : (
                 <>
                   {/* PENDIENTES DE VALIDAR */}
                   <h3 style={{ color: 'var(--color-ink)' }}>⏳ Pendientes de validar</h3>
                   {resultados.filter(r => !r.validado).length === 0 ? (
-                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#888', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', marginBottom: '30px' }}>
+                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', marginBottom: '30px' }}>
                       No hay resultados esperando validación.
                     </div>
                   ) : (
@@ -1467,7 +1467,7 @@ export default function AdminPage() {
                             <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#555' }}>
                               Marcador: {r.marcador_retador} — {r.marcador_retado} · Ganador: <strong>{r.ganador?.nombre}</strong>
                             </p>
-                            <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>
                               {CATEGORIAS.find(c => c.value === r.retos?.retador?.categoria)?.label} — {GENEROS.find(g => g.value === r.retos?.retador?.genero)?.label}
                               {' · '}Enviado {new Date(r.created_at).toLocaleDateString('es-ES')}
                             </p>
@@ -1491,7 +1491,7 @@ export default function AdminPage() {
                   {/* HISTORIAL VALIDADO */}
                   <h3 style={{ color: 'var(--color-ink)' }}>✅ Historial validado</h3>
                   {resultados.filter(r => r.validado).length === 0 ? (
-                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#888', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                       Todavía no hay resultados validados.
                     </div>
                   ) : (
@@ -1533,7 +1533,7 @@ export default function AdminPage() {
                                 {' — '}
                                 {GENEROS.find(g => g.value === r.retos?.retador?.genero)?.label || '—'}
                               </td>
-                              <td style={{ padding: '12px 16px', fontSize: '13px', color: '#888' }}>
+                              <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b6b6b' }}>
                                 {new Date(r.created_at).toLocaleDateString('es-ES')}
                               </td>
                             </tr>
@@ -1588,7 +1588,7 @@ export default function AdminPage() {
                     <option value="10">Plazo: 10 días</option>
                   </select>
                 </div>
-                <p style={{ fontSize: '12px', color: '#888', margin: '-4px 0 10px 0' }}>
+                <p style={{ fontSize: '12px', color: '#6b6b6b', margin: '-4px 0 10px 0' }}>
                   Plazo de inscripción: los jugadores tendrán ese número de días para anotarse antes del sorteo.
                 </p>
                 <button
@@ -1616,7 +1616,7 @@ export default function AdminPage() {
                 <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                   <div style={{ fontSize: '60px' }}>🎾</div>
                   <h2 style={{ color: 'var(--color-ink)' }}>No hay temporada activa</h2>
-                  <p style={{ color: '#888' }}>Crea una temporada con estado 'activa' antes de sortear el escalafón.</p>
+                  <p style={{ color: '#6b6b6b' }}>Crea una temporada con estado 'activa' antes de sortear el escalafón.</p>
                 </div>
               ) : (
                 <>
@@ -1701,7 +1701,7 @@ export default function AdminPage() {
                             style={{ padding: '10px 12px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px' }}
                           />
                           <div>
-                            <label style={{ fontSize: '11px', color: '#888', display: 'block' }}>Límite de inscripción</label>
+                            <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Límite de inscripción</label>
                             <input
                               type="date"
                               value={editTempLimite}
@@ -1777,11 +1777,11 @@ export default function AdminPage() {
                     {temporadaActiva.sorteo_realizado && (
                       <div style={{ marginTop: '18px', paddingTop: '18px', borderTop: '1px solid #eee' }}>
                         <h4 style={{ color: 'var(--color-ink)', margin: '0 0 8px 0' }}>➕ Agregar jugador manualmente</h4>
-                        <p style={{ fontSize: '13px', color: '#888', margin: '0 0 10px 0' }}>
+                        <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 10px 0' }}>
                           Para socios que se anotan tarde (después del plazo). Entran al final de su categoría/género, sin pasar por el sorteo.
                         </p>
                         {jugadoresDisponibles.length === 0 ? (
-                          <p style={{ fontSize: '13px', color: '#888' }}>Todos los socios activos ya están en el escalafón.</p>
+                          <p style={{ fontSize: '13px', color: '#6b6b6b' }}>Todos los socios activos ya están en el escalafón.</p>
                         ) : (
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                             <select
@@ -1823,9 +1823,9 @@ export default function AdminPage() {
                   </div>
 
                   {loading ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando escalafón...</div>
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando escalafón...</div>
                   ) : Object.keys(ladderPreview).length === 0 ? (
-                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#888', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                       Todavía no hay posiciones asignadas. Usa el botón de arriba para sortear.
                     </div>
                   ) : (
@@ -1839,7 +1839,7 @@ export default function AdminPage() {
                             <h4 style={{ color: 'var(--color-ink)', marginTop: 0 }}>{catLabel} — {genLabel}</h4>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                               <thead>
-                                <tr style={{ color: '#888', textAlign: 'left' }}>
+                                <tr style={{ color: '#6b6b6b', textAlign: 'left' }}>
                                   <th style={{ padding: '2px 4px' }}>#</th>
                                   <th style={{ padding: '2px 4px' }}>Jugador</th>
                                   <th style={{ padding: '2px 4px' }}>Inicial</th>
@@ -1858,7 +1858,7 @@ export default function AdminPage() {
                                     <tr key={p.id} style={{ borderTop: '1px solid #eee' }}>
                                       <td style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.posicion}</td>
                                       <td style={{ padding: '4px', color: '#333' }}>{p.jugadores?.nombre || 'Jugador'}</td>
-                                      <td style={{ padding: '4px', color: '#999', fontSize: '12px' }}>
+                                      <td style={{ padding: '4px', color: '#6b6b6b', fontSize: '12px' }}>
                                         #{inicial}
                                         {diferencia > 0 && <span style={{ color: '#28a745' }}> ▲{diferencia}</span>}
                                         {diferencia < 0 && <span style={{ color: '#c0392b' }}> ▼{Math.abs(diferencia)}</span>}
@@ -1866,7 +1866,7 @@ export default function AdminPage() {
                                       <td style={{ padding: '4px', textAlign: 'center' }}>{s.jugados}</td>
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
-                                      <td style={{ padding: '4px', textAlign: 'center', color: '#888' }}>{s.noPresentado}</td>
+                                      <td style={{ padding: '4px', textAlign: 'center', color: '#6b6b6b' }}>{s.noPresentado}</td>
                                     </tr>
                                   )
                                 })}
@@ -1884,7 +1884,7 @@ export default function AdminPage() {
               <div style={{ marginTop: '30px' }}>
                 <h3 style={{ color: 'var(--color-ink)' }}>📜 Historial de escalafones cerrados</h3>
                 {historial.length === 0 ? (
-                  <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#888', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                  <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                     Todavía no hay temporadas cerradas.
                   </div>
                 ) : (
@@ -1899,7 +1899,7 @@ export default function AdminPage() {
                           }}
                         >
                           <span style={{ fontWeight: '600', color: 'var(--color-ink)' }}>{t.nombre}</span>
-                          <span style={{ fontSize: '13px', color: '#888' }}>
+                          <span style={{ fontSize: '13px', color: '#6b6b6b' }}>
                             {t.fecha_inicio} → {t.fecha_fin} {historialAbierto === t.id ? '▲' : '▼'}
                           </span>
                         </button>
@@ -1907,9 +1907,9 @@ export default function AdminPage() {
                         {historialAbierto === t.id && (
                           <div style={{ padding: '0 20px 20px 20px' }}>
                             {!historialPosiciones[t.id] ? (
-                              <p style={{ color: '#888' }} className="loading-row"><span className="spinner" /> Cargando...</p>
+                              <p style={{ color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando...</p>
                             ) : Object.keys(historialPosiciones[t.id]).length === 0 ? (
-                              <p style={{ color: '#888' }}>No hubo posiciones registradas en esta temporada.</p>
+                              <p style={{ color: '#6b6b6b' }}>No hubo posiciones registradas en esta temporada.</p>
                             ) : (
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
                                 {Object.entries(historialPosiciones[t.id]).map(([key, lista]) => {
@@ -1922,7 +1922,7 @@ export default function AdminPage() {
                                       <h5 style={{ margin: '0 0 8px 0', color: 'var(--color-ink)' }}>{catLabel} — {genLabel}</h5>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                         <thead>
-                                          <tr style={{ color: '#888', textAlign: 'left' }}>
+                                          <tr style={{ color: '#6b6b6b', textAlign: 'left' }}>
                                             <th style={{ padding: '2px 4px' }}>#</th>
                                             <th style={{ padding: '2px 4px' }}>Jugador</th>
                                             <th style={{ padding: '2px 4px', textAlign: 'center' }}>PJ</th>
@@ -1941,7 +1941,7 @@ export default function AdminPage() {
                                                 <td style={{ padding: '4px', textAlign: 'center' }}>{s.jugados}</td>
                                                 <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                                                 <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
-                                                <td style={{ padding: '4px', textAlign: 'center', color: '#888' }}>{s.noPresentado}</td>
+                                                <td style={{ padding: '4px', textAlign: 'center', color: '#6b6b6b' }}>{s.noPresentado}</td>
                                               </tr>
                                             )
                                           })}
@@ -1968,10 +1968,10 @@ export default function AdminPage() {
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                 <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>💳 Registrar pago</h3>
                 {!temporadaActivaPagos ? (
-                  <p style={{ color: '#888' }}>No hay una temporada activa en este momento.</p>
+                  <p style={{ color: '#6b6b6b' }}>No hay una temporada activa en este momento.</p>
                 ) : (
                   <>
-                    <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px 0' }}>
+                    <p style={{ color: '#6b6b6b', fontSize: '13px', margin: '0 0 16px 0' }}>
                       Temporada: <strong>{temporadaActivaPagos.nombre}</strong> — solo los jugadores con pago registrado aquí entran al sorteo.
                     </p>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
@@ -2060,7 +2060,7 @@ export default function AdminPage() {
                 <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                   <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>✅ Estado de pago de inscritos</h3>
                   {inscritos.length === 0 ? (
-                    <p style={{ color: '#888', fontSize: '13px' }}>Todavía no hay jugadores anotados en esta temporada.</p>
+                    <p style={{ color: '#6b6b6b', fontSize: '13px' }}>Todavía no hay jugadores anotados en esta temporada.</p>
                   ) : (
                     <>
                       <p style={{ fontSize: '13px', color: '#555', margin: '0 0 14px 0' }}>
@@ -2069,7 +2069,7 @@ export default function AdminPage() {
                       <div className="table-scroll">
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                           <thead>
-                            <tr style={{ color: '#888', textAlign: 'left', borderBottom: '1px solid #eee' }}>
+                            <tr style={{ color: '#6b6b6b', textAlign: 'left', borderBottom: '1px solid #eee' }}>
                               <th style={{ padding: '6px 10px' }}>Jugador</th>
                               <th style={{ padding: '6px 10px' }}>Categoría</th>
                               <th style={{ padding: '6px 10px' }}>Estado</th>
@@ -2081,7 +2081,7 @@ export default function AdminPage() {
                               return (
                                 <tr key={j.jugador_id} style={{ borderBottom: '1px solid #f5f5f5' }}>
                                   <td style={{ padding: '8px 10px' }}>{j.jugadores?.nombre || 'Jugador'}</td>
-                                  <td style={{ padding: '8px 10px', color: '#777' }}>
+                                  <td style={{ padding: '8px 10px', color: '#5c5c5c' }}>
                                     {categoriaLabel(j.categoria)} — {GENEROS.find(g => g.value === j.genero)?.label}
                                   </td>
                                   <td style={{ padding: '8px 10px' }}>
@@ -2125,7 +2125,7 @@ export default function AdminPage() {
                 <div style={{ padding: '20px 20px 0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>📋 Pagos registrados</h3>
-                    <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>{rangoTexto}</p>
+                    <p style={{ fontSize: '12px', color: '#6b6b6b', marginTop: '4px' }}>{rangoTexto}</p>
                     {pagosFiltrados.length > 0 && (
                       <p style={{ fontSize: '13px', color: '#555', marginTop: '6px' }}>
                         Total Bs. (pago móvil + transferencia): <strong>Bs. {totalesPorMoneda.bolivares.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
@@ -2137,7 +2137,7 @@ export default function AdminPage() {
                   {pagos.length > 0 && (
                     <div className="no-imprimir" style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div>
-                        <label style={{ fontSize: '11px', color: '#888', display: 'block', marginBottom: '2px' }}>Desde</label>
+                        <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block', marginBottom: '2px' }}>Desde</label>
                         <input
                           type="date"
                           value={filtroFechaDesde}
@@ -2146,7 +2146,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: '11px', color: '#888', display: 'block', marginBottom: '2px' }}>Hasta</label>
+                        <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block', marginBottom: '2px' }}>Hasta</label>
                         <input
                           type="date"
                           value={filtroFechaHasta}
@@ -2178,9 +2178,9 @@ export default function AdminPage() {
                   )}
                 </div>
                 {loadingPagos ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: '#888' }} className="loading-row"><span className="spinner" /> Cargando pagos...</div>
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando pagos...</div>
                 ) : pagosFiltrados.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
                     {pagos.length === 0 ? 'Todavía no hay pagos registrados.' : 'No hay pagos en el rango de fechas seleccionado.'}
                   </div>
                 ) : (
@@ -2207,7 +2207,7 @@ export default function AdminPage() {
                               {monedaDe(p.tipo_pago)} {Number(p.monto).toLocaleString(p.tipo_pago === 'efectivo' ? 'en-US' : 'es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', color: '#555' }}>{p.referencia || '—'}</td>
-                            <td style={{ padding: '10px 16px', fontSize: '13px', color: '#888' }}>{p.fecha}</td>
+                            <td style={{ padding: '10px 16px', fontSize: '13px', color: '#6b6b6b' }}>{p.fecha}</td>
                             <td className="no-imprimir" style={{ padding: '10px 16px', textAlign: 'center' }}>
                               <button
                                 onClick={() => eliminarPago(p.id)}

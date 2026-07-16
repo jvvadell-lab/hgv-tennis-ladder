@@ -165,8 +165,19 @@ export default function Login() {
               ¿Olvidaste tu PIN?
             </a>
           </p>
-          <a href="/" style={{ color: 'var(--color-line)', fontSize: '13px', textDecoration: 'none' }}>
-            ← Volver al inicio
+          <a href="/" style={{
+            display: 'inline-block',
+            color: 'var(--color-ink)',
+            fontSize: '15px',
+            fontWeight: 700,
+            fontFamily: 'var(--font-body)',
+            textDecoration: 'none',
+            border: '1px solid var(--color-court)',
+            borderRadius: '4px',
+            padding: '10px 24px',
+            marginTop: '10px',
+          }}>
+            🎾 Volver al inicio
           </a>
         </div>
       </div>

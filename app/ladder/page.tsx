@@ -893,14 +893,14 @@ export default function LadderPage() {
             <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
               <h2 style={{ color: 'var(--color-ink)', marginTop: 0 }}>📅 Próximos partidos confirmados</h2>
               {proximosPartidos.length === 0 ? (
-                <p style={{ color: '#777' }}>No hay partidos confirmados por ahora.</p>
+                <p style={{ color: '#5c5c5c' }}>No hay partidos confirmados por ahora.</p>
               ) : (
                 proximosPartidos.map((partido) => (
                   <div key={partido.id} style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
                     <p style={{ margin: 0 }}>
                       <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retador?.nombre}</strong> vs <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retado?.nombre}</strong>
                     </p>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#777' }}>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#5c5c5c' }}>
                       {new Date(partido.fecha_propuesta).toLocaleString('es-ES', {
                         weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
                       })}
@@ -992,7 +992,7 @@ export default function LadderPage() {
                     </button>
                   )}
                   {!cerrado && (
-                    <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#888' }}>
+                    <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#6b6b6b' }}>
                       💳 Anotarte es gratis, pero recuerda: solo entran al sorteo los jugadores con el pago de inscripción registrado. Consulta a un administrador para pagar.
                     </p>
                   )}
@@ -1008,12 +1008,12 @@ export default function LadderPage() {
               {loading ? (
                 <p className="loading-row"><span className="spinner" /> Cargando...</p>
               ) : posiciones.length === 0 ? (
-                <p style={{ color: '#777' }}>Todavía no hay jugadores en esta categoría.</p>
+                <p style={{ color: '#5c5c5c' }}>Todavía no hay jugadores en esta categoría.</p>
               ) : (
                 <div className="table-scroll">
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ color: '#999', fontSize: '11px', textAlign: 'left' }}>
+                    <tr style={{ color: '#6b6b6b', fontSize: '11px', textAlign: 'left' }}>
                       <th style={{ padding: '4px 10px', fontWeight: 'normal' }}>Actual</th>
                       <th style={{ padding: '4px 10px', fontWeight: 'normal' }}>Jugador</th>
                       <th style={{ padding: '4px 10px', fontWeight: 'normal', textAlign: 'center' }}>Inicial</th>
@@ -1042,7 +1042,7 @@ export default function LadderPage() {
                           >
                             {p.jugadores?.nombre || 'Jugador'}
                           </td>
-                          <td style={{ padding: '10px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
+                          <td style={{ padding: '10px', textAlign: 'center', color: '#6b6b6b', fontSize: '13px' }}>
                             #{inicial}
                             {diferencia > 0 && <span style={{ color: '#28a745', marginLeft: '4px' }}>▲{diferencia}</span>}
                             {diferencia < 0 && <span style={{ color: '#c0392b', marginLeft: '4px' }}>▼{Math.abs(diferencia)}</span>}
@@ -1050,7 +1050,7 @@ export default function LadderPage() {
                           <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{s.jugados}</td>
                           <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                           <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#c0392b' }}>{s.perdidos}</td>
-                          <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#888' }}>{s.noPresentado}</td>
+                          <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#6b6b6b' }}>{s.noPresentado}</td>
                           <td style={{ padding: '10px', textAlign: 'right' }}>
                             {esElegible(p) && retandoA !== p.jugador_id && (
                               <>
@@ -1149,7 +1149,7 @@ export default function LadderPage() {
                   </div>
 
                   {temporadaInicio && temporadaFin && (
-                    <p style={{ fontSize: '11px', color: '#888', margin: '-6px 0 10px 0' }}>
+                    <p style={{ fontSize: '11px', color: '#6b6b6b', margin: '-6px 0 10px 0' }}>
                       La fecha debe estar dentro de la temporada: {temporadaInicio} a {temporadaFin}
                     </p>
                   )}
@@ -1161,7 +1161,7 @@ export default function LadderPage() {
                       <option value="HGV2">HGV 2</option>
                       <option value="FORANEA">Foránea</option>
                     </select>
-                    <p style={{ fontSize: '11px', color: '#888', margin: '4px 0 0 0' }}>
+                    <p style={{ fontSize: '11px', color: '#6b6b6b', margin: '4px 0 0 0' }}>
                       {retoCancha === 'HGV1' && 'Lun-Vie: 6:00am–2:00pm y 8:00pm–12:00am · Sáb-Dom: todo el día'}
                       {retoCancha === 'HGV2' && 'Lun-Vie: 7:00pm–12:00am · Sáb-Dom: todo el día'}
                       {retoCancha === 'FORANEA' && 'Sin restricción de horario del club (cancha externa)'}
@@ -1194,7 +1194,7 @@ export default function LadderPage() {
 
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={lanzarReto} style={btnPequeno('var(--color-ball)')}>Enviar reto</button>
-                    <button onClick={() => { setRetandoA(null); setRetoFormMsg('') }} style={btnPequeno('#999')}>Cancelar</button>
+                    <button onClick={() => { setRetandoA(null); setRetoFormMsg('') }} style={btnPequeno('#6b6b6b')}>Cancelar</button>
                   </div>
                   {retoFormMsg && (
                     <div style={{
@@ -1221,7 +1221,7 @@ export default function LadderPage() {
                 </p>
               )}
               {session?.role === 'jugador' && miPosicion && temporadaSorteada && !bloqueado && (
-                <p style={{ fontSize: '13px', color: '#777', marginTop: '12px' }}>
+                <p style={{ fontSize: '13px', color: '#5c5c5c', marginTop: '12px' }}>
                   Puedes retar a jugadores hasta {RANGO_RETO} posiciones arriba de ti.
                 </p>
               )}
@@ -1232,7 +1232,7 @@ export default function LadderPage() {
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px' }}>
                 <h2 style={{ color: 'var(--color-ink)', marginTop: 0 }}>Mis retos</h2>
                 {misRetos.length === 0 ? (
-                  <p style={{ color: '#777' }}>No tienes retos todavía.</p>
+                  <p style={{ color: '#5c5c5c' }}>No tienes retos todavía.</p>
                 ) : (
                   misRetos.map((r) => (
                     <div key={r.id} style={{ borderBottom: '1px solid #eee', padding: '12px 0' }}>
@@ -1260,7 +1260,7 @@ export default function LadderPage() {
                         </p>
                       )}
                       {r.comentarios && (
-                        <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#777', fontStyle: 'italic' }}>
+                        <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#5c5c5c', fontStyle: 'italic' }}>
                           💬 {r.comentarios}
                         </p>
                       )}
@@ -1347,7 +1347,7 @@ export default function LadderPage() {
 
                           {modoNoPresentado === null && (
                             <>
-                              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px 0' }}>
+                              <p style={{ fontSize: '12px', color: '#5c5c5c', margin: '0 0 8px 0' }}>
                                 Juegos ganados por set (2 sets; si queda 1-1 se pide tie-break)
                               </p>
 
@@ -1412,7 +1412,7 @@ export default function LadderPage() {
         <div style={{ marginTop: '30px' }}>
           <h2 style={{ color: 'var(--color-ball)', textAlign: 'center', marginBottom: '16px' }}>📜 Historial de escalafones anteriores</h2>
           {historial.length === 0 ? (
-            <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#888' }}>
+            <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#6b6b6b' }}>
               Todavía no hay temporadas cerradas.
             </div>
           ) : (
@@ -1427,7 +1427,7 @@ export default function LadderPage() {
                     }}
                   >
                     <span style={{ fontWeight: '600', color: 'var(--color-ink)' }}>{t.nombre}</span>
-                    <span style={{ fontSize: '13px', color: '#888' }}>
+                    <span style={{ fontSize: '13px', color: '#6b6b6b' }}>
                       {t.fecha_inicio} → {t.fecha_fin} {historialAbierto === t.id ? '▲' : '▼'}
                     </span>
                   </button>
@@ -1435,9 +1435,9 @@ export default function LadderPage() {
                   {historialAbierto === t.id && (
                     <div style={{ padding: '0 20px 20px 20px' }}>
                       {!historialPosiciones[t.id] ? (
-                        <p style={{ color: '#888' }} className="loading-row"><span className="spinner" /> Cargando...</p>
+                        <p style={{ color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando...</p>
                       ) : Object.keys(historialPosiciones[t.id]).length === 0 ? (
-                        <p style={{ color: '#888' }}>No hubo posiciones registradas en esta temporada.</p>
+                        <p style={{ color: '#6b6b6b' }}>No hubo posiciones registradas en esta temporada.</p>
                       ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
                           {Object.entries(historialPosiciones[t.id]).map(([key, lista]) => {
@@ -1450,7 +1450,7 @@ export default function LadderPage() {
                                 <h5 style={{ margin: '0 0 8px 0', color: 'var(--color-ink)' }}>{catLabel} — {genLabel}</h5>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                   <thead>
-                                    <tr style={{ color: '#888', textAlign: 'left' }}>
+                                    <tr style={{ color: '#6b6b6b', textAlign: 'left' }}>
                                       <th style={{ padding: '2px 4px' }}>#</th>
                                       <th style={{ padding: '2px 4px' }}>Jugador</th>
                                       <th style={{ padding: '2px 4px', textAlign: 'center' }}>PJ</th>
@@ -1474,7 +1474,7 @@ export default function LadderPage() {
                                           <td style={{ padding: '4px', textAlign: 'center' }}>{s.jugados}</td>
                                           <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                                           <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
-                                          <td style={{ padding: '4px', textAlign: 'center', color: '#888' }}>{s.noPresentado}</td>
+                                          <td style={{ padding: '4px', textAlign: 'center', color: '#6b6b6b' }}>{s.noPresentado}</td>
                                         </tr>
                                       )
                                     })}
@@ -1499,16 +1499,16 @@ export default function LadderPage() {
             style={{
               display: 'inline-block',
               color: 'var(--color-chalk)',
-              fontSize: '14px',
+              fontSize: '15px',
               fontWeight: 700,
               fontFamily: 'var(--font-body)',
               textDecoration: 'none',
-              border: '1px solid rgba(247,243,234,0.4)',
+              border: '1px solid var(--color-ball)',
               borderRadius: '4px',
-              padding: '10px 24px',
+              padding: '11px 26px',
             }}
           >
-            ← Volver al inicio
+            🎾 Volver al inicio
           </a>
         </div>
       </div>
@@ -1542,7 +1542,7 @@ export default function LadderPage() {
               </div>
               <button
                 onClick={() => setJugadorModal(null)}
-                style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#999', lineHeight: 1 }}
+                style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#6b6b6b', lineHeight: 1 }}
                 aria-label="Cerrar"
               >
                 ×
@@ -1551,9 +1551,9 @@ export default function LadderPage() {
 
             <div style={{ marginTop: '18px' }}>
               {cargandoTrayectoriaModal ? (
-                <p className="loading-row" style={{ fontSize: '13px', color: '#888' }}><span className="spinner" /> Cargando trayectoria…</p>
+                <p className="loading-row" style={{ fontSize: '13px', color: '#6b6b6b' }}><span className="spinner" /> Cargando trayectoria…</p>
               ) : !trayectoriaModal || trayectoriaModal.jugados === 0 ? (
-                <p style={{ fontSize: '13px', color: '#888' }}>Todavía no tiene partidos registrados.</p>
+                <p style={{ fontSize: '13px', color: '#6b6b6b' }}>Todavía no tiene partidos registrados.</p>
               ) : (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
@@ -1580,7 +1580,7 @@ export default function LadderPage() {
                           <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '18px', color: item.color || 'var(--color-ink)' }}>
                             {item.valor}
                           </div>
-                          <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                          <div style={{ fontSize: '10px', color: '#6b6b6b', marginTop: '2px' }}>
                             {item.label}{esClicable && ' 🔍'}
                           </div>
                         </div>
@@ -1594,7 +1594,7 @@ export default function LadderPage() {
                         <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '11px' }}>
                           <strong>{t.nombre}</strong> — {CATEGORIAS.find(c => c.value === t.categoria)?.label} / {GENEROS.find(g => g.value === t.genero)?.label}
                           <br />
-                          <span style={{ color: '#888' }}>
+                          <span style={{ color: '#6b6b6b' }}>
                             Posición final #{t.posicion} (inicial #{t.posicionInicial}) · {t.fechaInicio} al {t.fechaFin}
                           </span>
                         </div>
@@ -1608,7 +1608,7 @@ export default function LadderPage() {
                         <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '11px' }}>
                           vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
                           <br />
-                          <span style={{ color: '#888' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
+                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
                         </div>
                       ))}
                     </div>
@@ -1664,7 +1664,7 @@ const btnRetar: React.CSSProperties = {
 const btnRetarDeshabilitado: React.CSSProperties = {
   ...btnRetar,
   background: '#e0e0e0',
-  color: '#999',
+  color: '#6b6b6b',
   cursor: 'not-allowed',
 }
 

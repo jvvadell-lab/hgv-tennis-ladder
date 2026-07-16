@@ -301,7 +301,7 @@ export default function PerfilPage() {
                     <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '12px' }}>
                       <strong>{t.nombre}</strong> — {CATEGORIAS[t.categoria] || t.categoria} / {GENEROS[t.genero] || t.genero}
                       <br />
-                      <span style={{ color: '#888' }}>
+                      <span style={{ color: '#6b6b6b' }}>
                         Posición final #{t.posicion} (inicial #{t.posicionInicial}) · {t.fechaInicio} al {t.fechaFin}
                       </span>
                     </div>
@@ -315,7 +315,7 @@ export default function PerfilPage() {
                     <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '12px' }}>
                       vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
                       <br />
-                      <span style={{ color: '#888' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
+                      <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
                     </div>
                   ))}
                 </div>
@@ -358,8 +358,18 @@ export default function PerfilPage() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <a href="/ladder" style={{ color: 'var(--color-line)', textDecoration: 'none', fontSize: '13px' }}>
-            ← Volver a la escalera
+          <a href="/ladder" style={{
+            display: 'inline-block',
+            color: 'var(--color-ink)',
+            fontSize: '15px',
+            fontWeight: 700,
+            fontFamily: 'var(--font-body)',
+            textDecoration: 'none',
+            border: '1px solid var(--color-court)',
+            borderRadius: '4px',
+            padding: '10px 24px',
+          }}>
+            🎾 Volver a la escalera
           </a>
         </div>
       </div>

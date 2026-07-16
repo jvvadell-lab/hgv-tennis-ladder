@@ -297,8 +297,18 @@ export default function RegisterPage() {
         </form>
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <a href="/" style={{ color: 'var(--color-line)', textDecoration: 'none', fontSize: '13px' }}>
-            ← Volver al inicio
+          <a href="/" style={{
+            display: 'inline-block',
+            color: 'var(--color-ink)',
+            fontSize: '15px',
+            fontWeight: 700,
+            fontFamily: 'var(--font-body)',
+            textDecoration: 'none',
+            border: '1px solid var(--color-court)',
+            borderRadius: '4px',
+            padding: '10px 24px',
+          }}>
+            🎾 Volver al inicio
           </a>
         </div>
       </div>
