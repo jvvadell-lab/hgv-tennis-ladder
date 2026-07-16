@@ -51,6 +51,9 @@ export default function PerfilPage() {
   const [pagos, setPagos] = useState<any[]>([])
   const [temporadaPagos, setTemporadaPagos] = useState<any>(null)
   const [loadingPagos, setLoadingPagos] = useState(true)
+  const [trayectoria, setTrayectoria] = useState<any>(null)
+  const [loadingTrayectoria, setLoadingTrayectoria] = useState(true)
+  const [panelAbierto, setPanelAbierto] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState('')
 
   useEffect(() => {
@@ -71,6 +74,16 @@ export default function PerfilPage() {
         }
       })
       .finally(() => setLoadingPagos(false))
+  }, [session])
+
+  useEffect(() => {
+    if (!session || session.role !== 'jugador') return
+    fetch('/api/jugador/mi-trayectoria')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) setTrayectoria(data.trayectoria)
+      })
+      .finally(() => setLoadingTrayectoria(false))
   }, [session])
 
   useEffect(() => {
@@ -239,6 +252,77 @@ export default function PerfilPage() {
             {guardando ? 'Guardando…' : 'Guardar cambios'}
           </button>
         </form>
+
+        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid rgba(15,27,38,0.1)' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 12px 0' }}>
+            🏆 Mi trayectoria en HGV
+          </h2>
+          {loadingTrayectoria ? (
+            <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
+          ) : !trayectoria || trayectoria.jugados === 0 ? (
+            <p style={{ fontSize: '13px', color: 'var(--color-line)' }}>Todavía no tienes partidos registrados — ¡anímate a retar a alguien!</p>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px' }}>
+                {[
+                  { key: 'temporadas', label: 'Temporadas', valor: trayectoria.temporadas },
+                  { key: 'jugados', label: 'Jugados', valor: trayectoria.jugados },
+                  { key: 'ganados', label: 'Ganados', valor: trayectoria.ganados, color: 'var(--color-net)' },
+                  { key: 'perdidos', label: 'Perdidos', valor: trayectoria.perdidos, color: '#a83226' },
+                  { key: 'pct', label: '% Victorias', valor: `${trayectoria.porcentajeVictorias}%` },
+                  { key: 'mejor', label: 'Mejor posición', valor: trayectoria.mejorPosicion ? `#${trayectoria.mejorPosicion}` : '—' },
+                ].map((item) => {
+                  const esClicable = item.key === 'temporadas' || item.key === 'ganados'
+                  return (
+                    <div
+                      key={item.label}
+                      onClick={() => esClicable && setPanelAbierto(panelAbierto === item.key ? null : item.key)}
+                      style={{
+                        background: panelAbierto === item.key ? 'rgba(28,126,196,0.14)' : 'rgba(28,126,196,0.06)',
+                        border: '1px solid rgba(28,126,196,0.15)',
+                        borderRadius: '8px', padding: '10px', textAlign: 'center',
+                        cursor: esClicable ? 'pointer' : 'default',
+                      }}
+                    >
+                      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '20px', color: item.color || 'var(--color-ink)' }}>
+                        {item.valor}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-line)', marginTop: '2px' }}>
+                        {item.label}{esClicable && ' 🔍'}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {panelAbierto === 'temporadas' && (
+                <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {trayectoria.temporadasDetalle.map((t: any, i: number) => (
+                    <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '12px' }}>
+                      <strong>{t.nombre}</strong> — {CATEGORIAS[t.categoria] || t.categoria} / {GENEROS[t.genero] || t.genero}
+                      <br />
+                      <span style={{ color: '#888' }}>
+                        Posición final #{t.posicion} (inicial #{t.posicionInicial}) · {t.fechaInicio} al {t.fechaFin}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {panelAbierto === 'ganados' && (
+                <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {trayectoria.partidosGanadosDetalle.map((p: any, i: number) => (
+                    <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '12px' }}>
+                      vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
+                      <br />
+                      <span style={{ color: '#888' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
         <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid rgba(15,27,38,0.1)' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 4px 0' }}>
