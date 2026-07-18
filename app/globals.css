@@ -76,6 +76,7 @@ body {
   }
   .admin-nav button {
     flex: 0 0 auto !important;
+    width: auto !important;
     white-space: nowrap;
     border-left: none !important;
     border-bottom: 4px solid transparent;
