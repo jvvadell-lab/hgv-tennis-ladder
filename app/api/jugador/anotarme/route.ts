@@ -27,6 +27,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta temporada no está activa' }, { status: 400 })
     }
 
+    const { data: jugador } = await db
+      .from('jugadores')
+      .select('estado_verificacion')
+      .eq('id', session.id)
+      .maybeSingle()
+    if (jugador?.estado_verificacion === 'no_permitido') {
+      return NextResponse.json({ error: 'Tu cuenta no está habilitada para participar en el escalafón. Contacta a un administrador.' }, { status: 403 })
+    }
+
     if (temporada.sorteo_realizado) {
       return NextResponse.json({ error: 'El sorteo de esta temporada ya se realizó. Pide a un administrador que te agregue al escalafón.' }, { status: 400 })
     }

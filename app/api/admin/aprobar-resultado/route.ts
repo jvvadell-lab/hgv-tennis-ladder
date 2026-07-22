@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSession } from '@/lib/session'
+import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
 
@@ -8,6 +8,9 @@ export async function POST(request: Request) {
     const session = await getSession()
     if (!session || session.role !== 'admin') {
       return NextResponse.json({ error: 'Solo un administrador puede hacer esto' }, { status: 403 })
+    }
+    if (!esAdminCompleto(session)) {
+      return NextResponse.json({ error: 'Esta acción requiere permisos de administrador completo.' }, { status: 403 })
     }
 
     const { resultadoId } = await request.json()

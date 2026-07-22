@@ -20,6 +20,8 @@ const GENEROS = [
 ]
 
 export default function AdminPage() {
+  const [session, setSession] = useState<any>(null)
+  const [checkingSession, setCheckingSession] = useState(true)
   const [activeSection, setActiveSection] = useState('dashboard')
   const [players, setPlayers] = useState<any[]>([])
   const [editandoJugadorId, setEditandoJugadorId] = useState<string | null>(null)
@@ -65,6 +67,18 @@ export default function AdminPage() {
   const [loadingResultados, setLoadingResultados] = useState(false)
   const [aprobando, setAprobando] = useState<string | null>(null)
   const [resultadosMsg, setResultadosMsg] = useState('')
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then((r) => r.json())
+      .then((data) => {
+        setSession(data.session)
+        if (data.session?.role === 'admin' && data.session?.nivel === 'pagos') {
+          setActiveSection('payments')
+        }
+      })
+      .finally(() => setCheckingSession(false))
+  }, [])
 
   useEffect(() => {
     if (activeSection === 'results') {
@@ -802,10 +816,30 @@ export default function AdminPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, created_at')
+      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, created_at')
       .order('created_at', { ascending: false })
     if (!error) setPlayers(data || [])
     setLoading(false)
+  }
+
+  const [verificando, setVerificando] = useState<string | null>(null)
+
+  const verificarJugador = async (jugadorId: string, estado: string) => {
+    setVerificando(jugadorId)
+    try {
+      const res = await fetch('/api/admin/verificar-jugador', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId, estado }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar')
+      fetchPlayers()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setVerificando(null)
+    }
   }
 
   const deletePlayer = async (id: string) => {
@@ -871,7 +905,9 @@ export default function AdminPage() {
     return matchCat && matchGen
   })
 
-  const menuItems = [
+  const esAdminLimitado = session?.role === 'admin' && session?.nivel === 'pagos'
+
+  const menuItemsCompletos = [
     { id: 'dashboard', icon: '📊', label: 'Dashboard' },
     { id: 'players', icon: '👥', label: 'Jugadores' },
     { id: 'challenges', icon: '⚔️', label: 'Desafíos' },
@@ -879,6 +915,10 @@ export default function AdminPage() {
     { id: 'ladder', icon: '🎾', label: 'Escalafón' },
     { id: 'payments', icon: '💳', label: 'Pagos' },
   ]
+
+  const menuItems = esAdminLimitado
+    ? menuItemsCompletos.filter((m) => m.id === 'players' || m.id === 'payments')
+    : menuItemsCompletos
 
   const categoriaLabel = (value: string) => CATEGORIAS.find(c => c.value === value)?.label || value
 
@@ -901,6 +941,23 @@ export default function AdminPage() {
     return colors[cat] || '#666'
   }
 
+  if (checkingSession) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="loading-row">
+        <span className="spinner" /> Cargando…
+      </div>
+    )
+  }
+
+  if (!session || session.role !== 'admin') {
+    return (
+      <div className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
+        <p style={{ color: 'var(--color-chalk)', fontSize: '18px', marginBottom: '16px' }}>🔒 Acceso restringido — necesitas iniciar sesión como administrador.</p>
+        <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Iniciar sesión</a>
+      </div>
+    )
+  }
+
   return (
     <div className="admin-shell" style={{ fontFamily: 'var(--font-body)' }}>
 
@@ -913,7 +970,9 @@ export default function AdminPage() {
         <div className="admin-sidebar-header" style={{ textAlign: 'center', padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.2)' }}>
           <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '62px', height: '62px', objectFit: 'contain', margin: '0 auto', display: 'block' }} />
           <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-chalk)', fontSize: '15px', marginTop: '8px' }}>HGV Tennis</div>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>Panel Admin</div>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
+            Panel Admin{esAdminLimitado ? ' — Pagos' : ''}
+          </div>
         </div>
 
         <nav className="admin-nav" style={{ marginTop: '20px', flex: 1 }}>
@@ -1125,6 +1184,7 @@ export default function AdminPage() {
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>🎫 Acción</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>👥 Género</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>🏆 Categoría</th>
+                        <th style={{ padding: '14px 16px', textAlign: 'left' }}>🪪 Membresía</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>📅 Registro</th>
                         <th style={{ padding: '14px 16px', textAlign: 'center' }}>⚙️ Acciones</th>
                       </tr>
@@ -1171,6 +1231,44 @@ export default function AdminPage() {
                               }}>
                                 {categoriaLabel(player.categoria)}
                               </span>
+                            </td>
+                            <td style={{ padding: '12px 16px' }}>
+                              {player.estado_verificacion === 'verificado' ? (
+                                <span style={{ color: '#28a745', fontWeight: 'bold', fontSize: '13px' }}>✅ Verificado</span>
+                              ) : player.estado_verificacion === 'no_permitido' ? (
+                                <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '13px' }}>🚫 No permitido</span>
+                              ) : (
+                                <span style={{ color: '#e67e22', fontWeight: 'bold', fontSize: '13px' }}>⏳ Pendiente</span>
+                              )}
+                              <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                                {player.estado_verificacion !== 'verificado' && (
+                                  <button
+                                    onClick={() => verificarJugador(player.id, 'verificado')}
+                                    disabled={verificando === player.id}
+                                    style={{ background: '#d4edda', color: '#155724', border: 'none', padding: '3px 8px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}
+                                  >
+                                    Verificar
+                                  </button>
+                                )}
+                                {player.estado_verificacion !== 'no_permitido' && (
+                                  <button
+                                    onClick={() => verificarJugador(player.id, 'no_permitido')}
+                                    disabled={verificando === player.id}
+                                    style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '3px 8px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}
+                                  >
+                                    No permitir
+                                  </button>
+                                )}
+                                {player.estado_verificacion && player.estado_verificacion !== 'pendiente' && (
+                                  <button
+                                    onClick={() => verificarJugador(player.id, 'pendiente')}
+                                    disabled={verificando === player.id}
+                                    style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '3px 8px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}
+                                  >
+                                    Reiniciar
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td style={{ padding: '12px 16px', color: '#6b6b6b', fontSize: '13px' }}>
                               {player.created_at ? new Date(player.created_at).toLocaleDateString('es-ES') : '—'}

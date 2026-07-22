@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSession } from '@/lib/session'
+import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 
 export async function POST(request: Request) {
@@ -7,6 +7,9 @@ export async function POST(request: Request) {
     const session = await getSession()
     if (!session || session.role !== 'admin') {
       return NextResponse.json({ error: 'Solo un administrador puede hacer esto' }, { status: 403 })
+    }
+    if (!esAdminCompleto(session)) {
+      return NextResponse.json({ error: 'Esta acción requiere permisos de administrador completo.' }, { status: 403 })
     }
 
     const { temporadaId } = await request.json()
@@ -37,11 +40,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Todavía no hay jugadores anotados a esta temporada.' }, { status: 400 })
     }
 
+    // Solo entran al sorteo los que además tienen al menos un pago registrado
+    // en esta temporada, Y su membresía ya fue verificada por un admin —
+    // estar anotado no es suficiente por sí solo.
+    const { data: pagosTemp, error: errPagos } = await db
+      .from('pagos')
+      .select('jugador_id')
+      .eq('temporada_id', temporadaId)
+    if (errPagos) throw errPagos
+
+    const jugadorIds = anotados.map((j: any) => j.jugador_id)
+    const { data: jugadoresInfo, error: errJugadores } = await db
+      .from('jugadores')
+      .select('id, estado_verificacion')
+      .in('id', jugadorIds)
+    if (errJugadores) throw errJugadores
+
+    const verificados = new Set(
+      (jugadoresInfo || []).filter((j: any) => j.estado_verificacion === 'verificado').map((j: any) => j.id)
+    )
+    const pagaron = new Set((pagosTemp || []).map((p: any) => p.jugador_id))
+    const elegibles = anotados.filter((j: any) => pagaron.has(j.jugador_id) && verificados.has(j.jugador_id))
+    const excluidos = anotados.length - elegibles.length
+
+    if (elegibles.length === 0) {
+      return NextResponse.json({ error: 'Ninguno de los jugadores anotados cumple los dos requisitos (pago registrado y membresía verificada). Revísalos antes de sortear.' }, { status: 400 })
+    }
+
     const { error: errDelete } = await db.from('ladder_posiciones').delete().eq('temporada_id', temporadaId)
     if (errDelete) throw errDelete
 
     const grupos: Record<string, any[]> = {}
-    anotados.forEach((j: any) => {
+    elegibles.forEach((j: any) => {
       const key = `${j.categoria}__${j.genero}`
       if (!grupos[key]) grupos[key] = []
       grupos[key].push(j)
@@ -73,7 +103,7 @@ export async function POST(request: Request) {
     const { error: errUpdateTemp } = await db.from('temporadas').update({ sorteo_realizado: true }).eq('id', temporadaId)
     if (errUpdateTemp) throw errUpdateTemp
 
-    return NextResponse.json({ ok: true, count: filas.length })
+    return NextResponse.json({ ok: true, count: filas.length, excluidos })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al sortear' }, { status: 500 })
   }
