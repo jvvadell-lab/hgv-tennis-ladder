@@ -2018,6 +2018,48 @@ export default function AdminPage() {
                       })}
                     </div>
                   )}
+
+                  {Object.keys(ladderPreview).length > 0 && (
+                    <div style={{ marginTop: '30px' }}>
+                      <h3 style={{ color: 'var(--color-ink)' }}>🏆 Premios sugeridos</h3>
+                      <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 16px 0' }}>
+                        Basado en el escalafón actual — el campeón (posición #1) y quien más subió desde su posición inicial, por categoría.
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                        {Object.entries(ladderPreview).map(([key, lista]) => {
+                          const [catVal, genVal] = key.split('__')
+                          const catLabel = CATEGORIAS.find(c => c.value === catVal)?.label || catVal
+                          const genLabel = GENEROS.find(g => g.value === genVal)?.label || genVal
+
+                          const campeon = lista.find((p: any) => p.posicion === 1)
+
+                          const conProgreso = lista.map((p: any) => ({
+                            ...p,
+                            progreso: (p.posicion_inicial ?? p.posicion) - p.posicion,
+                          }))
+                          const mayorProgreso = conProgreso.reduce(
+                            (max: any, p: any) => (!max || p.progreso > max.progreso ? p : max),
+                            null
+                          )
+
+                          return (
+                            <div key={key} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '18px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderTop: '3px solid var(--color-ball)' }}>
+                              <h4 style={{ color: 'var(--color-ink)', marginTop: 0, marginBottom: '12px' }}>{catLabel} — {genLabel}</h4>
+                              <p style={{ margin: '0 0 8px 0', fontSize: '14px' }}>
+                                🏆 <strong>Campeón:</strong> {campeon?.jugadores?.nombre || '—'}
+                              </p>
+                              <p style={{ margin: 0, fontSize: '14px' }}>
+                                📈 <strong>Mayor progreso:</strong> {mayorProgreso?.jugadores?.nombre || '—'}
+                                {mayorProgreso && mayorProgreso.progreso > 0 && (
+                                  <span style={{ color: '#28a745', fontWeight: 'bold' }}> (+{mayorProgreso.progreso} posiciones)</span>
+                                )}
+                              </p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
