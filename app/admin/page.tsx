@@ -24,6 +24,33 @@ export default function AdminPage() {
   const [checkingSession, setCheckingSession] = useState(true)
   const [activeSection, setActiveSection] = useState('dashboard')
   const [players, setPlayers] = useState<any[]>([])
+
+  const [jugadorModal, setJugadorModal] = useState<any>(null)
+  const [trayectoriaModal, setTrayectoriaModal] = useState<any>(null)
+  const [cargandoTrayectoriaModal, setCargandoTrayectoriaModal] = useState(false)
+  const [panelModalAbierto, setPanelModalAbierto] = useState<string | null>(null)
+
+  const abrirTrayectoria = async (jugadorId: string) => {
+    setJugadorModal({ id: jugadorId })
+    setTrayectoriaModal(null)
+    setPanelModalAbierto(null)
+    setCargandoTrayectoriaModal(true)
+    try {
+      const res = await fetch('/api/publico/trayectoria', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setJugadorModal(data.jugador)
+        setTrayectoriaModal(data.trayectoria)
+      }
+    } finally {
+      setCargandoTrayectoriaModal(false)
+    }
+  }
+
   const [editandoJugadorId, setEditandoJugadorId] = useState<string | null>(null)
   const [editJugadorForm, setEditJugadorForm] = useState<any>({})
   const [guardandoJugador, setGuardandoJugador] = useState(false)
@@ -1204,7 +1231,13 @@ export default function AdminPage() {
                             background: index % 2 === 0 ? 'var(--color-chalk)' : '#fafafa'
                           }}>
                             <td style={{ padding: '12px 16px', color: '#6b6b6b', fontSize: '14px' }}>{index + 1}</td>
-                            <td style={{ padding: '12px 16px', fontWeight: '600', color: '#333' }}>{player.nombre}</td>
+                            <td
+                              onClick={() => abrirTrayectoria(player.id)}
+                              style={{ padding: '12px 16px', fontWeight: '600', color: '#333', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '3px' }}
+                              title="Ver trayectoria"
+                            >
+                              {player.nombre}
+                            </td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.email}</td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.telefono}</td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.numero_accion || '—'}</td>
@@ -1954,8 +1987,18 @@ export default function AdminPage() {
                                   const s = ladderStats[p.jugador_id] || { jugados: 0, ganados: 0, perdidos: 0, noPresentado: 0 }
                                   return (
                                     <tr key={p.id} style={{ borderTop: '1px solid #eee' }}>
-                                      <td style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.posicion}</td>
-                                      <td style={{ padding: '4px', color: '#333' }}>{p.jugadores?.nombre || 'Jugador'}</td>
+                                      <td
+                                        onClick={() => abrirTrayectoria(p.jugador_id)}
+                                        style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)', cursor: 'pointer' }}
+                                      >
+                                        {p.posicion}
+                                      </td>
+                                      <td
+                                        onClick={() => abrirTrayectoria(p.jugador_id)}
+                                        style={{ padding: '4px', color: '#333', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '2px' }}
+                                      >
+                                        {p.jugadores?.nombre || 'Jugador'}
+                                      </td>
                                       <td style={{ padding: '4px', color: '#6b6b6b', fontSize: '12px' }}>
                                         #{inicial}
                                         {diferencia > 0 && <span style={{ color: '#28a745' }}> ▲{diferencia}</span>}
@@ -2035,7 +2078,12 @@ export default function AdminPage() {
                                             return (
                                               <tr key={p.id} style={{ borderTop: '1px solid #e5e5e5' }}>
                                                 <td style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.posicion}</td>
-                                                <td style={{ padding: '4px', color: '#333' }}>{p.jugadores?.nombre || 'Jugador'}</td>
+                                                <td
+                                                  onClick={() => abrirTrayectoria(p.jugador_id)}
+                                                  style={{ padding: '4px', color: '#333', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '2px' }}
+                                                >
+                                                  {p.jugadores?.nombre || 'Jugador'}
+                                                </td>
                                                 <td style={{ padding: '4px', textAlign: 'center' }}>{s.jugados}</td>
                                                 <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                                                 <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
@@ -2178,7 +2226,12 @@ export default function AdminPage() {
                               const pago = pagos.find((p) => p.jugador_id === j.jugador_id)
                               return (
                                 <tr key={j.jugador_id} style={{ borderBottom: '1px solid #f5f5f5' }}>
-                                  <td style={{ padding: '8px 10px' }}>{j.jugadores?.nombre || 'Jugador'}</td>
+                                  <td
+                                    onClick={() => abrirTrayectoria(j.jugador_id)}
+                                    style={{ padding: '8px 10px', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '2px' }}
+                                  >
+                                    {j.jugadores?.nombre || 'Jugador'}
+                                  </td>
                                   <td style={{ padding: '8px 10px', color: '#5c5c5c' }}>
                                     {categoriaLabel(j.categoria)} — {GENEROS.find(g => g.value === j.genero)?.label}
                                   </td>
@@ -2336,6 +2389,113 @@ export default function AdminPage() {
 
         </div>
       </div>
+
+      {jugadorModal && (
+        <div
+          onClick={() => setJugadorModal(null)}
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(15,27,38,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px', zIndex: 1000, cursor: 'zoom-out',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--color-chalk)', borderRadius: '12px', borderTop: '3px solid var(--color-ball)',
+              padding: '28px', maxWidth: '380px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', cursor: 'default',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '22px', margin: 0 }}>
+                  {jugadorModal.nombre || 'Cargando…'}
+                </h3>
+                {jugadorModal.categoria && (
+                  <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-court)', fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '4px 0 0 0' }}>
+                    {CATEGORIAS.find(c => c.value === jugadorModal.categoria)?.label} — {GENEROS.find(g => g.value === jugadorModal.genero)?.label}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setJugadorModal(null)}
+                style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#999', lineHeight: 1 }}
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginTop: '18px' }}>
+              {cargandoTrayectoriaModal ? (
+                <p className="loading-row" style={{ fontSize: '13px', color: '#6b6b6b' }}><span className="spinner" /> Cargando trayectoria…</p>
+              ) : !trayectoriaModal || trayectoriaModal.jugados === 0 ? (
+                <p style={{ fontSize: '13px', color: '#6b6b6b' }}>Todavía no tiene partidos registrados.</p>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                    {[
+                      { key: 'temporadas', label: 'Temporadas', valor: trayectoriaModal.temporadas },
+                      { key: 'jugados', label: 'Jugados', valor: trayectoriaModal.jugados },
+                      { key: 'ganados', label: 'Ganados', valor: trayectoriaModal.ganados, color: '#28a745' },
+                      { key: 'perdidos', label: 'Perdidos', valor: trayectoriaModal.perdidos, color: '#c0392b' },
+                      { key: 'pct', label: '% Victorias', valor: `${trayectoriaModal.porcentajeVictorias}%` },
+                      { key: 'mejor', label: 'Mejor pos.', valor: trayectoriaModal.mejorPosicion ? `#${trayectoriaModal.mejorPosicion}` : '—' },
+                    ].map((item) => {
+                      const esClicable = item.key === 'temporadas' || item.key === 'ganados'
+                      return (
+                        <div
+                          key={item.label}
+                          onClick={() => esClicable && setPanelModalAbierto(panelModalAbierto === item.key ? null : item.key)}
+                          style={{
+                            background: panelModalAbierto === item.key ? 'rgba(28,126,196,0.14)' : 'rgba(28,126,196,0.06)',
+                            border: '1px solid rgba(28,126,196,0.15)',
+                            borderRadius: '8px', padding: '10px', textAlign: 'center',
+                            cursor: esClicable ? 'pointer' : 'default',
+                          }}
+                        >
+                          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '18px', color: item.color || 'var(--color-ink)' }}>
+                            {item.valor}
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#6b6b6b', marginTop: '2px' }}>
+                            {item.label}{esClicable && ' 🔍'}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {panelModalAbierto === 'temporadas' && (
+                    <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
+                      {trayectoriaModal.temporadasDetalle.map((t: any, i: number) => (
+                        <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '11px' }}>
+                          <strong>{t.nombre}</strong> — {CATEGORIAS.find(c => c.value === t.categoria)?.label} / {GENEROS.find(g => g.value === t.genero)?.label}
+                          <br />
+                          <span style={{ color: '#6b6b6b' }}>
+                            Posición final #{t.posicion} (inicial #{t.posicionInicial}) · {t.fechaInicio} al {t.fechaFin}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {panelModalAbierto === 'ganados' && (
+                    <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
+                      {trayectoriaModal.partidosGanadosDetalle.map((p: any, i: number) => (
+                        <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '11px' }}>
+                          vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
+                          <br />
+                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
