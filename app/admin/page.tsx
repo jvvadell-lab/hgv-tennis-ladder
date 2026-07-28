@@ -75,6 +75,7 @@ export default function AdminPage() {
   const [pagoReferencia, setPagoReferencia] = useState('')
   const [pagoFecha, setPagoFecha] = useState(new Date().toISOString().slice(0, 10))
   const [registrandoPago, setRegistrandoPago] = useState(false)
+  const [validandoPago, setValidandoPago] = useState<string | null>(null)
   const [pagoMsg, setPagoMsg] = useState('')
   const [sorteando, setSorteando] = useState(false)
 
@@ -398,6 +399,24 @@ export default function AdminPage() {
     }
   }
 
+  const validarPago = async (pagoId: string) => {
+    setValidandoPago(pagoId)
+    try {
+      const res = await fetch('/api/admin/validar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pagoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al validar')
+      fetchPagos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setValidandoPago(null)
+    }
+  }
+
   const registrarPago = async () => {
     if (!temporadaActivaPagos) {
       setPagoMsg('❌ No hay una temporada activa para registrar el pago.')
@@ -458,9 +477,12 @@ export default function AdminPage() {
   // por eso se totalizan por separado, no tiene sentido sumarlos juntos.
   const monedaDe = (tipoPago: string) => (tipoPago === 'efectivo' ? '$' : 'Bs.')
 
-  const pagaronSet = new Set(pagos.map((p) => p.jugador_id))
+  const pagosPendientes = pagos.filter((p) => !p.validado)
+  const pagosValidados = pagos.filter((p) => p.validado)
 
-  const pagosFiltrados = pagos.filter((p) => {
+  const pagaronSet = new Set(pagosValidados.map((p) => p.jugador_id))
+
+  const pagosFiltrados = pagosValidados.filter((p) => {
     if (filtroFechaDesde && p.fecha < filtroFechaDesde) return false
     if (filtroFechaHasta && p.fecha > filtroFechaHasta) return false
     return true
@@ -2244,6 +2266,54 @@ export default function AdminPage() {
                 )}
               </div>
 
+              {pagosPendientes.length > 0 && (
+                <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderLeft: '4px solid #e67e22' }}>
+                  <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>⏳ Pagos pendientes de validar</h3>
+                  <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 14px 0' }}>
+                    Pagos reportados directamente por jugadores — revisa el comprobante con ellos y valida cuando confirmes que el pago sí se recibió.
+                  </p>
+                  <div className="table-scroll">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ color: '#6b6b6b', textAlign: 'left', borderBottom: '1px solid #eee' }}>
+                          <th style={{ padding: '6px 10px' }}>Jugador</th>
+                          <th style={{ padding: '6px 10px' }}>Tipo</th>
+                          <th style={{ padding: '6px 10px' }}>Monto</th>
+                          <th style={{ padding: '6px 10px' }}>Referencia</th>
+                          <th style={{ padding: '6px 10px' }}>Fecha</th>
+                          <th style={{ padding: '6px 10px', textAlign: 'center' }}>Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagosPendientes.map((p) => (
+                          <tr key={p.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                            <td style={{ padding: '8px 10px' }}>{p.jugadores?.nombre || 'Jugador'}</td>
+                            <td style={{ padding: '8px 10px', textTransform: 'capitalize' }}>{p.tipo_pago.replace('_', ' ')}</td>
+                            <td style={{ padding: '8px 10px', fontFamily: 'var(--font-mono)' }}>
+                              {monedaDe(p.tipo_pago)} {Number(p.monto).toLocaleString(p.tipo_pago === 'efectivo' ? 'en-US' : 'es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td style={{ padding: '8px 10px', color: '#555' }}>{p.referencia || '—'}</td>
+                            <td style={{ padding: '8px 10px', color: '#6b6b6b' }}>{p.fecha}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => validarPago(p.id)}
+                                disabled={validandoPago === p.id}
+                                style={{
+                                  background: validandoPago === p.id ? '#ccc' : '#28a745', color: 'white', border: 'none',
+                                  padding: '5px 12px', borderRadius: '6px', cursor: validandoPago === p.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                }}
+                              >
+                                {validandoPago === p.id ? 'Validando...' : '✅ Validar'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {temporadaActivaPagos && (
                 <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                   <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>✅ Estado de pago de inscritos</h3>
@@ -2265,7 +2335,8 @@ export default function AdminPage() {
                           </thead>
                           <tbody>
                             {inscritos.map((j: any) => {
-                              const pago = pagos.find((p) => p.jugador_id === j.jugador_id)
+                              const pagoValidado = pagosValidados.find((p) => p.jugador_id === j.jugador_id)
+                              const pagoPendiente = pagosPendientes.find((p) => p.jugador_id === j.jugador_id)
                               return (
                                 <tr key={j.jugador_id} style={{ borderBottom: '1px solid #f5f5f5' }}>
                                   <td
@@ -2278,8 +2349,22 @@ export default function AdminPage() {
                                     {categoriaLabel(j.categoria)} — {GENEROS.find(g => g.value === j.genero)?.label}
                                   </td>
                                   <td style={{ padding: '8px 10px' }}>
-                                    {pago ? (
-                                      <span style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Pagado (recibo #{pago.numero_recibo})</span>
+                                    {pagoValidado ? (
+                                      <span style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Pagado (recibo #{pagoValidado.numero_recibo})</span>
+                                    ) : pagoPendiente ? (
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        <span style={{ color: '#e67e22', fontWeight: 'bold' }}>⏳ Pago reportado, pendiente de validar</span>
+                                        <button
+                                          onClick={() => validarPago(pagoPendiente.id)}
+                                          disabled={validandoPago === pagoPendiente.id}
+                                          style={{
+                                            background: validandoPago === pagoPendiente.id ? '#ccc' : '#28a745', color: 'white', border: 'none',
+                                            padding: '4px 10px', borderRadius: '6px', cursor: validandoPago === pagoPendiente.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                          }}
+                                        >
+                                          {validandoPago === pagoPendiente.id ? 'Validando...' : '✅ Validar'}
+                                        </button>
+                                      </span>
                                     ) : (
                                       <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         <span style={{ color: '#c0392b', fontWeight: 'bold' }}>❌ Sin pago</span>
@@ -2317,7 +2402,7 @@ export default function AdminPage() {
               <div className="pagos-imprimible" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
                 <div style={{ padding: '20px 20px 0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
-                    <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>📋 Pagos registrados</h3>
+                    <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>📋 Pagos validados</h3>
                     <p style={{ fontSize: '12px', color: '#6b6b6b', marginTop: '4px' }}>{rangoTexto}</p>
                     {pagosFiltrados.length > 0 && (
                       <p style={{ fontSize: '13px', color: '#555', marginTop: '6px' }}>
@@ -2327,7 +2412,7 @@ export default function AdminPage() {
                       </p>
                     )}
                   </div>
-                  {pagos.length > 0 && (
+                  {pagosValidados.length > 0 && (
                     <div className="no-imprimir" style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div>
                         <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block', marginBottom: '2px' }}>Desde</label>
@@ -2374,7 +2459,7 @@ export default function AdminPage() {
                   <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando pagos...</div>
                 ) : pagosFiltrados.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
-                    {pagos.length === 0 ? 'Todavía no hay pagos registrados.' : 'No hay pagos en el rango de fechas seleccionado.'}
+                    {pagosValidados.length === 0 ? 'Todavía no hay pagos validados.' : 'No hay pagos en el rango de fechas seleccionado.'}
                   </div>
                 ) : (
                   <div className="table-scroll">

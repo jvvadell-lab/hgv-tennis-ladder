@@ -23,7 +23,7 @@ export async function GET() {
 
     const { data: pagos, error } = await db
       .from('pagos')
-      .select('id, numero_recibo, tipo_pago, monto, fecha')
+      .select('id, numero_recibo, tipo_pago, monto, fecha, referencia, validado')
       .eq('jugador_id', session.id)
       .eq('temporada_id', temporada.id)
       .order('fecha', { ascending: false })

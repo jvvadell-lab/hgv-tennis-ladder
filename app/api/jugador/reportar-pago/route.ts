@@ -7,13 +7,13 @@ const TIPOS_VALIDOS = ['pago_movil', 'transferencia', 'efectivo']
 export async function POST(request: Request) {
   try {
     const session = await getSession()
-    if (!session || session.role !== 'admin') {
-      return NextResponse.json({ error: 'Solo un administrador puede hacer esto' }, { status: 403 })
+    if (!session || session.role !== 'jugador') {
+      return NextResponse.json({ error: 'Debes iniciar sesión como jugador' }, { status: 403 })
     }
 
-    const { jugadorId, temporadaId, tipoPago, monto, fecha, referencia } = await request.json()
-    if (!jugadorId || !temporadaId || !TIPOS_VALIDOS.includes(tipoPago)) {
-      return NextResponse.json({ error: 'Faltan datos o el tipo de pago no es válido' }, { status: 400 })
+    const { tipoPago, monto, fecha, referencia } = await request.json()
+    if (!TIPOS_VALIDOS.includes(tipoPago)) {
+      return NextResponse.json({ error: 'El tipo de pago no es válido' }, { status: 400 })
     }
     const montoNum = parseFloat(monto)
     if (!montoNum || montoNum <= 0) {
@@ -21,16 +21,27 @@ export async function POST(request: Request) {
     }
 
     const db = supabaseServer()
+
+    const { data: temporada, error: errTemp } = await db
+      .from('temporadas')
+      .select('id')
+      .eq('estado', 'activa')
+      .maybeSingle()
+    if (errTemp) throw errTemp
+    if (!temporada) {
+      return NextResponse.json({ error: 'No hay una temporada activa en este momento.' }, { status: 400 })
+    }
+
     const { data, error } = await db
       .from('pagos')
       .insert([{
-        jugador_id: jugadorId,
-        temporada_id: temporadaId,
+        jugador_id: session.id,
+        temporada_id: temporada.id,
         tipo_pago: tipoPago,
         monto: montoNum,
         fecha: fecha || new Date().toISOString().slice(0, 10),
         referencia: referencia?.trim() || null,
-        validado: true, // el admin lo registra directo, así que ya queda válido
+        validado: false,
       }])
       .select('numero_recibo')
       .single()
@@ -38,6 +49,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, numeroRecibo: data.numero_recibo })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Error al registrar el pago' }, { status: 500 })
+    return NextResponse.json({ error: err.message || 'Error al reportar el pago' }, { status: 500 })
   }
 }

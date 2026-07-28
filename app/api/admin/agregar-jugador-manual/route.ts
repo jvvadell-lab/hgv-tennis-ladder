@@ -41,15 +41,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `${jugador.nombre} ya está en el escalafón de esta temporada.` }, { status: 400 })
     }
 
-    // Mismo requisito que el sorteo: sin pago registrado en esta temporada, no entra.
+    // Mismo requisito que el sorteo: sin pago validado en esta temporada, no entra.
     const { data: pago } = await db
       .from('pagos')
       .select('id')
       .eq('temporada_id', temporadaId)
       .eq('jugador_id', jugadorId)
+      .eq('validado', true)
       .maybeSingle()
     if (!pago) {
-      return NextResponse.json({ error: `${jugador.nombre} todavía no tiene un pago registrado en esta temporada — regístralo primero en la pestaña Pagos.` }, { status: 400 })
+      return NextResponse.json({ error: `${jugador.nombre} todavía no tiene un pago validado en esta temporada — revísalo primero en la pestaña Pagos.` }, { status: 400 })
     }
 
     const { count } = await db

@@ -47,6 +47,7 @@ export async function POST(request: Request) {
       .from('pagos')
       .select('jugador_id')
       .eq('temporada_id', temporadaId)
+      .eq('validado', true)
     if (errPagos) throw errPagos
 
     const jugadorIds = anotados.map((j: any) => j.jugador_id)
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
     const excluidos = anotados.length - elegibles.length
 
     if (elegibles.length === 0) {
-      return NextResponse.json({ error: 'Ninguno de los jugadores anotados cumple los dos requisitos (pago registrado y membresía verificada). Revísalos antes de sortear.' }, { status: 400 })
+      return NextResponse.json({ error: 'Ninguno de los jugadores anotados cumple los dos requisitos (pago validado y membresía verificada). Revísalos antes de sortear.' }, { status: 400 })
     }
 
     const { error: errDelete } = await db.from('ladder_posiciones').delete().eq('temporada_id', temporadaId)

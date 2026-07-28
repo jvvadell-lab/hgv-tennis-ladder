@@ -51,6 +51,13 @@ export default function PerfilPage() {
   const [pagos, setPagos] = useState<any[]>([])
   const [temporadaPagos, setTemporadaPagos] = useState<any>(null)
   const [loadingPagos, setLoadingPagos] = useState(true)
+  const [mostrarFormPago, setMostrarFormPago] = useState(false)
+  const [reporteTipo, setReporteTipo] = useState('pago_movil')
+  const [reporteMonto, setReporteMonto] = useState('')
+  const [reporteFecha, setReporteFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [reporteReferencia, setReporteReferencia] = useState('')
+  const [reportandoPago, setReportandoPago] = useState(false)
+  const [reportePagoMsg, setReportePagoMsg] = useState('')
   const [trayectoria, setTrayectoria] = useState<any>(null)
   const [loadingTrayectoria, setLoadingTrayectoria] = useState(true)
   const [panelAbierto, setPanelAbierto] = useState<string | null>(null)
@@ -63,8 +70,42 @@ export default function PerfilPage() {
       .finally(() => setChecking(false))
   }, [])
 
-  useEffect(() => {
-    if (!session || session.role !== 'jugador') return
+  const reportarPago = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!reporteMonto) {
+      setReportePagoMsg('❌ Escribe el monto')
+      return
+    }
+
+    setReportandoPago(true)
+    setReportePagoMsg('')
+    try {
+      const res = await fetch('/api/jugador/reportar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipoPago: reporteTipo,
+          monto: reporteMonto,
+          fecha: reporteFecha,
+          referencia: reporteReferencia,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al reportar el pago')
+
+      setReportePagoMsg(`✅ Pago reportado — recibo #${data.numeroRecibo}. Un administrador lo va a validar pronto.`)
+      setReporteMonto('')
+      setReporteReferencia('')
+      setMostrarFormPago(false)
+      cargarMisPagos()
+    } catch (err: any) {
+      setReportePagoMsg('❌ ' + err.message)
+    } finally {
+      setReportandoPago(false)
+    }
+  }
+
+  const cargarMisPagos = () => {
     fetch('/api/jugador/mis-pagos')
       .then((r) => r.json())
       .then((data) => {
@@ -74,6 +115,11 @@ export default function PerfilPage() {
         }
       })
       .finally(() => setLoadingPagos(false))
+  }
+
+  useEffect(() => {
+    if (!session || session.role !== 'jugador') return
+    cargarMisPagos()
   }, [session])
 
   useEffect(() => {
@@ -325,32 +371,139 @@ export default function PerfilPage() {
         </div>
 
         <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid rgba(15,27,38,0.1)' }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 4px 0' }}>
-            💳 Mis pagos
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: 0 }}>
+              💳 Mis pagos
+            </h2>
+            {temporadaPagos && !mostrarFormPago && (
+              <button
+                onClick={() => setMostrarFormPago(true)}
+                style={{
+                  background: 'var(--color-ball)', color: 'var(--color-ink)', border: 'none',
+                  padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 700,
+                }}
+              >
+                ➕ Reportar un pago
+              </button>
+            )}
+          </div>
           {temporadaPagos && (
             <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 12px 0' }}>
               Temporada: {temporadaPagos.nombre}
             </p>
           )}
+
+          {mostrarFormPago && (
+            <form onSubmit={reportarPago} style={{ background: 'rgba(28,126,196,0.05)', border: '1px solid rgba(28,126,196,0.15)', borderRadius: '4px', padding: '16px', marginBottom: '16px' }}>
+              <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 12px 0' }}>
+                Reporta tu pago aquí — quedará <strong>pendiente de validación</strong> hasta que un administrador confirme que lo recibió.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-ink)', display: 'block', marginBottom: '4px' }}>Tipo de pago</label>
+                  <select
+                    value={reporteTipo}
+                    onChange={(e) => setReporteTipo(e.target.value)}
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.2)', boxSizing: 'border-box', fontSize: '13px' }}
+                  >
+                    <option value="pago_movil">Pago móvil</option>
+                    <option value="transferencia">Transferencia</option>
+                    <option value="efectivo">Efectivo</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-ink)', display: 'block', marginBottom: '4px' }}>
+                    Monto ({reporteTipo === 'efectivo' ? '$' : 'Bs.'})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={reporteMonto}
+                    onChange={(e) => setReporteMonto(e.target.value)}
+                    placeholder="0.00"
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.2)', boxSizing: 'border-box', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-ink)', display: 'block', marginBottom: '4px' }}>Fecha</label>
+                  <input
+                    type="date"
+                    value={reporteFecha}
+                    onChange={(e) => setReporteFecha(e.target.value)}
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.2)', boxSizing: 'border-box', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-ink)', display: 'block', marginBottom: '4px' }}>
+                    {reporteTipo === 'efectivo' ? 'Seriales del billete' : 'N° de referencia'}
+                  </label>
+                  <input
+                    type="text"
+                    value={reporteReferencia}
+                    onChange={(e) => setReporteReferencia(e.target.value)}
+                    placeholder="Opcional"
+                    style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.2)', boxSizing: 'border-box', fontSize: '13px' }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="submit"
+                  disabled={reportandoPago}
+                  style={{
+                    background: reportandoPago ? '#ccc' : 'var(--color-ball)', color: 'var(--color-ink)', border: 'none',
+                    padding: '10px 20px', borderRadius: '4px', cursor: reportandoPago ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 700,
+                  }}
+                >
+                  {reportandoPago ? 'Enviando…' : 'Enviar reporte'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMostrarFormPago(false); setReportePagoMsg('') }}
+                  style={{ background: 'none', border: '1px solid rgba(15,27,38,0.2)', color: 'var(--color-ink)', padding: '10px 20px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
+          {reportePagoMsg && (
+            <div style={{
+              padding: '10px 14px', borderRadius: '4px', fontSize: '13px', marginBottom: '14px',
+              background: reportePagoMsg.includes('✅') ? 'rgba(47,82,51,0.1)' : 'rgba(197,60,50,0.1)',
+              color: reportePagoMsg.includes('✅') ? 'var(--color-net)' : '#a83226',
+            }}>
+              {reportePagoMsg}
+            </div>
+          )}
+
           {loadingPagos ? (
             <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
           ) : !temporadaPagos ? (
             <p style={{ fontSize: '13px', color: 'var(--color-line)' }}>No hay una temporada activa en este momento.</p>
           ) : pagos.length === 0 ? (
             <div style={{ background: 'rgba(197,60,50,0.08)', color: '#a83226', padding: '12px', borderRadius: '4px', fontSize: '13px' }}>
-              ⚠️ Todavía no tienes un pago registrado en esta temporada. Sin un pago, no puedes ser incluido en el sorteo — habla con un administrador.
+              ⚠️ Todavía no tienes un pago registrado en esta temporada. Sin un pago validado, no puedes ser incluido en el sorteo — repórtalo arriba, o habla con un administrador.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {pagos.map((p) => (
                 <div key={p.id} style={{
-                  background: 'rgba(47,82,51,0.06)', border: '1px solid rgba(47,82,51,0.15)',
+                  background: p.validado ? 'rgba(47,82,51,0.06)' : 'rgba(230,126,34,0.08)',
+                  border: p.validado ? '1px solid rgba(47,82,51,0.15)' : '1px solid rgba(230,126,34,0.3)',
                   borderRadius: '4px', padding: '10px 14px', fontSize: '13px', color: 'var(--color-ink)',
                 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>Recibo #{p.numero_recibo}</span>
                   {' — '}{p.tipo_pago === 'efectivo' ? '$' : 'Bs.'} {Number(p.monto).toLocaleString(p.tipo_pago === 'efectivo' ? 'en-US' : 'es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {p.tipo_pago.replace('_', ' ')} · {p.fecha}
                   {p.referencia && <> · Ref: {p.referencia}</>}
+                  <br />
+                  {p.validado ? (
+                    <span style={{ color: 'var(--color-net)', fontWeight: 700, fontSize: '12px' }}>✅ Validado</span>
+                  ) : (
+                    <span style={{ color: '#e67e22', fontWeight: 700, fontSize: '12px' }}>⏳ Pendiente de validar</span>
+                  )}
                 </div>
               ))}
             </div>

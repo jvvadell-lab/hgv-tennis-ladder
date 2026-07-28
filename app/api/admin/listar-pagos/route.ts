@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     let query = db
       .from('pagos')
-      .select('id, numero_recibo, jugador_id, temporada_id, tipo_pago, monto, fecha, referencia, jugadores:jugador_id(nombre)')
+      .select('id, numero_recibo, jugador_id, temporada_id, tipo_pago, monto, fecha, referencia, validado, jugadores:jugador_id(nombre)')
       .order('numero_recibo', { ascending: false })
 
     if (temporadaId) query = query.eq('temporada_id', temporadaId)
