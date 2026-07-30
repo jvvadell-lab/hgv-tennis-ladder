@@ -122,7 +122,7 @@ export default function LadderPage() {
 
   const [retandoA, setRetandoA] = useState<string | null>(null)
   const [retoFecha, setRetoFecha] = useState('')
-  const [retoHora, setRetoHora] = useState('')
+  const [retoHora, setRetoHora] = useState('12:00')
   const [retoCancha, setRetoCancha] = useState('HGV1')
   const [retoCanchaForanea, setRetoCanchaForanea] = useState('')
   const [retoComentarios, setRetoComentarios] = useState('')
@@ -508,7 +508,11 @@ export default function LadderPage() {
     }
 
     if (!retoFecha || !retoHora) {
-      setRetoFormMsg('❌ Selecciona fecha y hora propuestas')
+      setRetoFormMsg(
+        !retoFecha
+          ? '❌ Falta elegir la fecha — toca la casilla del calendario 📅'
+          : '❌ Falta elegir la hora del partido'
+      )
       return
     }
 
@@ -558,8 +562,11 @@ export default function LadderPage() {
       })
 
       if (conflicto) {
-        const horaOcupada = new Date(conflicto.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene un partido cerca de esa hora (${horaOcupada}) — cada partido bloquea la cancha 1 hora y 30 minutos. Elige otro horario.`)
+        const horaConflicto = new Date(conflicto.fecha_propuesta)
+        const ocupadaDesde = new Date(horaConflicto.getTime() - DURACION_PARTIDO_MS)
+        const ocupadaHasta = new Date(horaConflicto.getTime() + DURACION_PARTIDO_MS)
+        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido). Elige un horario fuera de ese rango.`)
         return
       }
     }
@@ -640,7 +647,7 @@ export default function LadderPage() {
       setActionMsg('✅ ¡Reto enviado!')
       setRetandoA(null)
       setRetoFecha('')
-      setRetoHora('')
+      setRetoHora('12:00')
       setRetoCancha('HGV1')
       setRetoCanchaForanea('')
       setRetoComentarios('')
@@ -1153,10 +1160,9 @@ export default function LadderPage() {
                           <div style={{ display: 'flex', gap: '4px' }}>
                             <select
                               value={h12}
-                              onChange={(e) => setRetoHora(e.target.value ? combinarA24(e.target.value, min, ampm) : '')}
+                              onChange={(e) => setRetoHora(combinarA24(e.target.value, min, ampm))}
                               style={{ ...inputPequeno, flex: 1 }}
                             >
-                              <option value="">--</option>
                               {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
                                 <option key={n} value={n}>{n}</option>
                               ))}
