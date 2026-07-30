@@ -81,6 +81,9 @@ export default function AdminPage() {
 
   const [retos, setRetos] = useState<any[]>([])
   const [loadingRetos, setLoadingRetos] = useState(false)
+  const [fechaReservas, setFechaReservas] = useState(new Date().toISOString().slice(0, 10))
+  const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
+  const [loadingReservas, setLoadingReservas] = useState(false)
   const [filterEstado, setFilterEstado] = useState('')
 
   const [dashStats, setDashStats] = useState({ jugadores: 0, desafiosActivos: 0, partidosJugados: 0, esteMes: 0 })
@@ -232,7 +235,31 @@ export default function AdminPage() {
     if (activeSection === 'challenges') {
       fetchRetos()
     }
+    if (activeSection === 'reservas') {
+      fetchReservasDelDia(fechaReservas)
+    }
   }, [activeSection])
+
+  useEffect(() => {
+    if (activeSection === 'reservas') {
+      fetchReservasDelDia(fechaReservas)
+    }
+  }, [fechaReservas])
+
+  const fetchReservasDelDia = async (fecha: string) => {
+    setLoadingReservas(true)
+    const inicio = new Date(fecha + 'T00:00:00')
+    const fin = new Date(fecha + 'T23:59:59.999')
+    const { data } = await supabase
+      .from('retos')
+      .select('id, cancha, nombre_cancha_foranea, fecha_propuesta, estado, retador:retador_id(nombre, categoria, genero), retado:retado_id(nombre)')
+      .in('estado', ['pendiente', 'aceptado', 'jugado', 'no_presentado'])
+      .gte('fecha_propuesta', inicio.toISOString())
+      .lte('fecha_propuesta', fin.toISOString())
+      .order('fecha_propuesta', { ascending: true })
+    setReservasDelDia(data || [])
+    setLoadingReservas(false)
+  }
 
   const cancelarReto = async (retoId: string) => {
     if (!confirm('¿Cancelar este reto? Ambos jugadores quedarán libres para retar de nuevo. Úsalo solo si el reto quedó trabado (por ejemplo, uno de los dos fue desactivado).')) return
@@ -962,6 +989,7 @@ export default function AdminPage() {
     { id: 'challenges', icon: '⚔️', label: 'Desafíos' },
     { id: 'results', icon: '🏆', label: 'Resultados' },
     { id: 'ladder', icon: '🎾', label: 'Escalafón' },
+    { id: 'reservas', icon: '📅', label: 'Reservas' },
     { id: 'payments', icon: '💳', label: 'Pagos' },
   ]
 
@@ -1560,6 +1588,83 @@ export default function AdminPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* RESERVAS */}
+          {activeSection === 'reservas' && (
+            <div>
+              <div style={{
+                background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap'
+              }}>
+                <span style={{ fontWeight: 'bold', color: '#333' }}>📅 Ver reservas del día:</span>
+                <input
+                  type="date"
+                  value={fechaReservas}
+                  onChange={(e) => setFechaReservas(e.target.value)}
+                  style={{ padding: '8px 12px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px' }}
+                />
+                <button
+                  onClick={() => setFechaReservas(new Date().toISOString().slice(0, 10))}
+                  style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  Hoy
+                </button>
+                <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
+                  Total: <strong>{reservasDelDia.length}</strong> partidos
+                </span>
+              </div>
+
+              {loadingReservas ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando reservas...</div>
+              ) : reservasDelDia.length === 0 ? (
+                <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                  No hay partidos programados para este día.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+                  {['HGV1', 'HGV2', 'FORANEA'].map((canchaId) => {
+                    const partidosCancha = reservasDelDia.filter((r) => r.cancha === canchaId)
+                    if (partidosCancha.length === 0) return null
+                    const nombreCanchaGrupo = canchaId === 'FORANEA' ? 'Canchas foráneas' : canchaId === 'HGV1' ? 'Cancha HGV 1' : 'Cancha HGV 2'
+                    return (
+                      <div key={canchaId} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                        <h4 style={{ color: 'var(--color-ink)', marginTop: 0 }}>🎾 {nombreCanchaGrupo}</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {partidosCancha.map((r) => {
+                            const ec = estadoColor(r.estado)
+                            return (
+                              <div key={r.id} style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--color-court)' }}>
+                                    {new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
+                                    {r.estado}
+                                  </span>
+                                </div>
+                                <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#333' }}>
+                                  {r.retador?.nombre || '—'} vs {r.retado?.nombre || '—'}
+                                </p>
+                                {canchaId === 'FORANEA' && r.nombre_cancha_foranea && (
+                                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b6b6b' }}>{r.nombre_cancha_foranea}</p>
+                                )}
+                                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b6b6b' }}>
+                                  {CATEGORIAS.find(c => c.value === r.retador?.categoria)?.label || '—'}
+                                  {' — '}
+                                  {GENEROS.find(g => g.value === r.retador?.genero)?.label || '—'}
+                                </p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

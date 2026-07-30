@@ -15,6 +15,22 @@ type Anuncio = {
   activo: boolean
 } | null
 
+type PartidoHoy = {
+  id: string
+  cancha: string
+  nombre_cancha_foranea: string | null
+  fecha_propuesta: string
+  retador: { nombre: string } | null
+  retado: { nombre: string } | null
+}
+
+function nombreCanchaCorta(cancha: string, nombreForanea: string | null) {
+  if (cancha === 'FORANEA') return nombreForanea || 'Foránea'
+  if (cancha === 'HGV1') return 'HGV 1'
+  if (cancha === 'HGV2') return 'HGV 2'
+  return cancha
+}
+
 // Divisor de "línea de cancha" — doble línea fina, como la línea de fondo
 // y la línea de servicio de una cancha de tenis. Es la firma visual de la marca.
 function LineaDeCancha() {
@@ -30,6 +46,8 @@ export default function Home() {
   const [session, setSession] = useState<Session>(null)
   const [checking, setChecking] = useState(true)
   const [anuncio, setAnuncio] = useState<Anuncio>(null)
+  const [partidosHoy, setPartidosHoy] = useState<PartidoHoy[]>([])
+  const [cargandoPartidosHoy, setCargandoPartidosHoy] = useState(true)
 
   useEffect(() => {
     fetch('/api/me')
@@ -46,6 +64,25 @@ export default function Home() {
       .maybeSingle()
       .then(({ data }) => {
         if (data?.activo && data.titulo) setAnuncio(data as Anuncio)
+      })
+  }, [])
+
+  useEffect(() => {
+    const inicioHoy = new Date()
+    inicioHoy.setHours(0, 0, 0, 0)
+    const finHoy = new Date()
+    finHoy.setHours(23, 59, 59, 999)
+
+    supabase
+      .from('retos')
+      .select('id, cancha, nombre_cancha_foranea, fecha_propuesta, retador:retador_id(nombre), retado:retado_id(nombre)')
+      .eq('estado', 'aceptado')
+      .gte('fecha_propuesta', inicioHoy.toISOString())
+      .lte('fecha_propuesta', finHoy.toISOString())
+      .order('fecha_propuesta', { ascending: true })
+      .then(({ data }) => {
+        setPartidosHoy((data as any) || [])
+        setCargandoPartidosHoy(false)
       })
   }, [])
 
@@ -159,6 +196,39 @@ export default function Home() {
               {anuncio.descripcion}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Partidos de hoy */}
+      {!cargandoPartidosHoy && partidosHoy.length > 0 && (
+        <div style={{
+          background: 'rgba(247,243,234,0.06)', border: '1px solid rgba(247,243,234,0.12)',
+          borderTop: '2px solid var(--color-ball)', borderRadius: '4px',
+          padding: '18px 22px', marginBottom: '32px', maxWidth: '480px', width: '100%',
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px',
+            letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 10px 0', fontWeight: 700, textAlign: 'center',
+          }}>
+            🎾 Partidos de hoy
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {partidosHoy.map((p) => (
+              <div key={p.id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px',
+                fontSize: '13px', color: 'var(--color-chalk)', padding: '6px 0',
+                borderBottom: '1px solid rgba(247,243,234,0.08)',
+              }}>
+                <span>
+                  <strong>{p.retador?.nombre || '—'}</strong> vs <strong>{p.retado?.nombre || '—'}</strong>
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', whiteSpace: 'nowrap' }}>
+                  {new Date(p.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  {' · '}{nombreCanchaCorta(p.cancha, p.nombre_cancha_foranea)}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
