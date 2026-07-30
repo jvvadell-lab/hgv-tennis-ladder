@@ -335,19 +335,42 @@ export default function Home() {
           Galería
         </Link>
 
-        <Link href="/reservas" style={{
-          backgroundColor: 'transparent',
-          color: 'var(--color-chalk)',
-          padding: '14px 30px',
-          borderRadius: '4px',
-          textDecoration: 'none',
-          fontWeight: 700,
-          fontSize: '15px',
-          fontFamily: 'var(--font-body)',
-          border: '1px solid rgba(247,243,234,0.4)',
-        }}>
+        {/* Reservar Cancha — deshabilitado temporalmente. Se deja visible para
+            anticipar la función, pero no navega a /reservas hasta que esté lista.
+            Para reactivarlo: volver a un <Link href="/reservas"> como los de arriba
+            y quitar este bloque + el span "Próximamente". */}
+        <span
+          aria-disabled="true"
+          title="Próximamente"
+          style={{
+            backgroundColor: 'transparent',
+            color: 'rgba(247,243,234,0.35)',
+            padding: '14px 30px',
+            borderRadius: '4px',
+            fontWeight: 700,
+            fontSize: '15px',
+            fontFamily: 'var(--font-body)',
+            border: '1px solid rgba(247,243,234,0.15)',
+            cursor: 'not-allowed',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
           Reservar Cancha
-        </Link>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--color-ink)',
+            background: 'var(--color-ball)',
+            padding: '2px 6px',
+            borderRadius: '3px',
+          }}>
+            Próximamente
+          </span>
+        </span>
 
         {!checking && session ? (
           session.role === 'admin' && (
