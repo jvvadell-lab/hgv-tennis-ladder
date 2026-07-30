@@ -528,6 +528,42 @@ export default function LadderPage() {
       return
     }
 
+    // Cada partido bloquea la cancha (solo HGV1/HGV2, la foránea no la gestiona el club)
+    // por 1 hora y 30 minutos — así que rechazamos otro reto en la misma cancha
+    // si su horario cae dentro de esa ventana de algún partido ya pendiente/aceptado.
+    if (retoCancha !== 'FORANEA') {
+      const fechaPropuestaCheck = new Date(`${retoFecha}T${retoHora}`)
+      const inicioDia = new Date(`${retoFecha}T00:00:00`)
+      const finDia = new Date(`${retoFecha}T23:59:59`)
+      const DURACION_PARTIDO_MS = 90 * 60 * 1000
+
+      const { data: partidosCancha, error: errCancha } = await supabase
+        .from('retos')
+        .select('id, fecha_propuesta')
+        .eq('temporada_id', temporadaId)
+        .eq('cancha', retoCancha)
+        .in('estado', ['pendiente', 'aceptado'])
+        .gte('fecha_propuesta', inicioDia.toISOString())
+        .lte('fecha_propuesta', finDia.toISOString())
+
+      if (errCancha) {
+        setRetoFormMsg('❌ Error al verificar disponibilidad de la cancha: ' + errCancha.message)
+        return
+      }
+
+      const nuevaHoraMs = fechaPropuestaCheck.getTime()
+      const conflicto = (partidosCancha || []).find((r: any) => {
+        const otraHoraMs = new Date(r.fecha_propuesta).getTime()
+        return Math.abs(otraHoraMs - nuevaHoraMs) < DURACION_PARTIDO_MS
+      })
+
+      if (conflicto) {
+        const horaOcupada = new Date(conflicto.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene un partido cerca de esa hora (${horaOcupada}) — cada partido bloquea la cancha 1 hora y 30 minutos. Elige otro horario.`)
+        return
+      }
+    }
+
     // Verificación en vivo contra la base de datos (no contra datos ya cargados en el navegador),
     // para evitar que dos clics rápidos generen retos duplicados, y para confirmar que ni yo
     // ni el rival tengamos ya un reto pendiente/aceptado con cualquier otra persona.
