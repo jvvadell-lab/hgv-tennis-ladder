@@ -322,6 +322,7 @@ export default function AdminPage() {
   }
   const [sorteoMsg, setSorteoMsg] = useState('')
   const [cerrando, setCerrando] = useState(false)
+  const [eliminandoTemp, setEliminandoTemp] = useState<string | null>(null)
 
   const [historial, setHistorial] = useState<any[]>([])
   const [historialAbierto, setHistorialAbierto] = useState<string | null>(null)
@@ -689,6 +690,31 @@ export default function AdminPage() {
       setEditTempMsg('❌ Error al guardar: ' + err.message)
     } finally {
       setGuardandoEdicion(false)
+    }
+  }
+
+  const eliminarTemporada = async (temporadaId: string, nombreTemp: string) => {
+    const confirmacion1 = confirm(`¿Eliminar por completo "${nombreTemp}"? Esto borra TODOS sus datos: jugadores anotados, retos, resultados, pagos y recordatorios de esa temporada. No se puede deshacer.`)
+    if (!confirmacion1) return
+    const confirmacion2 = confirm('Confirma una vez más: esta acción es permanente. ¿Continuar?')
+    if (!confirmacion2) return
+
+    setEliminandoTemp(temporadaId)
+    try {
+      const res = await fetch('/api/admin/eliminar-temporada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temporadaId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al eliminar')
+
+      fetchTemporadaYLadder()
+      fetchHistorial()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setEliminandoTemp(null)
     }
   }
 
@@ -2062,6 +2088,17 @@ export default function AdminPage() {
                       >
                         {cerrando ? '⏳ Cerrando...' : '🔒 Cerrar temporada'}
                       </button>
+                      <button
+                        onClick={() => eliminarTemporada(temporadaActiva.id, temporadaActiva.nombre)}
+                        disabled={eliminandoTemp === temporadaActiva.id}
+                        style={{
+                          background: 'none', color: '#c0392b', border: '1px solid #c0392b',
+                          padding: '12px 24px', borderRadius: '8px', cursor: eliminandoTemp === temporadaActiva.id ? 'not-allowed' : 'pointer',
+                          fontSize: '15px', fontWeight: 'bold'
+                        }}
+                      >
+                        {eliminandoTemp === temporadaActiva.id ? '⏳ Eliminando...' : '🗑️ Eliminar temporada'}
+                      </button>
                     </div>
                     {sorteoMsg && (
                       <div style={{
@@ -2242,18 +2279,31 @@ export default function AdminPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {historial.map((t) => (
                       <div key={t.id} style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-                        <button
-                          onClick={() => verHistorialTemporada(t.id)}
-                          style={{
-                            width: '100%', textAlign: 'left', padding: '16px 20px', background: 'none', border: 'none',
-                            cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                          }}
-                        >
-                          <span style={{ fontWeight: '600', color: 'var(--color-ink)' }}>{t.nombre}</span>
-                          <span style={{ fontSize: '13px', color: '#6b6b6b' }}>
-                            {t.fecha_inicio} → {t.fecha_fin} {historialAbierto === t.id ? '▲' : '▼'}
-                          </span>
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <button
+                            onClick={() => verHistorialTemporada(t.id)}
+                            style={{
+                              flex: 1, textAlign: 'left', padding: '16px 20px', background: 'none', border: 'none',
+                              cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                            }}
+                          >
+                            <span style={{ fontWeight: '600', color: 'var(--color-ink)' }}>{t.nombre}</span>
+                            <span style={{ fontSize: '13px', color: '#6b6b6b' }}>
+                              {t.fecha_inicio} → {t.fecha_fin} {historialAbierto === t.id ? '▲' : '▼'}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => eliminarTemporada(t.id, t.nombre)}
+                            disabled={eliminandoTemp === t.id}
+                            style={{
+                              background: 'none', border: 'none', color: '#c0392b', cursor: eliminandoTemp === t.id ? 'not-allowed' : 'pointer',
+                              fontSize: '18px', padding: '16px 20px',
+                            }}
+                            title="Eliminar esta temporada por completo"
+                          >
+                            {eliminandoTemp === t.id ? '⏳' : '🗑️'}
+                          </button>
+                        </div>
 
                         {historialAbierto === t.id && (
                           <div style={{ padding: '0 20px 20px 20px' }}>
@@ -2323,6 +2373,10 @@ export default function AdminPage() {
             <div>
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                 <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>💳 Registrar pago</h3>
+                <div style={{ background: '#f0f7fc', border: '1px solid rgba(28,126,196,0.2)', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px' }}>
+                  <strong style={{ color: 'var(--color-ink)' }}>📱 Datos para Pago Móvil:</strong>{' '}
+                  <span style={{ color: '#333' }}>YELITZA CONTRERAS · V-19.523.642 · 0412-7628281 · Banco BNC</span>
+                </div>
                 {!temporadaActivaPagos ? (
                   <p style={{ color: '#6b6b6b' }}>No hay una temporada activa en este momento.</p>
                 ) : (

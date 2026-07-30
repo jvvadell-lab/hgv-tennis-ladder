@@ -34,7 +34,7 @@ body {
 /* Fondo de cancha real — foto + capa de marca para legibilidad del texto */
 .court-bg {
   background-image:
-    linear-gradient(165deg, rgba(15,27,38,0.88) 0%, rgba(18,58,92,0.82) 55%, rgba(28,126,196,0.72) 100%),
+    linear-gradient(165deg, rgba(15,27,38,0.68) 0%, rgba(18,58,92,0.60) 55%, rgba(28,126,196,0.48) 100%),
     url('/court-bg.jpg');
   background-size: cover;
   background-position: center;
@@ -76,7 +76,6 @@ body {
   }
   .admin-nav button {
     flex: 0 0 auto !important;
-    width: auto !important;
     white-space: nowrap;
     border-left: none !important;
     border-bottom: 4px solid transparent;

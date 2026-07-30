@@ -216,6 +216,13 @@ export default function PerfilPage() {
           <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
             La categoría y el género solo puede cambiarlos un administrador.
           </p>
+          <a href="/reservas" style={{
+            display: 'inline-block', marginTop: '16px', color: 'var(--color-ink)', fontSize: '14px', fontWeight: 700,
+            fontFamily: 'var(--font-body)', textDecoration: 'none', border: '1px solid var(--color-court)',
+            borderRadius: '4px', padding: '9px 20px',
+          }}>
+            🎾 Reservar cancha
+          </a>
         </div>
 
         <form onSubmit={guardar}>
@@ -395,6 +402,15 @@ export default function PerfilPage() {
 
           {mostrarFormPago && (
             <form onSubmit={reportarPago} style={{ background: 'rgba(28,126,196,0.05)', border: '1px solid rgba(28,126,196,0.15)', borderRadius: '4px', padding: '16px', marginBottom: '16px' }}>
+              <div style={{ background: '#fff', border: '1px solid rgba(28,126,196,0.25)', borderRadius: '4px', padding: '12px 14px', marginBottom: '12px' }}>
+                <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-ink)', margin: '0 0 4px 0' }}>📱 Datos para Pago Móvil</p>
+                <p style={{ fontSize: '13px', color: '#333', margin: 0, lineHeight: 1.6 }}>
+                  Yelitza Contreras<br />
+                  V-19.523.642<br />
+                  0412-7628281<br />
+                  Banco BNC
+                </p>
+              </div>
               <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 12px 0' }}>
                 Reporta tu pago aquí — quedará <strong>pendiente de validación</strong> hasta que un administrador confirme que lo recibió.
               </p>
