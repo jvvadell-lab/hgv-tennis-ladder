@@ -83,6 +83,7 @@ export default function AdminPage() {
   const [loadingRetos, setLoadingRetos] = useState(false)
   const [fechaReservas, setFechaReservas] = useState(new Date().toISOString().slice(0, 10))
   const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
+  const [reservasCasualesDelDia, setReservasCasualesDelDia] = useState<any[]>([])
   const [loadingReservas, setLoadingReservas] = useState(false)
   const [filterEstado, setFilterEstado] = useState('')
 
@@ -258,6 +259,16 @@ export default function AdminPage() {
       .lte('fecha_propuesta', fin.toISOString())
       .order('fecha_propuesta', { ascending: true })
     setReservasDelDia(data || [])
+
+    const { data: casuales } = await supabase
+      .from('reservas_cancha')
+      .select('id, cancha, fecha_hora, estado, jugadores:jugador_id(nombre)')
+      .eq('estado', 'activa')
+      .gte('fecha_hora', inicio.toISOString())
+      .lte('fecha_hora', fin.toISOString())
+      .order('fecha_hora', { ascending: true })
+    setReservasCasualesDelDia(casuales || [])
+
     setLoadingReservas(false)
   }
 
@@ -1615,48 +1626,78 @@ export default function AdminPage() {
                   Hoy
                 </button>
                 <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
-                  Total: <strong>{reservasDelDia.length}</strong> partidos
+                  Total: <strong>{reservasDelDia.length + reservasCasualesDelDia.length}</strong> reservas
                 </span>
               </div>
 
               {loadingReservas ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando reservas...</div>
-              ) : reservasDelDia.length === 0 ? (
+              ) : reservasDelDia.length === 0 && reservasCasualesDelDia.length === 0 ? (
                 <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-                  No hay partidos programados para este día.
+                  No hay nada programado para este día.
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                   {['HGV1', 'HGV2', 'FORANEA'].map((canchaId) => {
-                    const partidosCancha = reservasDelDia.filter((r) => r.cancha === canchaId)
-                    if (partidosCancha.length === 0) return null
+                    const partidos = reservasDelDia
+                      .filter((r) => r.cancha === canchaId)
+                      .map((r) => ({ tipo: 'escalera' as const, hora: r.fecha_propuesta, data: r }))
+                    const casuales = canchaId === 'FORANEA' ? [] : reservasCasualesDelDia
+                      .filter((r) => r.cancha === canchaId)
+                      .map((r) => ({ tipo: 'casual' as const, hora: r.fecha_hora, data: r }))
+                    const itemsCancha = [...partidos, ...casuales].sort((a, b) => a.hora < b.hora ? -1 : 1)
+                    if (itemsCancha.length === 0) return null
                     const nombreCanchaGrupo = canchaId === 'FORANEA' ? 'Canchas foráneas' : canchaId === 'HGV1' ? 'Cancha HGV 1' : 'Cancha HGV 2'
                     return (
                       <div key={canchaId} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                         <h4 style={{ color: 'var(--color-ink)', marginTop: 0 }}>🎾 {nombreCanchaGrupo}</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          {partidosCancha.map((r) => {
-                            const ec = estadoColor(r.estado)
+                          {itemsCancha.map((item) => {
+                            if (item.tipo === 'escalera') {
+                              const r = item.data
+                              const ec = estadoColor(r.estado)
+                              return (
+                                <div key={`reto-${r.id}`} style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--color-court)' }}>
+                                      {new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    <span style={{ display: 'flex', gap: '6px' }}>
+                                      <span style={{ background: '#e0f2fe', color: '#075985', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
+                                        🎾 Escalera
+                                      </span>
+                                      <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
+                                        {r.estado}
+                                      </span>
+                                    </span>
+                                  </div>
+                                  <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#333' }}>
+                                    {r.retador?.nombre || '—'} vs {r.retado?.nombre || '—'}
+                                  </p>
+                                  {canchaId === 'FORANEA' && r.nombre_cancha_foranea && (
+                                    <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b6b6b' }}>{r.nombre_cancha_foranea}</p>
+                                  )}
+                                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b6b6b' }}>
+                                    {CATEGORIAS.find(c => c.value === r.retador?.categoria)?.label || '—'}
+                                    {' — '}
+                                    {GENEROS.find(g => g.value === r.retador?.genero)?.label || '—'}
+                                  </p>
+                                </div>
+                              )
+                            }
+                            const res = item.data
                             return (
-                              <div key={r.id} style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                              <div key={`reserva-${res.id}`} style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--color-court)' }}>
-                                    {new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                    {new Date(res.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                   </span>
-                                  <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
-                                    {r.estado}
+                                  <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
+                                    📅 Reserva casual
                                   </span>
                                 </div>
                                 <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#333' }}>
-                                  {r.retador?.nombre || '—'} vs {r.retado?.nombre || '—'}
-                                </p>
-                                {canchaId === 'FORANEA' && r.nombre_cancha_foranea && (
-                                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b6b6b' }}>{r.nombre_cancha_foranea}</p>
-                                )}
-                                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b6b6b' }}>
-                                  {CATEGORIAS.find(c => c.value === r.retador?.categoria)?.label || '—'}
-                                  {' — '}
-                                  {GENEROS.find(g => g.value === r.retador?.genero)?.label || '—'}
+                                  {res.jugadores?.nombre || 'Socio'}
                                 </p>
                               </div>
                             )

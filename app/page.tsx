@@ -24,6 +24,13 @@ type PartidoHoy = {
   retado: { nombre: string } | null
 }
 
+type ReservaHoy = {
+  id: string
+  cancha: string
+  fecha_hora: string
+  jugadores: { nombre: string } | null
+}
+
 function nombreCanchaCorta(cancha: string, nombreForanea: string | null) {
   if (cancha === 'FORANEA') return nombreForanea || 'Foránea'
   if (cancha === 'HGV1') return 'HGV 1'
@@ -47,6 +54,7 @@ export default function Home() {
   const [checking, setChecking] = useState(true)
   const [anuncio, setAnuncio] = useState<Anuncio>(null)
   const [partidosHoy, setPartidosHoy] = useState<PartidoHoy[]>([])
+  const [reservasHoy, setReservasHoy] = useState<ReservaHoy[]>([])
   const [cargandoPartidosHoy, setCargandoPartidosHoy] = useState(true)
 
   useEffect(() => {
@@ -82,6 +90,17 @@ export default function Home() {
       .order('fecha_propuesta', { ascending: true })
       .then(({ data }) => {
         setPartidosHoy((data as any) || [])
+      })
+
+    supabase
+      .from('reservas_cancha')
+      .select('id, cancha, fecha_hora, jugadores:jugador_id(nombre)')
+      .eq('estado', 'activa')
+      .gte('fecha_hora', inicioHoy.toISOString())
+      .lte('fecha_hora', finHoy.toISOString())
+      .order('fecha_hora', { ascending: true })
+      .then(({ data }) => {
+        setReservasHoy((data as any) || [])
         setCargandoPartidosHoy(false)
       })
   }, [])
@@ -200,7 +219,7 @@ export default function Home() {
       )}
 
       {/* Partidos de hoy */}
-      {!cargandoPartidosHoy && partidosHoy.length > 0 && (
+      {!cargandoPartidosHoy && (partidosHoy.length > 0 || reservasHoy.length > 0) && (
         <div style={{
           background: 'rgba(247,243,234,0.06)', border: '1px solid rgba(247,243,234,0.12)',
           borderTop: '2px solid var(--color-ball)', borderRadius: '4px',
@@ -210,24 +229,40 @@ export default function Home() {
             fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px',
             letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 10px 0', fontWeight: 700, textAlign: 'center',
           }}>
-            🎾 Partidos de hoy
+            🎾 En cancha hoy
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {partidosHoy.map((p) => (
-              <div key={p.id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px',
-                fontSize: '13px', color: 'var(--color-chalk)', padding: '6px 0',
-                borderBottom: '1px solid rgba(247,243,234,0.08)',
-              }}>
-                <span>
-                  <strong>{p.retador?.nombre || '—'}</strong> vs <strong>{p.retado?.nombre || '—'}</strong>
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', whiteSpace: 'nowrap' }}>
-                  {new Date(p.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                  {' · '}{nombreCanchaCorta(p.cancha, p.nombre_cancha_foranea)}
-                </span>
-              </div>
-            ))}
+            {[
+              ...partidosHoy.map((p) => ({ tipo: 'escalera' as const, hora: p.fecha_propuesta, data: p })),
+              ...reservasHoy.map((r) => ({ tipo: 'casual' as const, hora: r.fecha_hora, data: r })),
+            ]
+              .sort((a, b) => (a.hora < b.hora ? -1 : 1))
+              .map((item) => (
+                <div key={`${item.tipo}-${item.data.id}`} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px',
+                  fontSize: '13px', color: 'var(--color-chalk)', padding: '6px 0',
+                  borderBottom: '1px solid rgba(247,243,234,0.08)',
+                }}>
+                  {item.tipo === 'escalera' ? (
+                    <span>
+                      <strong>{item.data.retador?.nombre || '—'}</strong> vs <strong>{item.data.retado?.nombre || '—'}</strong>
+                      <span style={{ color: 'var(--color-ball)', fontSize: '11px' }}> · escalera</span>
+                    </span>
+                  ) : (
+                    <span>
+                      <strong>{item.data.jugadores?.nombre || 'Socio'}</strong>
+                      <span style={{ color: 'rgba(247,243,234,0.6)', fontSize: '11px' }}> · reserva casual</span>
+                    </span>
+                  )}
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', whiteSpace: 'nowrap' }}>
+                    {new Date(item.hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    {' · '}
+                    {item.tipo === 'escalera'
+                      ? nombreCanchaCorta(item.data.cancha, item.data.nombre_cancha_foranea)
+                      : nombreCanchaCorta(item.data.cancha, null)}
+                  </span>
+                </div>
+              ))}
           </div>
         </div>
       )}
@@ -301,7 +336,7 @@ export default function Home() {
         </Link>
 
         {!checking && session ? (
-          session.role === 'admin' && (
+          session.role === 'admin' ? (
             <Link href="/admin" style={{
               backgroundColor: 'transparent',
               color: 'var(--color-chalk)',
@@ -314,6 +349,20 @@ export default function Home() {
               border: '1px solid rgba(247,243,234,0.4)',
             }}>
               Panel Admin
+            </Link>
+          ) : (
+            <Link href="/reservas" style={{
+              backgroundColor: 'transparent',
+              color: 'var(--color-chalk)',
+              padding: '14px 30px',
+              borderRadius: '4px',
+              textDecoration: 'none',
+              fontWeight: 700,
+              fontSize: '15px',
+              fontFamily: 'var(--font-body)',
+              border: '1px solid rgba(247,243,234,0.4)',
+            }}>
+              Reservar Cancha
             </Link>
           )
         ) : (

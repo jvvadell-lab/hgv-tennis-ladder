@@ -569,6 +569,34 @@ export default function LadderPage() {
         setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido). Elige un horario fuera de ese rango.`)
         return
       }
+
+      // También revisamos que no choque con una reserva casual de cancha (bloquean 1 hora)
+      const { data: reservasCancha, error: errReservas } = await supabase
+        .from('reservas_cancha')
+        .select('id, fecha_hora')
+        .eq('cancha', retoCancha)
+        .eq('estado', 'activa')
+        .gte('fecha_hora', inicioDia.toISOString())
+        .lte('fecha_hora', finDia.toISOString())
+
+      if (errReservas) {
+        setRetoFormMsg('❌ Error al verificar reservas casuales de la cancha: ' + errReservas.message)
+        return
+      }
+
+      const DURACION_RESERVA_MS = 60 * 60 * 1000
+      const finNuevoReto = nuevaHoraMs + DURACION_PARTIDO_MS
+      const conflictoReserva = (reservasCancha || []).find((r: any) => {
+        const inicioReserva = new Date(r.fecha_hora).getTime()
+        const finReserva = inicioReserva + DURACION_RESERVA_MS
+        return nuevaHoraMs < finReserva && inicioReserva < finNuevoReto
+      })
+
+      if (conflictoReserva) {
+        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual a las ${fmt(new Date(conflictoReserva.fecha_hora))}. Elige otro horario.`)
+        return
+      }
     }
 
     // Verificación en vivo contra la base de datos (no contra datos ya cargados en el navegador),
