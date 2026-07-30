@@ -335,8 +335,22 @@ export default function Home() {
           Galería
         </Link>
 
+        <Link href="/reservas" style={{
+          backgroundColor: 'transparent',
+          color: 'var(--color-chalk)',
+          padding: '14px 30px',
+          borderRadius: '4px',
+          textDecoration: 'none',
+          fontWeight: 700,
+          fontSize: '15px',
+          fontFamily: 'var(--font-body)',
+          border: '1px solid rgba(247,243,234,0.4)',
+        }}>
+          Reservar Cancha
+        </Link>
+
         {!checking && session ? (
-          session.role === 'admin' ? (
+          session.role === 'admin' && (
             <Link href="/admin" style={{
               backgroundColor: 'transparent',
               color: 'var(--color-chalk)',
@@ -349,20 +363,6 @@ export default function Home() {
               border: '1px solid rgba(247,243,234,0.4)',
             }}>
               Panel Admin
-            </Link>
-          ) : (
-            <Link href="/reservas" style={{
-              backgroundColor: 'transparent',
-              color: 'var(--color-chalk)',
-              padding: '14px 30px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              fontWeight: 700,
-              fontSize: '15px',
-              fontFamily: 'var(--font-body)',
-              border: '1px solid rgba(247,243,234,0.4)',
-            }}>
-              Reservar Cancha
             </Link>
           )
         ) : (
