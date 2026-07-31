@@ -2287,6 +2287,10 @@ export default function AdminPage() {
 
                   {loading ? (
                     <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando escalafón...</div>
+                  ) : !temporadaActiva.sorteo_realizado ? (
+                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                      Todavía no se ha hecho el sorteo — el orden de anotación no es un ranking real. Usa el botón de arriba para sortear.
+                    </div>
                   ) : Object.keys(ladderPreview).length === 0 ? (
                     <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                       Todavía no hay posiciones asignadas. Usa el botón de arriba para sortear.
@@ -2351,7 +2355,7 @@ export default function AdminPage() {
                     </div>
                   )}
 
-                  {Object.keys(ladderPreview).length > 0 && (
+                  {temporadaActiva.sorteo_realizado && Object.keys(ladderPreview).length > 0 && (
                     <div style={{ marginTop: '30px' }}>
                       <h3 style={{ color: 'var(--color-ink)' }}>🏆 Premios sugeridos</h3>
                       <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 16px 0' }}>

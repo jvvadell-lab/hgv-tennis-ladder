@@ -61,11 +61,25 @@ export default function RegisterPage() {
   })
   const [fotoCarnet, setFotoCarnet] = useState<File | null>(null)
   const [previewCarnet, setPreviewCarnet] = useState<string | null>(null)
+  const [fotoCarnetError, setFotoCarnetError] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
+  // Formatos que aceptamos para la foto del carné, y tamaño máximo del archivo.
+  const FORMATOS_CARNET_ACEPTADOS = ['image/jpeg', 'image/png', 'image/webp']
+  const TAMANO_MAXIMO_CARNET_MB = 5
+
   const handleFotoCarnet = (file: File | null) => {
+    setFotoCarnetError('')
+    if (file && !FORMATOS_CARNET_ACEPTADOS.includes(file.type)) {
+      setFotoCarnetError('❌ Formato no soportado — usa JPG, PNG o WEBP.')
+      return
+    }
+    if (file && file.size > TAMANO_MAXIMO_CARNET_MB * 1024 * 1024) {
+      setFotoCarnetError(`❌ La foto pesa demasiado — el máximo es ${TAMANO_MAXIMO_CARNET_MB}MB.`)
+      return
+    }
     setFotoCarnet(file)
     if (previewCarnet) URL.revokeObjectURL(previewCarnet)
     setPreviewCarnet(file ? URL.createObjectURL(file) : null)
@@ -241,13 +255,16 @@ export default function RegisterPage() {
             <label style={labelStyle}>Foto de tu carné de socio (opcional)</label>
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               onChange={(e) => handleFotoCarnet(e.target.files?.[0] || null)}
               style={{ ...inputStyle, padding: '8px', background: 'white' }}
             />
             <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
-              Súbela ahora y te ahorras mostrar el carné físico cuando vayas a jugar — el club ya la tiene registrada.
+              Súbela ahora y te ahorras mostrar el carné físico cuando vayas a jugar — el club ya la tiene registrada. Formatos JPG, PNG o WEBP, máximo {TAMANO_MAXIMO_CARNET_MB}MB.
             </p>
+            {fotoCarnetError && (
+              <p style={{ fontSize: '12px', color: '#a83226', marginTop: '4px' }}>{fotoCarnetError}</p>
+            )}
             {previewCarnet && (
               <img
                 src={previewCarnet}
