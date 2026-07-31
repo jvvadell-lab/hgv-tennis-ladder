@@ -989,8 +989,10 @@ export default function LadderPage() {
               )}
             </div>
 
-            {/* Mi posición destacada */}
-            {session?.role === 'jugador' && miPosicion && (
+            {/* Mi posición destacada — solo tiene sentido después del sorteo; antes es
+                solo el orden de inscripción y mostrarla en grande da la impresión falsa
+                de un ranking real. */}
+            {session?.role === 'jugador' && miPosicion && temporadaSorteada && (
               <div style={{
                 background: 'linear-gradient(135deg, #d4e157 0%, #b9c93f 100%)',
                 borderRadius: '12px', padding: '20px 24px', marginBottom: '24px',
@@ -1074,8 +1076,13 @@ export default function LadderPage() {
             {/* Ranking */}
             <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
               <h2 style={{ color: 'var(--color-ink)', marginTop: 0 }}>
-                Ranking — {CATEGORIAS.find(c => c.value === categoria)?.label} / {GENEROS.find(g => g.value === genero)?.label}
+                {temporadaSorteada ? 'Ranking' : 'Jugadores anotados'} — {CATEGORIAS.find(c => c.value === categoria)?.label} / {GENEROS.find(g => g.value === genero)?.label}
               </h2>
+              {!temporadaSorteada && posiciones.length > 0 && (
+                <p style={{ fontSize: '13px', color: '#e67e22', fontWeight: 'bold', margin: '-6px 0 14px 0' }}>
+                  🎲 El sorteo todavía no se ha hecho — el orden de abajo es solo el orden de inscripción, no es el ranking final.
+                </p>
+              )}
               {loading ? (
                 <p className="loading-row"><span className="spinner" /> Cargando...</p>
               ) : posiciones.length === 0 ? (
@@ -1085,7 +1092,7 @@ export default function LadderPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ color: '#6b6b6b', fontSize: '11px', textAlign: 'left' }}>
-                      <th style={{ padding: '4px 10px', fontWeight: 'normal' }}>Actual</th>
+                      <th style={{ padding: '4px 10px', fontWeight: 'normal' }}>{temporadaSorteada ? 'Actual' : '#'}</th>
                       <th style={{ padding: '4px 10px', fontWeight: 'normal' }}>Jugador</th>
                       <th style={{ padding: '4px 10px', fontWeight: 'normal', textAlign: 'center' }}>Inicial</th>
                       <th style={{ padding: '4px 6px', fontWeight: 'normal', textAlign: 'center' }}>PJ</th>
@@ -1114,9 +1121,13 @@ export default function LadderPage() {
                             {p.jugadores?.nombre || 'Jugador'}
                           </td>
                           <td style={{ padding: '10px', textAlign: 'center', color: '#6b6b6b', fontSize: '13px' }}>
-                            #{inicial}
-                            {diferencia > 0 && <span style={{ color: '#28a745', marginLeft: '4px' }}>▲{diferencia}</span>}
-                            {diferencia < 0 && <span style={{ color: '#c0392b', marginLeft: '4px' }}>▼{Math.abs(diferencia)}</span>}
+                            {temporadaSorteada ? (
+                              <>
+                                #{inicial}
+                                {diferencia > 0 && <span style={{ color: '#28a745', marginLeft: '4px' }}>▲{diferencia}</span>}
+                                {diferencia < 0 && <span style={{ color: '#c0392b', marginLeft: '4px' }}>▼{Math.abs(diferencia)}</span>}
+                              </>
+                            ) : '—'}
                           </td>
                           <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px' }}>{s.jugados}</td>
                           <td style={{ padding: '10px', textAlign: 'center', fontSize: '13px', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
