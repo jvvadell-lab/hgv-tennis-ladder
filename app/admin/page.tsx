@@ -2287,15 +2287,17 @@ export default function AdminPage() {
 
                   {loading ? (
                     <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando escalafón...</div>
-                  ) : !temporadaActiva.sorteo_realizado ? (
-                    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-                      Todavía no se ha hecho el sorteo — el orden de anotación no es un ranking real. Usa el botón de arriba para sortear.
-                    </div>
                   ) : Object.keys(ladderPreview).length === 0 ? (
                     <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-                      Todavía no hay posiciones asignadas. Usa el botón de arriba para sortear.
+                      {temporadaActiva.sorteo_realizado ? 'Todavía no hay posiciones asignadas.' : 'Todavía no hay jugadores anotados a esta temporada.'}
                     </div>
                   ) : (
+                    <>
+                      {!temporadaActiva.sorteo_realizado && (
+                        <p style={{ fontSize: '13px', color: '#e67e22', fontWeight: 'bold', margin: '0 0 14px 0' }}>
+                          🎲 El sorteo todavía no se ha hecho — el orden de abajo es solo el de inscripción, no es el ranking final.
+                        </p>
+                      )}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                       {Object.entries(ladderPreview).map(([key, lista]) => {
                         const [catVal, genVal] = key.split('__')
@@ -2307,7 +2309,7 @@ export default function AdminPage() {
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                               <thead>
                                 <tr style={{ color: '#6b6b6b', textAlign: 'left' }}>
-                                  <th style={{ padding: '2px 4px' }}>#</th>
+                                  <th style={{ padding: '2px 4px' }}>{temporadaActiva.sorteo_realizado ? '#' : 'Orden'}</th>
                                   <th style={{ padding: '2px 4px' }}>Jugador</th>
                                   <th style={{ padding: '2px 4px' }}>Inicial</th>
                                   <th style={{ padding: '2px 4px', textAlign: 'center' }}>PJ</th>
@@ -2353,6 +2355,7 @@ export default function AdminPage() {
                         )
                       })}
                     </div>
+                    </>
                   )}
 
                   {temporadaActiva.sorteo_realizado && Object.keys(ladderPreview).length > 0 && (
