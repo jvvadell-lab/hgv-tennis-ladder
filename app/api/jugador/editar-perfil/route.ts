@@ -9,7 +9,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Debes iniciar sesión como jugador' }, { status: 403 })
     }
 
-    const { nombre, email, telefono, numeroAccion, pin } = await request.json()
+    const { nombre, email, telefono, numeroAccion, pin, fotoCarnetUrl } = await request.json()
     if (!nombre?.trim() || !email?.trim()) {
       return NextResponse.json({ error: 'Nombre y email son obligatorios' }, { status: 400 })
     }
@@ -39,6 +39,8 @@ export async function POST(request: Request) {
       numero_accion: numeroAccion || null,
     }
     if (pin) updateData.pin = pin
+    // La foto ya se sube al bucket desde el cliente antes de llamar aquí — solo guardamos la URL resultante.
+    if (fotoCarnetUrl) updateData.foto_carnet_url = fotoCarnetUrl
 
     const { error } = await db.from('jugadores').update(updateData).eq('id', session.id)
     if (error) throw error

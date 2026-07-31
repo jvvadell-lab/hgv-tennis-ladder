@@ -63,6 +63,16 @@ export default function PerfilPage() {
   const [panelAbierto, setPanelAbierto] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState('')
 
+  const [fotoCarnetActual, setFotoCarnetActual] = useState<string | null>(null)
+  const [fotoCarnetArchivo, setFotoCarnetArchivo] = useState<File | null>(null)
+  const [previewCarnet, setPreviewCarnet] = useState<string | null>(null)
+
+  const handleFotoCarnet = (file: File | null) => {
+    setFotoCarnetArchivo(file)
+    if (previewCarnet) URL.revokeObjectURL(previewCarnet)
+    setPreviewCarnet(file ? URL.createObjectURL(file) : null)
+  }
+
   useEffect(() => {
     fetch('/api/me')
       .then((r) => r.json())
@@ -136,7 +146,7 @@ export default function PerfilPage() {
     if (!session || session.role !== 'jugador') return
     supabase
       .from('jugadores')
-      .select('nombre, email, telefono, numero_accion, categoria, genero')
+      .select('nombre, email, telefono, numero_accion, categoria, genero, foto_carnet_url')
       .eq('id', session.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -150,6 +160,7 @@ export default function PerfilPage() {
           })
           setCategoria(data.categoria || '')
           setGenero(data.genero || '')
+          setFotoCarnetActual(data.foto_carnet_url || null)
         }
         setLoading(false)
       })
@@ -160,16 +171,37 @@ export default function PerfilPage() {
     setGuardando(true)
     setMensaje('')
     try {
+      // Si el jugador eligió una foto nueva de carné, la subimos primero al mismo
+      // bucket que usa el registro ("fotos-partidos/carnets/") y mandamos la URL.
+      let fotoCarnetUrl: string | null = null
+      if (fotoCarnetArchivo) {
+        const extension = fotoCarnetArchivo.name.split('.').pop() || 'jpg'
+        const nombreArchivo = `carnets/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+        const { error: errorSubida } = await supabase.storage
+          .from('fotos-partidos')
+          .upload(nombreArchivo, fotoCarnetArchivo)
+        if (errorSubida) throw new Error('No se pudo subir la foto del carné: ' + errorSubida.message)
+
+        const { data: publicUrlData } = supabase.storage
+          .from('fotos-partidos')
+          .getPublicUrl(nombreArchivo)
+        fotoCarnetUrl = publicUrlData.publicUrl
+      }
+
       const res = await fetch('/api/jugador/editar-perfil', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, fotoCarnetUrl }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al guardar')
 
       setMensaje('✅ Datos actualizados correctamente.')
       setForm({ ...form, pin: '' })
+      if (fotoCarnetUrl) {
+        setFotoCarnetActual(fotoCarnetUrl)
+        handleFotoCarnet(null)
+      }
     } catch (err: any) {
       setMensaje('❌ ' + err.message)
     } finally {
@@ -266,6 +298,38 @@ export default function PerfilPage() {
               onChange={(e) => setForm({ ...form, numeroAccion: e.target.value })}
               style={inputStyle}
             />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Foto de tu carné de socio</label>
+            {fotoCarnetActual && !previewCarnet && (
+              <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <img
+                  src={fotoCarnetActual}
+                  alt="Carné actual"
+                  style={{ width: '70px', height: '48px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.15)' }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--color-line)' }}>Ya tienes una foto guardada — sube otra para reemplazarla.</span>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFotoCarnet(e.target.files?.[0] || null)}
+              style={{ ...inputStyle, padding: '8px', background: 'white' }}
+            />
+            {!fotoCarnetActual && (
+              <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
+                Súbela y te ahorras mostrar el carné físico cuando vayas a jugar.
+              </p>
+            )}
+            {previewCarnet && (
+              <img
+                src={previewCarnet}
+                alt="Vista previa del nuevo carné"
+                style={{ marginTop: '10px', maxWidth: '160px', maxHeight: '110px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.15)' }}
+              />
+            )}
           </div>
 
           <div style={{ marginBottom: '20px' }}>
