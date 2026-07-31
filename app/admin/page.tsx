@@ -29,6 +29,7 @@ export default function AdminPage() {
   const [trayectoriaModal, setTrayectoriaModal] = useState<any>(null)
   const [cargandoTrayectoriaModal, setCargandoTrayectoriaModal] = useState(false)
   const [panelModalAbierto, setPanelModalAbierto] = useState<string | null>(null)
+  const [carnetAmpliado, setCarnetAmpliado] = useState<string | null>(null)
 
   const abrirTrayectoria = async (jugadorId: string) => {
     setJugadorModal({ id: jugadorId })
@@ -972,7 +973,7 @@ export default function AdminPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, created_at')
+      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, created_at, foto_carnet_url')
       .order('created_at', { ascending: false })
     if (!error) setPlayers(data || [])
     setLoading(false)
@@ -1343,6 +1344,7 @@ export default function AdminPage() {
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>👥 Género</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>🏆 Categoría</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>🪪 Membresía</th>
+                        <th style={{ padding: '14px 16px', textAlign: 'center' }}>🖼️ Carné</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>📅 Registro</th>
                         <th style={{ padding: '14px 16px', textAlign: 'center' }}>⚙️ Acciones</th>
                       </tr>
@@ -1350,7 +1352,7 @@ export default function AdminPage() {
                     <tbody>
                       {filteredPlayers.length === 0 ? (
                         <tr>
-                          <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
+                          <td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
                             😔 No hay jugadores registrados aún
                           </td>
                         </tr>
@@ -1434,6 +1436,18 @@ export default function AdminPage() {
                                 )}
                               </div>
                             </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              {player.foto_carnet_url ? (
+                                <img
+                                  src={player.foto_carnet_url}
+                                  alt="Carné de socio"
+                                  onClick={() => setCarnetAmpliado(player.foto_carnet_url)}
+                                  style={{ width: '44px', height: '32px', objectFit: 'cover', borderRadius: '4px', cursor: 'zoom-in', border: '1px solid #ddd' }}
+                                />
+                              ) : (
+                                <span style={{ color: '#bbb', fontSize: '12px' }}>—</span>
+                              )}
+                            </td>
                             <td style={{ padding: '12px 16px', color: '#6b6b6b', fontSize: '13px' }}>
                               {player.created_at ? new Date(player.created_at).toLocaleDateString('es-ES') : '—'}
                             </td>
@@ -1460,7 +1474,7 @@ export default function AdminPage() {
                           </tr>
                           {editandoJugadorId === player.id && (
                             <tr>
-                              <td colSpan={9} style={{ padding: '16px', background: '#f8f9fa' }}>
+                              <td colSpan={10} style={{ padding: '16px', background: '#f8f9fa' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '10px' }}>
                                   <div>
                                     <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Nombre</label>
@@ -2934,6 +2948,24 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {carnetAmpliado && (
+        <div
+          onClick={() => setCarnetAmpliado(null)}
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(15,27,38,0.9)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px', zIndex: 1100, cursor: 'zoom-out',
+          }}
+        >
+          <img
+            src={carnetAmpliado}
+            alt="Carné de socio ampliado"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '6px', cursor: 'default' }}
+          />
         </div>
       )}
     </div>
