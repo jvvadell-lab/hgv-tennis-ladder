@@ -59,9 +59,17 @@ export default function RegisterPage() {
     pin: '',
     numeroAccion: ''
   })
+  const [fotoCarnet, setFotoCarnet] = useState<File | null>(null)
+  const [previewCarnet, setPreviewCarnet] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  const handleFotoCarnet = (file: File | null) => {
+    setFotoCarnet(file)
+    if (previewCarnet) URL.revokeObjectURL(previewCarnet)
+    setPreviewCarnet(file ? URL.createObjectURL(file) : null)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,6 +78,23 @@ export default function RegisterPage() {
     setError('')
 
     try {
+      // Si el jugador adjuntó la foto de su carné, la subimos primero al bucket
+      // "fotos-partidos" (carpeta carnets/) y guardamos la URL pública resultante.
+      let fotoCarnetUrl: string | null = null
+      if (fotoCarnet) {
+        const extension = fotoCarnet.name.split('.').pop() || 'jpg'
+        const nombreArchivo = `carnets/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+        const { error: errorSubida } = await supabase.storage
+          .from('fotos-partidos')
+          .upload(nombreArchivo, fotoCarnet)
+        if (errorSubida) throw new Error('No se pudo subir la foto del carné: ' + errorSubida.message)
+
+        const { data: publicUrlData } = supabase.storage
+          .from('fotos-partidos')
+          .getPublicUrl(nombreArchivo)
+        fotoCarnetUrl = publicUrlData.publicUrl
+      }
+
       const { error } = await supabase
         .from('jugadores')
         .insert([{
@@ -80,6 +105,7 @@ export default function RegisterPage() {
           genero: formData.genero,
           pin: formData.pin,
           numero_accion: formData.numeroAccion,
+          foto_carnet_url: fotoCarnetUrl,
           activo: true
         }])
 
@@ -87,6 +113,7 @@ export default function RegisterPage() {
 
       setMessage('✅ ¡Registro exitoso! Ya puedes iniciar sesión con tu email y PIN')
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
+      handleFotoCarnet(null)
     } catch (err: any) {
       if (err.message?.includes('jugadores_email_key')) {
         setError('❌ Ya existe un jugador registrado con ese correo. Si es tuyo, usa "¿Olvidaste tu PIN?" en la página de inicio de sesión.')
@@ -208,6 +235,26 @@ export default function RegisterPage() {
             <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
               La escalera es exclusiva para socios del club — se validará tu número de acción.
             </p>
+          </div>
+
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>Foto de tu carné de socio (opcional)</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFotoCarnet(e.target.files?.[0] || null)}
+              style={{ ...inputStyle, padding: '8px', background: 'white' }}
+            />
+            <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
+              Súbela ahora y te ahorras mostrar el carné físico cuando vayas a jugar — el club ya la tiene registrada.
+            </p>
+            {previewCarnet && (
+              <img
+                src={previewCarnet}
+                alt="Vista previa del carné"
+                style={{ marginTop: '10px', maxWidth: '160px', maxHeight: '110px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.15)' }}
+              />
+            )}
           </div>
 
           <div style={{ marginBottom: '18px' }}>

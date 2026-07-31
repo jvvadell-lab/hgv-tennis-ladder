@@ -100,6 +100,11 @@ export default function AdminPage() {
   const [aprobando, setAprobando] = useState<string | null>(null)
   const [resultadosMsg, setResultadosMsg] = useState('')
 
+  const [fotosGaleria, setFotosGaleria] = useState<any[]>([])
+  const [loadingFotos, setLoadingFotos] = useState(false)
+  const [eliminandoFoto, setEliminandoFoto] = useState<string | null>(null)
+  const [fotosMsg, setFotosMsg] = useState('')
+
   useEffect(() => {
     fetch('/api/me')
       .then((r) => r.json())
@@ -157,6 +162,44 @@ export default function AdminPage() {
       setResultadosMsg('❌ Error al aprobar: ' + err.message)
     } finally {
       setAprobando(null)
+    }
+  }
+
+  useEffect(() => {
+    if (activeSection === 'galeria') {
+      fetchFotosGaleria()
+    }
+  }, [activeSection])
+
+  const fetchFotosGaleria = async () => {
+    setLoadingFotos(true)
+    const { data } = await supabase
+      .from('resultados')
+      .select('id, foto_url, created_at, retos:reto_id(cancha, nombre_cancha_foranea, fecha_propuesta, retador:retador_id(nombre), retado:retado_id(nombre))')
+      .not('foto_url', 'is', null)
+      .order('created_at', { ascending: false })
+    setFotosGaleria(data || [])
+    setLoadingFotos(false)
+  }
+
+  const eliminarFoto = async (resultadoId: string) => {
+    if (!confirm('¿Eliminar esta foto de la galería? El resultado del partido no se ve afectado, solo se quita la foto.')) return
+    setEliminandoFoto(resultadoId)
+    setFotosMsg('')
+    try {
+      const res = await fetch('/api/admin/eliminar-foto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultadoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al eliminar')
+      setFotosMsg('✅ Foto eliminada de la galería.')
+      fetchFotosGaleria()
+    } catch (err: any) {
+      setFotosMsg('❌ ' + err.message)
+    } finally {
+      setEliminandoFoto(null)
     }
   }
 
@@ -1027,6 +1070,7 @@ export default function AdminPage() {
     { id: 'results', icon: '🏆', label: 'Resultados' },
     { id: 'ladder', icon: '🎾', label: 'Escalafón' },
     { id: 'reservas', icon: '📅', label: 'Reservas' },
+    { id: 'galeria', icon: '🖼️', label: 'Galería' },
     { id: 'payments', icon: '💳', label: 'Pagos' },
   ]
 
@@ -1868,6 +1912,75 @@ export default function AdminPage() {
                     </div>
                   )}
                 </>
+              )}
+            </div>
+          )}
+
+          {/* GALERÍA */}
+          {activeSection === 'galeria' && (
+            <div>
+              <div style={{
+                background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                display: 'flex', gap: '16px', alignItems: 'center'
+              }}>
+                <button
+                  onClick={fetchFotosGaleria}
+                  style={{ background: 'var(--color-court)', color: 'var(--color-chalk)', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}
+                >
+                  🔄 Actualizar
+                </button>
+                <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
+                  Total: <strong>{fotosGaleria.length}</strong> fotos
+                </span>
+              </div>
+
+              {fotosMsg && (
+                <div style={{
+                  marginBottom: '20px', padding: '12px', borderRadius: '8px',
+                  background: fotosMsg.includes('✅') ? '#d4edda' : '#f8d7da',
+                  color: fotosMsg.includes('✅') ? '#155724' : '#721c24',
+                }}>
+                  {fotosMsg}
+                </div>
+              )}
+
+              {loadingFotos ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando fotos...</div>
+              ) : fotosGaleria.length === 0 ? (
+                <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                  Todavía no hay fotos cargadas en la galería.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
+                  {fotosGaleria.map((f) => (
+                    <div key={f.id} style={{ background: 'var(--color-chalk)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                      <img
+                        src={f.foto_url}
+                        alt="Foto del partido"
+                        style={{ width: '100%', height: '180px', objectFit: 'cover', display: 'block' }}
+                      />
+                      <div style={{ padding: '12px 14px' }}>
+                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>
+                          {f.retos?.retador?.nombre || '—'} vs {f.retos?.retado?.nombre || '—'}
+                        </p>
+                        <p style={{ margin: '4px 0 10px 0', fontSize: '12px', color: '#6b6b6b' }}>
+                          {new Date(f.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                        <button
+                          onClick={() => eliminarFoto(f.id)}
+                          disabled={eliminandoFoto === f.id}
+                          style={{
+                            width: '100%', background: eliminandoFoto === f.id ? '#ccc' : '#fee2e2', color: '#dc2626', border: 'none',
+                            padding: '8px 10px', borderRadius: '6px', cursor: eliminandoFoto === f.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                          }}
+                        >
+                          {eliminandoFoto === f.id ? '⏳ Eliminando...' : '🗑️ Eliminar foto'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
