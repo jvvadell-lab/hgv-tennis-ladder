@@ -2237,17 +2237,18 @@ export default function AdminPage() {
                       </div>
                     )}
 
-                    {temporadaActiva.sorteo_realizado && (
-                      <div style={{ marginTop: '18px', paddingTop: '18px', borderTop: '1px solid #eee' }}>
-                        <h4 style={{ color: 'var(--color-ink)', margin: '0 0 8px 0' }}>➕ Agregar jugador manualmente</h4>
-                        <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 10px 0' }}>
-                          Para socios que se anotan tarde (después del plazo). Entran al final de su categoría/género, sin pasar por el sorteo.
-                        </p>
-                        {jugadoresDisponibles.length === 0 ? (
-                          <p style={{ fontSize: '13px', color: '#6b6b6b' }}>Todos los socios activos ya están en el escalafón.</p>
-                        ) : (
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <select
+                    <div style={{ marginTop: '18px', paddingTop: '18px', borderTop: '1px solid #eee' }}>
+                      <h4 style={{ color: 'var(--color-ink)', margin: '0 0 8px 0' }}>➕ Agregar jugador manualmente</h4>
+                      <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 10px 0' }}>
+                        {temporadaActiva.sorteo_realizado
+                          ? 'Para socios que se anotan tarde (después del plazo). Entran al final de su categoría/género, sin pasar por el sorteo.'
+                          : 'Requiere que el jugador ya esté verificado y con el pago validado en esta temporada. Entra en el orden de inscripción — su posición real la definirá el sorteo cuando lo hagas.'}
+                      </p>
+                      {jugadoresDisponibles.length === 0 ? (
+                        <p style={{ fontSize: '13px', color: '#6b6b6b' }}>Todos los socios activos ya están en el escalafón.</p>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <select
                               value={jugadorManualId}
                               onChange={(e) => setJugadorManualId(e.target.value)}
                               style={{ padding: '10px 12px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px', flex: '1 1 240px' }}
@@ -2282,7 +2283,6 @@ export default function AdminPage() {
                           </div>
                         )}
                       </div>
-                    )}
                   </div>
 
                   {loading ? (
