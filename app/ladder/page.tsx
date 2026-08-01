@@ -1640,7 +1640,7 @@ export default function LadderPage() {
           <img
             src="https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/Patrocinio%201.png"
             alt="Patrocinantes HGV Tennis Club"
-            style={{ maxWidth: '95%', width: '442px', height: 'auto', opacity: 0.92 }}
+            style={{ maxWidth: '95%', width: '575px', height: 'auto', opacity: 0.92 }}
           />
         </div>
 
