@@ -2605,85 +2605,85 @@ export default function AdminPage() {
           {/* PAGOS */}
           {activeSection === 'payments' && (
             <div>
-              <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px 24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderLeft: '4px solid #1c7ec4' }}>
-                {!editandoTasaBcv ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                    <div>
-                      <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>💶 Tasa BCV del día</h3>
-                      {tasaBcvActual ? (
-                        <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#333' }}>
-                          Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
-                            {tasaBcvActual.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </strong> según BCV
-                          <span style={{ color: '#6b6b6b', fontSize: '12px' }}> — {new Date(tasaBcvActual.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                        </p>
-                      ) : (
-                        <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#6b6b6b' }}>Todavía no se ha registrado la tasa de hoy.</p>
-                      )}
-                      <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#999' }}>
-                        Fuente: <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>bcv.org.ve</a>
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => { setEditandoTasaBcv(true); setTasaBcvMsg('') }}
-                      style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
-                    >
-                      {tasaBcvActual ? '✏️ Actualizar tasa' : '➕ Registrar tasa'}
-                    </button>
+              <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>💳 Registrar pago</h3>
+                <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                  <div style={{ flex: '1 1 260px', background: '#f0f7fc', border: '1px solid rgba(28,126,196,0.2)', borderRadius: '8px', padding: '12px 16px', fontSize: '13px' }}>
+                    <strong style={{ color: 'var(--color-ink)' }}>📱 Datos para Pago Móvil:</strong>{' '}
+                    <span style={{ color: '#333' }}>YELITZA CONTRERAS · V-19.523.642 · 0412-7628281 · Banco BNC</span>
                   </div>
-                ) : (
-                  <div>
-                    <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>💶 Tasa BCV del día</h3>
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                      <div>
-                        <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Tasa € (Bs.)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={tasaBcvValorInput}
-                          onChange={(e) => setTasaBcvValorInput(e.target.value)}
-                          placeholder="Ej: 145.32"
-                          style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', width: '140px' }}
-                        />
+
+                  <div style={{ flex: '1 1 260px', background: 'white', border: '1px solid rgba(28,126,196,0.3)', borderLeft: '4px solid #1c7ec4', borderRadius: '8px', padding: '12px 16px' }}>
+                    {!editandoTasaBcv ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          {tasaBcvActual ? (
+                            <p style={{ margin: 0, fontSize: '13px', color: '#333' }}>
+                              💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                                {tasaBcvActual.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </strong> según BCV
+                              <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {new Date(tasaBcvActual.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                            </p>
+                          ) : (
+                            <p style={{ margin: 0, fontSize: '13px', color: '#6b6b6b' }}>💶 Todavía no se ha registrado la tasa BCV de hoy.</p>
+                          )}
+                          <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#999' }}>
+                            Fuente: <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>bcv.org.ve</a>
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => { setEditandoTasaBcv(true); setTasaBcvMsg('') }}
+                          style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+                        >
+                          {tasaBcvActual ? '✏️ Actualizar' : '➕ Registrar'}
+                        </button>
                       </div>
+                    ) : (
                       <div>
-                        <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Fecha</label>
-                        <input
-                          type="date"
-                          value={tasaBcvFechaInput}
-                          onChange={(e) => setTasaBcvFechaInput(e.target.value)}
-                          style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd' }}
-                        />
-                      </div>
-                      <button
-                        onClick={guardarTasaBcv}
-                        disabled={guardandoTasaBcv}
-                        style={{ background: guardandoTasaBcv ? '#ccc' : '#28a745', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '6px', cursor: guardandoTasaBcv ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold' }}
-                      >
-                        {guardandoTasaBcv ? 'Guardando...' : '✅ Guardar'}
-                      </button>
-                      <button
-                        onClick={() => setEditandoTasaBcv(false)}
-                        style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '9px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                    {tasaBcvMsg && (
-                      <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '6px', background: '#f8d7da', color: '#721c24', fontSize: '13px' }}>
-                        {tasaBcvMsg}
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                          <div>
+                            <label style={{ fontSize: '11px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Tasa € (Bs.)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={tasaBcvValorInput}
+                              onChange={(e) => setTasaBcvValorInput(e.target.value)}
+                              placeholder="Ej: 145.32"
+                              style={{ padding: '7px 9px', borderRadius: '6px', border: '1px solid #ddd', width: '110px', fontSize: '13px' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '11px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Fecha</label>
+                            <input
+                              type="date"
+                              value={tasaBcvFechaInput}
+                              onChange={(e) => setTasaBcvFechaInput(e.target.value)}
+                              style={{ padding: '7px 9px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                            />
+                          </div>
+                          <button
+                            onClick={guardarTasaBcv}
+                            disabled={guardandoTasaBcv}
+                            style={{ background: guardandoTasaBcv ? '#ccc' : '#28a745', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: guardandoTasaBcv ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                          >
+                            {guardandoTasaBcv ? 'Guardando...' : '✅ Guardar'}
+                          </button>
+                          <button
+                            onClick={() => setEditandoTasaBcv(false)}
+                            style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                        {tasaBcvMsg && (
+                          <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '6px', background: '#f8d7da', color: '#721c24', fontSize: '12px' }}>
+                            {tasaBcvMsg}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-
-              <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-                <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>💳 Registrar pago</h3>
-                <div style={{ background: '#f0f7fc', border: '1px solid rgba(28,126,196,0.2)', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px' }}>
-                  <strong style={{ color: 'var(--color-ink)' }}>📱 Datos para Pago Móvil:</strong>{' '}
-                  <span style={{ color: '#333' }}>YELITZA CONTRERAS · V-19.523.642 · 0412-7628281 · Banco BNC</span>
                 </div>
                 {!temporadaActivaPagos ? (
                   <p style={{ color: '#6b6b6b' }}>No hay una temporada activa en este momento.</p>
