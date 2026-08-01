@@ -67,6 +67,7 @@ export default function PerfilPage() {
   const [loadingStandby, setLoadingStandby] = useState(true)
   const [activandoStandby, setActivandoStandby] = useState<number | null>(null)
   const [standbyMsg, setStandbyMsg] = useState('')
+  const [temporadaSorteada, setTemporadaSorteada] = useState(false)
 
   const [fotoCarnetActual, setFotoCarnetActual] = useState<string | null>(null)
   const [fotoCarnetArchivo, setFotoCarnetArchivo] = useState<File | null>(null)
@@ -155,8 +156,16 @@ export default function PerfilPage() {
       .eq('jugador_id', session.id)
       .eq('temporada_id', temporadaPagos.id)
       .maybeSingle()
-      .then(({ data }) => setStandbyActual(data || null))
-      .finally(() => setLoadingStandby(false))
+      .then(({ data }) => {
+        setStandbyActual(data || null)
+        setLoadingStandby(false)
+      })
+    supabase
+      .from('temporadas')
+      .select('sorteo_realizado')
+      .eq('id', temporadaPagos.id)
+      .maybeSingle()
+      .then(({ data }) => setTemporadaSorteada(!!data?.sorteo_realizado))
   }, [session, temporadaPagos])
 
   const activarStandby = async (dias: number) => {
@@ -685,6 +694,10 @@ export default function PerfilPage() {
                   Es una única vez por temporada — ya no puedes activarlo de nuevo hasta la próxima.
                 </p>
               </div>
+            ) : !temporadaSorteada ? (
+              <p style={{ fontSize: '13px', color: 'var(--color-line)' }}>
+                🔒 El standby se habilita cuando se haga el sorteo de esta temporada — antes de eso nadie puede retarte de todas formas.
+              </p>
             ) : (
               <>
                 <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 10px 0' }}>

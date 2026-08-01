@@ -19,11 +19,14 @@ export async function POST(request: Request) {
 
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')
-      .select('id, estado')
+      .select('id, estado, sorteo_realizado')
       .eq('estado', 'activa')
       .maybeSingle()
     if (errTemp) throw errTemp
     if (!temporada) return NextResponse.json({ error: 'No hay una temporada activa' }, { status: 400 })
+    if (!temporada.sorteo_realizado) {
+      return NextResponse.json({ error: 'El standby se habilita después del sorteo de la temporada.' }, { status: 400 })
+    }
 
     // La tabla ya tiene UNIQUE(jugador_id, temporada_id), pero revisamos antes
     // para devolver un mensaje claro en vez del error crudo de la base de datos.
