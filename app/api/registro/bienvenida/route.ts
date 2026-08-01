@@ -73,7 +73,7 @@ export async function POST(request: Request) {
         <ul style="margin: 0 0 18px 0; padding-left: 18px;">
           <li>Cada partido de escalera bloquea la cancha por 1 hora y 30 minutos.</li>
           <li>El sistema no te deja proponer un horario que choque con otro partido de escalera o con las clases de la Academia de Tenis.</li>
-          <li>Horarios de cancha, de lunes a viernes (fines de semana no hay restricción): HGV 1, de 6:00am a 2:00pm y de 8:00pm a 12:00am. HGV 2, de 7:00pm a 12:00am. Cancha foránea, sin restricción de horario del club.</li>
+          <li>Horarios de cancha (fines de semana, sin restricción en ambas): HGV 1, lunes a jueves de 8:00pm a 12:00am, viernes desde las 2:00pm. HGV 2, lunes a viernes de 6:00am a 2:00pm y de 7:00pm a 12:00am. Cancha foránea, sin restricción de horario del club.</li>
         </ul>
 
         <p style="margin: 0 0 4px 0;"><strong>● Aceptar o rechazar</strong></p>

@@ -482,29 +482,35 @@ export default function LadderPage() {
 
     const [y, m, d] = fechaStr.split('-').map(Number)
     const fecha = new Date(y, m - 1, d)
-    const dia = fecha.getDay() // 0 = domingo, 6 = sábado
+    const dia = fecha.getDay() // 0 = domingo, 1 = lunes, ... 5 = viernes, 6 = sábado
     const esFinde = dia === 0 || dia === 6
     if (esFinde) return { valido: true } // sábado y domingo, todo el día, ambas canchas
 
+    const esViernes = dia === 5
     const [hh, mm] = horaStr.split(':').map(Number)
     const minutos = hh * 60 + mm
 
     if (cancha === 'HGV1') {
-      const enManana = minutos >= 360 && minutos < 840   // 6:00am – 2:00pm
-      const enNoche = minutos >= 1200 && minutos < 1440  // 8:00pm – 12:00am
-      if (enManana || enNoche) return { valido: true }
+      // Viernes: libre desde las 2:00pm hasta medianoche. Lunes-jueves: solo 8:00pm-12:00am.
+      const disponible = esViernes
+        ? minutos >= 840 && minutos < 1440   // 2:00pm – 12:00am
+        : minutos >= 1200 && minutos < 1440  // 8:00pm – 12:00am
+      if (disponible) return { valido: true }
       return {
         valido: false,
-        mensaje: 'HGV 1 solo está disponible de lunes a viernes de 6:00am a 2:00pm y de 8:00pm a 12:00am (fines de semana, todo el día).',
+        mensaje: esViernes
+          ? 'Los viernes, HGV 1 está disponible a partir de las 2:00pm.'
+          : 'HGV 1 solo está disponible de lunes a jueves de 8:00pm a 12:00am (viernes desde las 2:00pm, fines de semana todo el día).',
       }
     }
 
     if (cancha === 'HGV2') {
+      const enManana = minutos >= 360 && minutos < 840   // 6:00am – 2:00pm
       const enNoche = minutos >= 1140 && minutos < 1440  // 7:00pm – 12:00am
-      if (enNoche) return { valido: true }
+      if (enManana || enNoche) return { valido: true }
       return {
         valido: false,
-        mensaje: 'HGV 2 solo está disponible de lunes a viernes de 7:00pm a 12:00am (fines de semana, todo el día).',
+        mensaje: 'HGV 2 solo está disponible de lunes a viernes de 6:00am a 2:00pm y de 7:00pm a 12:00am (fines de semana, todo el día).',
       }
     }
 
@@ -1293,8 +1299,8 @@ export default function LadderPage() {
                       <option value="FORANEA">Foránea</option>
                     </select>
                     <p style={{ fontSize: '11px', color: '#6b6b6b', margin: '4px 0 0 0' }}>
-                      {retoCancha === 'HGV1' && 'Lun-Vie: 6:00am–2:00pm y 8:00pm–12:00am · Sáb-Dom: todo el día'}
-                      {retoCancha === 'HGV2' && 'Lun-Vie: 7:00pm–12:00am · Sáb-Dom: todo el día'}
+                      {retoCancha === 'HGV1' && 'Lun-Jue: 8:00pm–12:00am · Vie: desde 2:00pm · Sáb-Dom: todo el día'}
+                      {retoCancha === 'HGV2' && 'Lun-Vie: 6:00am–2:00pm y 7:00pm–12:00am · Sáb-Dom: todo el día'}
                       {retoCancha === 'FORANEA' && 'Sin restricción de horario del club (cancha externa)'}
                     </p>
                   </div>
