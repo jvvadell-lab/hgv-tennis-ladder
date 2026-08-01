@@ -109,7 +109,7 @@ export default function RegisterPage() {
         fotoCarnetUrl = publicUrlData.publicUrl
       }
 
-      const { error } = await supabase
+      const { data: nuevoJugador, error } = await supabase
         .from('jugadores')
         .insert([{
           nombre: toTitleCase(formData.name.trim()),
@@ -122,8 +122,19 @@ export default function RegisterPage() {
           foto_carnet_url: fotoCarnetUrl,
           activo: true
         }])
+        .select('id')
+        .single()
 
       if (error) throw error
+
+      // Correo de bienvenida en segundo plano — si falla, no afecta el registro ya hecho.
+      if (nuevoJugador?.id) {
+        fetch('/api/registro/bienvenida', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jugadorId: nuevoJugador.id }),
+        }).catch(() => {})
+      }
 
       // Dejarlo logueado de una vez con el email/PIN que acaba de crear, y mandarlo
       // directo a la escalera — ahí es donde tiene que anotarse a la temporada.

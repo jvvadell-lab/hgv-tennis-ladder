@@ -577,13 +577,12 @@ export default function AdminPage() {
   }
 
   // Rechazar un pago reportado por el jugador (el dinero nunca llegó a la cuenta).
-  // Reutiliza el mismo endpoint de eliminar — al borrarlo, el jugador puede
-  // reportarlo de nuevo si fue un error de su parte.
+  // Lo elimina y le manda un correo avisándole y con el contacto de Yelitza.
   const rechazarPago = async (pagoId: string) => {
-    if (!confirm('¿Rechazar este pago? Se eliminará porque el dinero no llegó a la cuenta del club. El jugador podrá reportarlo de nuevo si fue un error.')) return
+    if (!confirm('¿Rechazar este pago? Se eliminará y se le enviará un correo al jugador avisándole que verifique los datos y lo cargue de nuevo.')) return
     setRechazandoPago(pagoId)
     try {
-      const res = await fetch('/api/admin/eliminar-pago', {
+      const res = await fetch('/api/admin/rechazar-pago', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pagoId }),
