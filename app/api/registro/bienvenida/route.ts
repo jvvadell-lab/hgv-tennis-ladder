@@ -72,7 +72,18 @@ export async function POST(request: Request) {
           <li>Si pierdes, te quedas donde estabas.</li>
         </ul>
 
-        <p style="color: #888; font-size: 13px; margin-top: 24px;">— HGV Tennis Club 🎾</p>
+        <p style="margin: 24px 0 0 0;">Si tienes alguna duda, contacta a <strong>Johan Contreras</strong> al WhatsApp <strong>0424-4032313</strong> o escríbenos a <a href="mailto:hgvtennisclub@gmail.com" style="color: #1c7ec4;">hgvtennisclub@gmail.com</a>.</p>
+
+        <p style="margin-top: 20px;">Con cariño y espíritu deportivo,<br /><strong>Comisión de Tenis HGV</strong></p>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 26px 0 16px 0;" />
+
+        <p style="text-align: center; font-size: 11px; color: #999; letter-spacing: 0.05em; text-transform: uppercase; margin: 0 0 10px 0;">Con el apoyo de nuestros patrocinantes</p>
+        <p style="text-align: center; margin: 0 0 20px 0;">
+          <img src="https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/Patrocinio%201.png" alt="Patrocinantes HGV Tennis Club" style="max-width: 100%; height: auto; display: inline-block;" />
+        </p>
+
+        <p style="color: #888; font-size: 13px; margin-top: 8px;">— HGV Tennis Club 🎾</p>
       </div>
     `
 
