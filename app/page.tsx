@@ -421,12 +421,27 @@ export default function Home() {
         )}
       </div>
 
+      {/* Patrocinantes */}
+      <div style={{ marginTop: '56px', textAlign: 'center' }}>
+        <p style={{
+          fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.5)', fontSize: '10px',
+          letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 12px 0',
+        }}>
+          Con el apoyo de nuestros patrocinantes
+        </p>
+        <img
+          src="https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/Patrocinio%201.png"
+          alt="Patrocinantes HGV Tennis Club"
+          style={{ maxWidth: '90%', width: '340px', height: 'auto', opacity: 0.92 }}
+        />
+      </div>
+
       {/* Footer */}
       <p style={{
         color: 'rgba(247,243,234,0.35)',
         fontSize: '12px',
         fontFamily: 'var(--font-mono)',
-        marginTop: '56px',
+        marginTop: '20px',
         letterSpacing: '0.04em',
       }}>
         © 2026 HGV Tennis Club
