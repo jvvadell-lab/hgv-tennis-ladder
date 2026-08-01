@@ -77,6 +77,7 @@ export default function AdminPage() {
   const [pagoFecha, setPagoFecha] = useState(new Date().toISOString().slice(0, 10))
   const [registrandoPago, setRegistrandoPago] = useState(false)
   const [validandoPago, setValidandoPago] = useState<string | null>(null)
+  const [rechazandoPago, setRechazandoPago] = useState<string | null>(null)
   const [pagoMsg, setPagoMsg] = useState('')
   const [sorteando, setSorteando] = useState(false)
 
@@ -553,6 +554,28 @@ export default function AdminPage() {
       fetchPagos()
     } catch (err: any) {
       alert('❌ ' + err.message)
+    }
+  }
+
+  // Rechazar un pago reportado por el jugador (el dinero nunca llegó a la cuenta).
+  // Reutiliza el mismo endpoint de eliminar — al borrarlo, el jugador puede
+  // reportarlo de nuevo si fue un error de su parte.
+  const rechazarPago = async (pagoId: string) => {
+    if (!confirm('¿Rechazar este pago? Se eliminará porque el dinero no llegó a la cuenta del club. El jugador podrá reportarlo de nuevo si fue un error.')) return
+    setRechazandoPago(pagoId)
+    try {
+      const res = await fetch('/api/admin/eliminar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pagoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al rechazar')
+      fetchPagos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setRechazandoPago(null)
     }
   }
 
@@ -2631,13 +2654,23 @@ export default function AdminPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                               <button
                                 onClick={() => validarPago(p.id)}
-                                disabled={validandoPago === p.id}
+                                disabled={validandoPago === p.id || rechazandoPago === p.id}
                                 style={{
                                   background: validandoPago === p.id ? '#ccc' : '#28a745', color: 'white', border: 'none',
-                                  padding: '5px 12px', borderRadius: '6px', cursor: validandoPago === p.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                  padding: '5px 12px', borderRadius: '6px', cursor: validandoPago === p.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold', marginRight: '6px'
                                 }}
                               >
                                 {validandoPago === p.id ? 'Validando...' : '✅ Validar'}
+                              </button>
+                              <button
+                                onClick={() => rechazarPago(p.id)}
+                                disabled={validandoPago === p.id || rechazandoPago === p.id}
+                                style={{
+                                  background: rechazandoPago === p.id ? '#ccc' : '#fee2e2', color: '#dc2626', border: 'none',
+                                  padding: '5px 12px', borderRadius: '6px', cursor: rechazandoPago === p.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                }}
+                              >
+                                {rechazandoPago === p.id ? 'Rechazando...' : '❌ Rechazar'}
                               </button>
                             </td>
                           </tr>
@@ -2690,13 +2723,23 @@ export default function AdminPage() {
                                         <span style={{ color: '#e67e22', fontWeight: 'bold' }}>⏳ Pago reportado, pendiente de validar</span>
                                         <button
                                           onClick={() => validarPago(pagoPendiente.id)}
-                                          disabled={validandoPago === pagoPendiente.id}
+                                          disabled={validandoPago === pagoPendiente.id || rechazandoPago === pagoPendiente.id}
                                           style={{
                                             background: validandoPago === pagoPendiente.id ? '#ccc' : '#28a745', color: 'white', border: 'none',
                                             padding: '4px 10px', borderRadius: '6px', cursor: validandoPago === pagoPendiente.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
                                           }}
                                         >
                                           {validandoPago === pagoPendiente.id ? 'Validando...' : '✅ Validar'}
+                                        </button>
+                                        <button
+                                          onClick={() => rechazarPago(pagoPendiente.id)}
+                                          disabled={validandoPago === pagoPendiente.id || rechazandoPago === pagoPendiente.id}
+                                          style={{
+                                            background: rechazandoPago === pagoPendiente.id ? '#ccc' : '#fee2e2', color: '#dc2626', border: 'none',
+                                            padding: '4px 10px', borderRadius: '6px', cursor: rechazandoPago === pagoPendiente.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                          }}
+                                        >
+                                          {rechazandoPago === pagoPendiente.id ? 'Rechazando...' : '❌ Rechazar'}
                                         </button>
                                       </span>
                                     ) : (
