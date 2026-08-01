@@ -99,6 +99,7 @@ export async function POST(request: Request) {
         <ul style="margin: 0 0 18px 0; padding-left: 18px;">
           <li>Desde "Mi Perfil" puedes activar el modo standby por 3 o 5 días — mientras dure, no te pueden retar y tú tampoco puedes retar a nadie.</li>
           <li>Es una <strong>única vez por temporada</strong>: si eliges 3 días, no puedes pedir después otros 5 (ni viceversa). Elige bien antes de confirmar.</li>
+          <li>Solo se puede activar después de que se haya hecho el sorteo de la temporada.</li>
         </ul>
 
         <p style="margin: 24px 0 0 0;">Si tienes alguna duda, contacta a <strong>Johan Contreras</strong> al WhatsApp <strong>0424-4032313</strong> o escríbenos a <a href="mailto:hgvtennisclub@gmail.com" style="color: #1c7ec4;">hgvtennisclub@gmail.com</a>.</p>
