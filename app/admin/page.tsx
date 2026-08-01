@@ -63,6 +63,8 @@ export default function AdminPage() {
   const [temporadaActiva, setTemporadaActiva] = useState<any>(null)
   const [ladderPreview, setLadderPreview] = useState<Record<string, any[]>>({})
   const [ladderStats, setLadderStats] = useState<Record<string, any>>({})
+  const [standbyMap, setStandbyMap] = useState<Record<string, { dias: number; fecha_inicio: string; fecha_fin: string }>>({})
+  const [activandoStandbyId, setActivandoStandbyId] = useState<string | null>(null)
   const [pagos, setPagos] = useState<any[]>([])
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
@@ -939,6 +941,16 @@ export default function AdminPage() {
 
       setLadderStats(stats)
 
+      const { data: standbyRows } = await supabase
+        .from('standby')
+        .select('jugador_id, dias, fecha_inicio, fecha_fin')
+        .eq('temporada_id', temporada.id)
+      const mapaStandby: Record<string, { dias: number; fecha_inicio: string; fecha_fin: string }> = {}
+      ;(standbyRows || []).forEach((s: any) => {
+        mapaStandby[s.jugador_id] = { dias: s.dias, fecha_inicio: s.fecha_inicio, fecha_fin: s.fecha_fin }
+      })
+      setStandbyMap(mapaStandby)
+
       const { data: todosJugadores } = await supabase
         .from('jugadores')
         .select('id, nombre, categoria, genero')
@@ -971,6 +983,42 @@ export default function AdminPage() {
       setAgregarManualMsg('❌ ' + err.message)
     } finally {
       setAgregandoManual(false)
+    }
+  }
+
+  // "Hoy" comparado como texto YYYY-MM-DD, igual que en /ladder, para evitar líos de huso horario.
+  const enStandby = (jugadorId: string) => {
+    const s = standbyMap[jugadorId]
+    if (!s) return false
+    const hoy = new Date().toISOString().slice(0, 10)
+    return hoy >= s.fecha_inicio && hoy <= s.fecha_fin
+  }
+
+  const activarStandbyAdmin = async (jugadorId: string, nombreJugador: string) => {
+    const respuesta = prompt(`¿Cuántos días de standby para ${nombreJugador}? Escribe 3 o 5.`)
+    if (!respuesta) return
+    const dias = Number(respuesta.trim())
+    if (![3, 5].includes(dias)) {
+      alert('❌ Solo se acepta 3 o 5 días.')
+      return
+    }
+    if (!confirm(`¿Activar standby de ${dias} días para ${nombreJugador}? Es una única vez por temporada — no se puede repetir ni deshacer.`)) return
+
+    setActivandoStandbyId(jugadorId)
+    try {
+      const res = await fetch('/api/admin/activar-standby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId, temporadaId: temporadaActiva.id, dias }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al activar')
+      setSorteoMsg(`✅ Standby de ${dias} días activado para ${data.nombre}, hasta el ${new Date(data.fechaFin + 'T00:00:00').toLocaleDateString('es-ES')}.`)
+      fetchTemporadaYLadder()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setActivandoStandbyId(null)
     }
   }
 
@@ -2422,6 +2470,11 @@ export default function AdminPage() {
                                         style={{ padding: '4px', color: '#333', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '2px' }}
                                       >
                                         {p.jugadores?.nombre || 'Jugador'}
+                                        {enStandby(p.jugador_id) && (
+                                          <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 'bold', color: '#e67e22', background: '#fff3cd', padding: '2px 5px', borderRadius: '8px' }}>
+                                            🧳 hasta {new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                          </span>
+                                        )}
                                       </td>
                                       <td style={{ padding: '4px', color: '#6b6b6b', fontSize: '12px' }}>
                                         #{inicial}
@@ -2432,7 +2485,20 @@ export default function AdminPage() {
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#6b6b6b' }}>{s.noPresentado}</td>
-                                      <td style={{ padding: '4px', textAlign: 'center' }}>
+                                      <td style={{ padding: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                        {!standbyMap[p.jugador_id] && (
+                                          <button
+                                            onClick={() => activarStandbyAdmin(p.jugador_id, p.jugadores?.nombre || 'este jugador')}
+                                            disabled={activandoStandbyId === p.jugador_id}
+                                            title="Activar standby (viaje) — única vez por temporada"
+                                            style={{
+                                              background: 'none', border: 'none', color: activandoStandbyId === p.jugador_id ? '#ccc' : '#e67e22',
+                                              cursor: activandoStandbyId === p.jugador_id ? 'not-allowed' : 'pointer', fontSize: '13px', padding: '2px 4px'
+                                            }}
+                                          >
+                                            {activandoStandbyId === p.jugador_id ? '⏳' : '🧳'}
+                                          </button>
+                                        )}
                                         <button
                                           onClick={() => retirarDeEscalafon(p.id, p.jugadores?.nombre || 'este jugador')}
                                           disabled={retirandoPosicionId === p.id}

@@ -99,6 +99,7 @@ export default function LadderPage() {
   const [misRetos, setMisRetos] = useState<Reto[]>([])
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
   const [jugadoresOcupados, setJugadoresOcupados] = useState<Set<string>>(new Set()) // cualquiera con un reto pendiente/aceptado, sin importar quién lo inició
+  const [standbyMap, setStandbyMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de standby (viaje) en esta temporada
   const [rankingStats, setRankingStats] = useState<Record<string, any>>({}) // jugador_id -> { jugados, ganados, perdidos, noPresentado }
   const [retosConResultadoPendiente, setRetosConResultadoPendiente] = useState<Set<string>>(new Set())
   const [proximosPartidos, setProximosPartidos] = useState<ProximoPartido[]>([])
@@ -187,6 +188,19 @@ export default function LadderPage() {
       ocupados.add(r.retado_id)
     })
     setJugadoresOcupados(ocupados)
+
+    // Jugadores en modo standby (viaje) en esta temporada — quien esté de viaje
+    // no puede retar ni ser retado mientras dure su rango de fechas.
+    const { data: standbyRows } = await supabase
+      .from('standby')
+      .select('jugador_id, fecha_inicio, fecha_fin')
+      .eq('temporada_id', temporadaId)
+
+    const mapaStandby: Record<string, { fecha_inicio: string; fecha_fin: string }> = {}
+    ;(standbyRows || []).forEach((s: any) => {
+      mapaStandby[s.jugador_id] = { fecha_inicio: s.fecha_inicio, fecha_fin: s.fecha_fin }
+    })
+    setStandbyMap(mapaStandby)
 
     // Estadísticas públicas del ranking (partidos jugados/ganados/perdidos/no presentado)
     const { data: retosTemp } = await supabase
@@ -856,6 +870,17 @@ export default function LadderPage() {
     return new Date() < new Date(fecha)
   }
 
+  // "Hoy" comparado como texto YYYY-MM-DD contra fecha_inicio/fecha_fin (también
+  // texto), para no meternos en líos de huso horario con new Date() a medianoche.
+  const enStandby = (jugadorId: string) => {
+    const s = standbyMap[jugadorId]
+    if (!s) return false
+    const hoy = new Date().toISOString().slice(0, 10)
+    return hoy >= s.fecha_inicio && hoy <= s.fecha_fin
+  }
+
+  const yoEstoyEnStandby = session?.role === 'jugador' ? enStandby(session.id) : false
+
   const puedoRetar = (p: Posicion) => {
     return (
       esElegible(p) &&
@@ -863,7 +888,9 @@ export default function LadderPage() {
       !bloqueado &&
       !retandoA &&
       !enEnfriamiento(p.jugador_id) &&
-      !jugadoresOcupados.has(p.jugador_id)
+      !jugadoresOcupados.has(p.jugador_id) &&
+      !enStandby(p.jugador_id) &&
+      !yoEstoyEnStandby
     )
   }
 
@@ -1012,6 +1039,20 @@ export default function LadderPage() {
               </div>
             )}
 
+            {yoEstoyEnStandby && (
+              <div style={{
+                background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '12px',
+                padding: '16px 20px', marginBottom: '24px', textAlign: 'center',
+              }}>
+                <p style={{ margin: 0, color: '#7a4a0e', fontWeight: 'bold', fontSize: '14px' }}>
+                  🧳 Estás en modo standby hasta el {new Date(standbyMap[session!.id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+                </p>
+                <p style={{ margin: '4px 0 0 0', color: '#7a4a0e', fontSize: '12px' }}>
+                  No puedes retar ni ser retado durante este periodo.
+                </p>
+              </div>
+            )}
+
             {/* Aviso para anotarse a la temporada activa */}
             {session?.role === 'jugador' && yaAnotado === false && (() => {
               const hoy = new Date().toISOString().slice(0, 10)
@@ -1119,6 +1160,11 @@ export default function LadderPage() {
                             title="Ver trayectoria"
                           >
                             {p.jugadores?.nombre || 'Jugador'}
+                            {enStandby(p.jugador_id) && (
+                              <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 'bold', color: '#e67e22', background: '#fff3cd', padding: '2px 6px', borderRadius: '10px' }}>
+                                🧳 de viaje hasta {new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                              </span>
+                            )}
                           </td>
                           <td style={{ padding: '10px', textAlign: 'center', color: '#6b6b6b', fontSize: '13px' }}>
                             {temporadaSorteada ? (
@@ -1143,6 +1189,10 @@ export default function LadderPage() {
                                   title={
                                     !temporadaSorteada
                                       ? 'El sorteo de esta temporada todavía no se ha realizado'
+                                      : yoEstoyEnStandby
+                                      ? 'Estás en modo standby — no puedes retar mientras dure'
+                                      : enStandby(p.jugador_id)
+                                      ? `Este jugador está de viaje hasta el ${new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES')}`
                                       : enEnfriamiento(p.jugador_id)
                                       ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES')}`
                                       : jugadoresOcupados.has(p.jugador_id)
@@ -1152,7 +1202,7 @@ export default function LadderPage() {
                                 >
                                   ⚔️ Retar
                                 </button>
-                                {temporadaSorteada && !enEnfriamiento(p.jugador_id) && jugadoresOcupados.has(p.jugador_id) && (
+                                {temporadaSorteada && !enEnfriamiento(p.jugador_id) && !enStandby(p.jugador_id) && jugadoresOcupados.has(p.jugador_id) && (
                                   <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
                                     Ocupado en otro reto
                                   </p>

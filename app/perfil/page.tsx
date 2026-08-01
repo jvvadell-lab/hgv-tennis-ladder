@@ -63,6 +63,10 @@ export default function PerfilPage() {
   const [panelAbierto, setPanelAbierto] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState('')
   const [tasaBcv, setTasaBcv] = useState<{ valor: number; fecha: string } | null>(null)
+  const [standbyActual, setStandbyActual] = useState<{ dias: number; fecha_inicio: string; fecha_fin: string } | null>(null)
+  const [loadingStandby, setLoadingStandby] = useState(true)
+  const [activandoStandby, setActivandoStandby] = useState<number | null>(null)
+  const [standbyMsg, setStandbyMsg] = useState('')
 
   const [fotoCarnetActual, setFotoCarnetActual] = useState<string | null>(null)
   const [fotoCarnetArchivo, setFotoCarnetArchivo] = useState<File | null>(null)
@@ -140,6 +144,38 @@ export default function PerfilPage() {
         }
       })
       .finally(() => setLoadingPagos(false))
+  }
+
+  useEffect(() => {
+    if (!session || session.role !== 'jugador' || !temporadaPagos?.id) return
+    setLoadingStandby(true)
+    supabase
+      .from('standby')
+      .select('dias, fecha_inicio, fecha_fin')
+      .eq('jugador_id', session.id)
+      .eq('temporada_id', temporadaPagos.id)
+      .maybeSingle()
+      .then(({ data }) => setStandbyActual(data || null))
+      .finally(() => setLoadingStandby(false))
+  }, [session, temporadaPagos])
+
+  const activarStandby = async (dias: number) => {
+    setActivandoStandby(dias)
+    setStandbyMsg('')
+    try {
+      const res = await fetch('/api/jugador/activar-standby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dias }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al activar el standby')
+      setStandbyActual({ dias, fecha_inicio: data.fechaInicio, fecha_fin: data.fechaFin })
+    } catch (err: any) {
+      setStandbyMsg('❌ ' + err.message)
+    } finally {
+      setActivandoStandby(null)
+    }
   }
 
   useEffect(() => {
@@ -632,6 +668,63 @@ export default function PerfilPage() {
             </div>
           )}
         </div>
+
+        {temporadaPagos && (
+          <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid rgba(15,27,38,0.1)' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 8px 0' }}>
+              🧳 Modo standby (viaje)
+            </h2>
+            {loadingStandby ? (
+              <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
+            ) : standbyActual ? (
+              <div style={{ background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '4px', padding: '12px 14px' }}>
+                <p style={{ margin: 0, fontSize: '13px', color: '#7a4a0e' }}>
+                  🧳 Ya usaste tu standby de esta temporada: <strong>{standbyActual.dias} días</strong>, del {new Date(standbyActual.fecha_inicio + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} al {new Date(standbyActual.fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}.
+                </p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#7a4a0e' }}>
+                  Es una única vez por temporada — ya no puedes activarlo de nuevo hasta la próxima.
+                </p>
+              </div>
+            ) : (
+              <>
+                <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 10px 0' }}>
+                  ¿Te vas de viaje unos días? Activa el standby y no te van a poder retar mientras dure (tampoco podrás retar tú). Solo puedes usarlo <strong>una vez por temporada</strong> — elige bien los días.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => activarStandby(3)}
+                    disabled={activandoStandby !== null}
+                    style={{
+                      background: activandoStandby === 3 ? '#ccc' : 'var(--color-ball)', color: 'var(--color-ink)', border: 'none',
+                      padding: '10px 20px', borderRadius: '4px', cursor: activandoStandby !== null ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700,
+                    }}
+                  >
+                    {activandoStandby === 3 ? 'Activando…' : '3 días'}
+                  </button>
+                  <button
+                    onClick={() => activarStandby(5)}
+                    disabled={activandoStandby !== null}
+                    style={{
+                      background: activandoStandby === 5 ? '#ccc' : 'var(--color-ball)', color: 'var(--color-ink)', border: 'none',
+                      padding: '10px 20px', borderRadius: '4px', cursor: activandoStandby !== null ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700,
+                    }}
+                  >
+                    {activandoStandby === 5 ? 'Activando…' : '5 días'}
+                  </button>
+                </div>
+                {standbyMsg && (
+                  <div style={{
+                    marginTop: '10px', padding: '10px 12px', borderRadius: '4px', fontSize: '13px',
+                    background: standbyMsg.includes('✅') ? 'rgba(47,82,51,0.1)' : 'rgba(197,60,50,0.1)',
+                    color: standbyMsg.includes('✅') ? 'var(--color-net)' : '#a83226',
+                  }}>
+                    {standbyMsg}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <a href="/ladder" style={{
