@@ -2620,6 +2620,9 @@ export default function AdminPage() {
                       ) : (
                         <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#6b6b6b' }}>Todavía no se ha registrado la tasa de hoy.</p>
                       )}
+                      <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#999' }}>
+                        Fuente: <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>bcv.org.ve</a>
+                      </p>
                     </div>
                     <button
                       onClick={() => { setEditandoTasaBcv(true); setTasaBcvMsg('') }}
