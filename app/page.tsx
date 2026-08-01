@@ -432,7 +432,7 @@ export default function Home() {
         <img
           src="https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/Patrocinio%201.png"
           alt="Patrocinantes HGV Tennis Club"
-          style={{ maxWidth: '90%', width: '340px', height: 'auto', opacity: 0.92 }}
+          style={{ maxWidth: '95%', width: '442px', height: 'auto', opacity: 0.92 }}
         />
       </div>
 

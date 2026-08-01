@@ -1630,7 +1630,21 @@ export default function LadderPage() {
           )}
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: '32px', marginBottom: '20px' }}>
+        <div style={{ marginTop: '40px', textAlign: 'center' }}>
+          <p style={{
+            fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.5)', fontSize: '10px',
+            letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 12px 0',
+          }}>
+            Con el apoyo de nuestros patrocinantes
+          </p>
+          <img
+            src="https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/Patrocinio%201.png"
+            alt="Patrocinantes HGV Tennis Club"
+            style={{ maxWidth: '95%', width: '442px', height: 'auto', opacity: 0.92 }}
+          />
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '20px', marginBottom: '20px' }}>
           <a
             href="/"
             style={{
