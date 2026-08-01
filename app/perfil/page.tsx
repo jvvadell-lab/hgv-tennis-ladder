@@ -482,24 +482,15 @@ export default function PerfilPage() {
               </button>
             )}
           </div>
-          {tasaBcv && (
-            <p style={{ fontSize: '12px', color: '#666', margin: '0 0 10px 0' }}>
-              💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
-                {tasaBcv.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </strong> según BCV — {new Date(tasaBcv.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
-              {' · '}
-              <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>Fuente: bcv.org.ve</a>
-            </p>
-          )}
           {temporadaPagos && (
-            <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 12px 0' }}>
+            <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 10px 0' }}>
               Temporada: {temporadaPagos.nombre}
             </p>
           )}
 
-          {mostrarFormPago && (
-            <form onSubmit={reportarPago} style={{ background: 'rgba(28,126,196,0.05)', border: '1px solid rgba(28,126,196,0.15)', borderRadius: '4px', padding: '16px', marginBottom: '16px' }}>
-              <div style={{ background: '#fff', border: '1px solid rgba(28,126,196,0.25)', borderRadius: '4px', padding: '12px 14px', marginBottom: '12px' }}>
+          {temporadaPagos && (
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+              <div style={{ flex: '1 1 200px', background: '#fff', border: '1px solid rgba(28,126,196,0.25)', borderRadius: '4px', padding: '12px 14px' }}>
                 <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-ink)', margin: '0 0 4px 0' }}>📱 Datos para Pago Móvil</p>
                 <p style={{ fontSize: '13px', color: '#333', margin: 0, lineHeight: 1.6 }}>
                   Yelitza Contreras<br />
@@ -508,6 +499,25 @@ export default function PerfilPage() {
                   Banco BNC
                 </p>
               </div>
+
+              {tasaBcv && (
+                <div style={{ flex: '1 1 200px', background: '#fff', border: '1px solid rgba(28,126,196,0.3)', borderLeft: '4px solid #1c7ec4', borderRadius: '4px', padding: '12px 14px' }}>
+                  <p style={{ fontSize: '13px', color: '#333', margin: 0 }}>
+                    💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                      {tasaBcv.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </strong> según BCV
+                    <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {new Date(tasaBcv.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}</span>
+                  </p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#999' }}>
+                    Fuente: <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>bcv.org.ve</a>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {mostrarFormPago && (
+            <form onSubmit={reportarPago} style={{ background: 'rgba(28,126,196,0.05)', border: '1px solid rgba(28,126,196,0.15)', borderRadius: '4px', padding: '16px', marginBottom: '16px' }}>
               <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 12px 0' }}>
                 Reporta tu pago aquí — quedará <strong>pendiente de validación</strong> hasta que un administrador confirme que lo recibió.
               </p>
