@@ -392,6 +392,7 @@ export default function AdminPage() {
   const [jugadorManualId, setJugadorManualId] = useState('')
   const [agregandoManual, setAgregandoManual] = useState(false)
   const [agregarManualMsg, setAgregarManualMsg] = useState('')
+  const [retirandoPosicionId, setRetirandoPosicionId] = useState<string | null>(null)
   const [jugadoresDisponibles, setJugadoresDisponibles] = useState<any[]>([])
 
   useEffect(() => {
@@ -953,6 +954,29 @@ export default function AdminPage() {
       setAgregarManualMsg('❌ ' + err.message)
     } finally {
       setAgregandoManual(false)
+    }
+  }
+
+  const retirarDeEscalafon = async (posicionId: string, nombreJugador: string) => {
+    if (!confirm(`¿Retirar a ${nombreJugador} del escalafón de esta temporada? Úsalo cuando quedó anotado en la categoría o género equivocado — su historial de partidos no se toca. Después corrígele la categoría/género en la pestaña Jugadores y vuelve a anotarlo (o pídele que se anote él mismo).`)) return
+
+    setRetirandoPosicionId(posicionId)
+    setSorteoMsg('')
+    try {
+      const res = await fetch('/api/admin/retirar-de-escalafon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posicionId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al retirar')
+
+      setSorteoMsg(`✅ ${data.nombre} fue retirado del escalafón de esta temporada.`)
+      fetchTemporadaYLadder()
+    } catch (err: any) {
+      setSorteoMsg('❌ ' + err.message)
+    } finally {
+      setRetirandoPosicionId(null)
     }
   }
 
@@ -2339,6 +2363,7 @@ export default function AdminPage() {
                                   <th style={{ padding: '2px 4px', textAlign: 'center' }}>G</th>
                                   <th style={{ padding: '2px 4px', textAlign: 'center' }}>P</th>
                                   <th style={{ padding: '2px 4px', textAlign: 'center' }}>NP</th>
+                                  <th style={{ padding: '2px 4px' }}></th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -2369,6 +2394,19 @@ export default function AdminPage() {
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#28a745', fontWeight: 'bold' }}>{s.ganados}</td>
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#c0392b' }}>{s.perdidos}</td>
                                       <td style={{ padding: '4px', textAlign: 'center', color: '#6b6b6b' }}>{s.noPresentado}</td>
+                                      <td style={{ padding: '4px', textAlign: 'center' }}>
+                                        <button
+                                          onClick={() => retirarDeEscalafon(p.id, p.jugadores?.nombre || 'este jugador')}
+                                          disabled={retirandoPosicionId === p.id}
+                                          title="Retirar del escalafón — usar si quedó en la categoría o género equivocado"
+                                          style={{
+                                            background: 'none', border: 'none', color: retirandoPosicionId === p.id ? '#ccc' : '#c0392b',
+                                            cursor: retirandoPosicionId === p.id ? 'not-allowed' : 'pointer', fontSize: '13px', padding: '2px 4px'
+                                          }}
+                                        >
+                                          {retirandoPosicionId === p.id ? '⏳' : '🗑️'}
+                                        </button>
+                                      </td>
                                     </tr>
                                   )
                                 })}
