@@ -62,6 +62,7 @@ export default function PerfilPage() {
   const [loadingTrayectoria, setLoadingTrayectoria] = useState(true)
   const [panelAbierto, setPanelAbierto] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState('')
+  const [tasaBcv, setTasaBcv] = useState<{ valor: number; fecha: string } | null>(null)
 
   const [fotoCarnetActual, setFotoCarnetActual] = useState<string | null>(null)
   const [fotoCarnetArchivo, setFotoCarnetArchivo] = useState<File | null>(null)
@@ -144,6 +145,14 @@ export default function PerfilPage() {
   useEffect(() => {
     if (!session || session.role !== 'jugador') return
     cargarMisPagos()
+    supabase
+      .from('tasa_bcv')
+      .select('valor, fecha')
+      .eq('id', 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setTasaBcv(data)
+      })
   }, [session])
 
   useEffect(() => {
@@ -473,6 +482,15 @@ export default function PerfilPage() {
               </button>
             )}
           </div>
+          {tasaBcv && (
+            <p style={{ fontSize: '12px', color: '#666', margin: '0 0 10px 0' }}>
+              💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                {tasaBcv.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong> según BCV — {new Date(tasaBcv.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+              {' · '}
+              <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>Fuente: bcv.org.ve</a>
+            </p>
+          )}
           {temporadaPagos && (
             <p style={{ fontSize: '12px', color: 'var(--color-line)', margin: '0 0 12px 0' }}>
               Temporada: {temporadaPagos.nombre}
