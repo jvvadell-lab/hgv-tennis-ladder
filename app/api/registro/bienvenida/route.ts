@@ -29,6 +29,29 @@ export async function POST(request: Request) {
         <p>Ahora te toca a ti, <strong>${jugador.nombre || ''}</strong>. Anótate, reta, compite — y hazte parte de esta primera escalera que esperamos se convierta en tradición.</p>
         <p>¡Nos vemos en cancha! 🎾🏆</p>
 
+        <div style="background: #fdf6d8; border: 1px solid #d4e157; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+          <p style="margin: 0 0 10px 0; font-weight: bold; color: #1c7ec4; font-size: 15px;">✅ Para quedar listo, solo necesitas:</p>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+            <tr>
+              <td style="padding: 4px 8px 4px 0; vertical-align: top; width: 24px;">💳</td>
+              <td style="padding: 4px 0; font-size: 14px;">Hacer tu pago de inscripción</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 8px 4px 0; vertical-align: top;">🪪</td>
+              <td style="padding: 4px 0; font-size: 14px;">Cargar la foto de tu carné de socio</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 8px 4px 0; vertical-align: top;">📝</td>
+              <td style="padding: 4px 0; font-size: 14px;">Reportar tu pago en el sistema</td>
+            </tr>
+          </table>
+          <p style="margin: 0 0 4px 0; font-size: 14px;">¡Y listo! Solo acompáñanos el día del sorteo:</p>
+          <p style="margin: 0; font-size: 17px; font-weight: bold; color: #0f1b26;">
+            🗓️ 5 de agosto · 🕖 7:00 pm<br />
+            📍 Canchas del Club HGV
+          </p>
+        </div>
+
         <hr style="border: none; border-top: 1px solid #eee; margin: 26px 0;" />
 
         <h3 style="color: #1c7ec4; margin: 0 0 14px 0;">Reglas de la Escalera de Retos HGV</h3>
