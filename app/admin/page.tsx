@@ -578,6 +578,37 @@ export default function AdminPage() {
     }
   }
 
+  const [editandoMontoPagoId, setEditandoMontoPagoId] = useState<string | null>(null)
+  const [nuevoMontoInput, setNuevoMontoInput] = useState('')
+  const [guardandoMonto, setGuardandoMonto] = useState(false)
+  const [modoSorteoManual, setModoSorteoManual] = useState(false)
+  const [posicionesManualInput, setPosicionesManualInput] = useState<Record<string, string>>({})
+  const [guardandoSorteoManual, setGuardandoSorteoManual] = useState(false)
+
+  const abrirEdicionMonto = (pago: any) => {
+    setEditandoMontoPagoId(pago.id)
+    setNuevoMontoInput(String(pago.monto))
+  }
+
+  const guardarNuevoMonto = async (pagoId: string) => {
+    setGuardandoMonto(true)
+    try {
+      const res = await fetch('/api/admin/editar-monto-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pagoId, monto: nuevoMontoInput }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar')
+      setEditandoMontoPagoId(null)
+      fetchPagos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setGuardandoMonto(false)
+    }
+  }
+
   // Rechazar un pago reportado por el jugador (el dinero nunca llegó a la cuenta).
   // Lo elimina y le manda un correo avisándole y con el contacto de Yelitza.
   const rechazarPago = async (pagoId: string) => {
@@ -1063,6 +1094,45 @@ export default function AdminPage() {
       setTasaBcvMsg('❌ ' + err.message)
     } finally {
       setGuardandoTasaBcv(false)
+    }
+  }
+
+  const confirmarSorteoManual = async () => {
+    if (!temporadaActiva) return
+    const jugadoresAnotados = Object.values(ladderPreview).flat()
+
+    const faltantes = jugadoresAnotados.filter((p: any) => !posicionesManualInput[p.jugador_id]?.trim())
+    if (faltantes.length > 0) {
+      setSorteoMsg(`❌ Falta ponerle posición a ${faltantes.length} jugador(es) — completa todos antes de confirmar.`)
+      return
+    }
+
+    const asignaciones = jugadoresAnotados.map((p: any) => ({
+      jugadorId: p.jugador_id,
+      posicion: Number(posicionesManualInput[p.jugador_id]),
+    }))
+
+    if (!confirm('¿Confirmar el sorteo manual con estas posiciones? Esta acción no se puede repetir ni deshacer.')) return
+
+    setGuardandoSorteoManual(true)
+    setSorteoMsg('')
+    try {
+      const res = await fetch('/api/admin/sorteo-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temporadaId: temporadaActiva.id, asignaciones }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar')
+
+      setSorteoMsg(`✅ Sorteo manual confirmado — ${data.count} jugadores ubicados en el escalafón.`)
+      setModoSorteoManual(false)
+      setPosicionesManualInput({})
+      fetchTemporadaYLadder()
+    } catch (err: any) {
+      setSorteoMsg('❌ ' + err.message)
+    } finally {
+      setGuardandoSorteoManual(false)
     }
   }
 
@@ -2321,10 +2391,12 @@ export default function AdminPage() {
                     <p style={{ color: '#666' }}>
                       {temporadaActiva.sorteo_realizado
                         ? 'El sorteo de esta temporada ya se realizó y quedó fijo — no puede repetirse. Para agregar jugadores tarde, usa "Agregar manualmente" abajo.'
-                        : 'Todavía no se ha hecho el sorteo. Esto asignará una posición inicial aleatoria a cada jugador que ya se haya ANOTADO a esta temporada, dentro de su categoría y género.'}
+                        : modoSorteoManual
+                        ? 'Modo sorteo manual activado — a medida que saquen las pelotas en vivo, escríbele a cada jugador la posición que le tocó en la tabla de abajo. Cuando todos tengan su número, confirma con el botón al final de la tabla.'
+                        : 'Todavía no se ha hecho el sorteo. Puedes sortear automáticamente (aleatorio) o en modo manual, escribiendo tú mismo la posición de cada jugador a medida que la sacan en vivo con las pelotas.'}
                     </p>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      {!temporadaActiva.sorteo_realizado && (
+                      {!temporadaActiva.sorteo_realizado && !modoSorteoManual && (
                         <button
                           onClick={realizarSorteo}
                           disabled={sorteando || cerrando}
@@ -2334,7 +2406,21 @@ export default function AdminPage() {
                             fontSize: '15px', fontWeight: 'bold'
                           }}
                         >
-                          {sorteando ? '⏳ Sorteando...' : '🎲 Realizar sorteo'}
+                          {sorteando ? '⏳ Sorteando...' : '🎲 Sorteo automático (aleatorio)'}
+                        </button>
+                      )}
+                      {!temporadaActiva.sorteo_realizado && (
+                        <button
+                          onClick={() => { setModoSorteoManual(!modoSorteoManual); setSorteoMsg('') }}
+                          disabled={sorteando || cerrando}
+                          style={{
+                            background: modoSorteoManual ? '#6b6b6b' : 'none', color: modoSorteoManual ? 'white' : '#e67e22',
+                            border: '2px solid #e67e22',
+                            padding: '10px 22px', borderRadius: '8px', cursor: 'pointer',
+                            fontSize: '15px', fontWeight: 'bold'
+                          }}
+                        >
+                          {modoSorteoManual ? '✕ Cancelar sorteo manual' : '🎾 Sorteo manual (pelotas físicas)'}
                         </button>
                       )}
                       <button
@@ -2459,11 +2545,19 @@ export default function AdminPage() {
                                   const s = ladderStats[p.jugador_id] || { jugados: 0, ganados: 0, perdidos: 0, noPresentado: 0 }
                                   return (
                                     <tr key={p.id} style={{ borderTop: '1px solid #eee' }}>
-                                      <td
-                                        onClick={() => abrirTrayectoria(p.jugador_id)}
-                                        style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)', cursor: 'pointer' }}
-                                      >
-                                        {p.posicion}
+                                      <td style={{ padding: '4px', fontWeight: 'bold', color: 'var(--color-ink)' }}>
+                                        {modoSorteoManual ? (
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={posicionesManualInput[p.jugador_id] || ''}
+                                            onChange={(e) => setPosicionesManualInput({ ...posicionesManualInput, [p.jugador_id]: e.target.value })}
+                                            placeholder="—"
+                                            style={{ width: '48px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #e67e22', fontSize: '13px', textAlign: 'center' }}
+                                          />
+                                        ) : (
+                                          <span onClick={() => abrirTrayectoria(p.jugador_id)} style={{ cursor: 'pointer' }}>{p.posicion}</span>
+                                        )}
                                       </td>
                                       <td
                                         onClick={() => abrirTrayectoria(p.jugador_id)}
@@ -2520,6 +2614,24 @@ export default function AdminPage() {
                         )
                       })}
                     </div>
+                    {modoSorteoManual && (
+                      <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                        <button
+                          onClick={confirmarSorteoManual}
+                          disabled={guardandoSorteoManual}
+                          style={{
+                            background: guardandoSorteoManual ? '#ccc' : '#28a745', color: 'white', border: 'none',
+                            padding: '14px 32px', borderRadius: '8px', cursor: guardandoSorteoManual ? 'not-allowed' : 'pointer',
+                            fontSize: '16px', fontWeight: 'bold'
+                          }}
+                        >
+                          {guardandoSorteoManual ? '⏳ Guardando...' : '✅ Confirmar sorteo manual completo'}
+                        </button>
+                        <p style={{ fontSize: '12px', color: '#6b6b6b', marginTop: '8px' }}>
+                          Verifica que cada categoría/género tenga las posiciones 1 a N completas antes de confirmar — no se puede deshacer.
+                        </p>
+                      </div>
+                    )}
                     </>
                   )}
 
@@ -3075,7 +3187,44 @@ export default function AdminPage() {
                             <td style={{ padding: '10px 16px' }}>{p.jugadores?.nombre || 'Jugador'}</td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', textTransform: 'capitalize' }}>{p.tipo_pago.replace('_', ' ')}</td>
                             <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)' }}>
-                              {monedaDe(p.tipo_pago)} {Number(p.monto).toLocaleString(p.tipo_pago === 'efectivo' ? 'en-US' : 'es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {editandoMontoPagoId === p.id ? (
+                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={nuevoMontoInput}
+                                    onChange={(e) => setNuevoMontoInput(e.target.value)}
+                                    style={{ width: '90px', padding: '4px 6px', borderRadius: '4px', border: '1px solid #ddd', fontSize: '13px' }}
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => guardarNuevoMonto(p.id)}
+                                    disabled={guardandoMonto}
+                                    style={{ background: '#28a745', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                                  >
+                                    {guardandoMonto ? '...' : '✅'}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditandoMontoPagoId(null)}
+                                    style={{ background: 'none', border: '1px solid #ccc', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  {monedaDe(p.tipo_pago)} {Number(p.monto).toLocaleString(p.tipo_pago === 'efectivo' ? 'en-US' : 'es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <button
+                                    onClick={() => abrirEdicionMonto(p)}
+                                    className="no-imprimir"
+                                    title="Editar monto"
+                                    style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: '11px', marginLeft: '6px' }}
+                                  >
+                                    ✏️
+                                  </button>
+                                </>
+                              )}
                             </td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', color: '#555' }}>{p.referencia || '—'}</td>
                             <td style={{ padding: '10px 16px', fontSize: '13px', color: '#6b6b6b' }}>{p.fecha}</td>
