@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { verificarNumeroAccion } from '@/lib/verificarAccion'
 
 export async function POST(request: Request) {
   try {
@@ -40,7 +41,14 @@ export async function POST(request: Request) {
     }
     if (pin) updateData.pin = pin
     // La foto ya se sube al bucket desde el cliente antes de llamar aquí — solo guardamos la URL resultante.
-    if (fotoCarnetUrl) updateData.foto_carnet_url = fotoCarnetUrl
+    if (fotoCarnetUrl) {
+      updateData.foto_carnet_url = fotoCarnetUrl
+      // Verificamos el número de acción contra la foto nueva — no bloquea el guardado,
+      // solo queda registrado para que el admin lo revise si no coincide.
+      const { ocr, coincide } = await verificarNumeroAccion(fotoCarnetUrl, numeroAccion || '')
+      updateData.numero_accion_ocr = ocr
+      updateData.numero_accion_coincide = coincide
+    }
 
     const { error } = await db.from('jugadores').update(updateData).eq('id', session.id)
     if (error) throw error

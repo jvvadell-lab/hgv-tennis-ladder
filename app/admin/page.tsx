@@ -1176,7 +1176,7 @@ export default function AdminPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, created_at, foto_carnet_url')
+      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide')
       .order('created_at', { ascending: false })
     if (!error) setPlayers(data || [])
     setLoading(false)
@@ -1576,7 +1576,17 @@ export default function AdminPage() {
                             </td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.email}</td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.telefono}</td>
-                            <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.numero_accion || '—'}</td>
+                            <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>
+                              {player.numero_accion || '—'}
+                              {player.numero_accion_coincide === false && (
+                                <span
+                                  title={`La IA leyó "${player.numero_accion_ocr}" en el carné, pero el jugador escribió "${player.numero_accion}" — revisa la foto antes de verificarlo.`}
+                                  style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 'bold', color: '#c0392b', background: '#fee2e2', padding: '2px 6px', borderRadius: '8px', cursor: 'help' }}
+                                >
+                                  ⚠️ no coincide
+                                </span>
+                              )}
+                            </td>
                             <td style={{ padding: '12px 16px' }}>
                               <span style={{
                                 background: player.genero === 'caballeros' ? '#dbeafe' : '#fce7f3',

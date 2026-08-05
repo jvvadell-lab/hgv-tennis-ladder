@@ -134,6 +134,14 @@ export default function RegisterPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jugadorId: nuevoJugador.id }),
         }).catch(() => {})
+
+        // Verificación automática del carné (si subieron foto) — también en
+        // segundo plano, no bloquea el registro ni el login automático.
+        fetch('/api/registro/verificar-carnet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jugadorId: nuevoJugador.id }),
+        }).catch(() => {})
       }
 
       // Dejarlo logueado de una vez con el email/PIN que acaba de crear, y mandarlo
