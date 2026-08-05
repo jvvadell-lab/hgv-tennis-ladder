@@ -2075,7 +2075,7 @@ export default function AdminPage() {
                     />
                   </div>
                   <button
-                    onClick={fetchHistorialReservas}
+                    onClick={() => fetchHistorialReservas()}
                     style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
                   >
                     🔍 Buscar
