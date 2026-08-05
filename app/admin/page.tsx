@@ -2443,6 +2443,20 @@ export default function AdminPage() {
                           {modoSorteoManual ? '✕ Cancelar sorteo manual' : '🎾 Sorteo manual (pelotas físicas)'}
                         </button>
                       )}
+                      {!temporadaActiva.sorteo_realizado && (
+                        <a
+                          href="/admin/sorteo-show"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            background: 'none', color: '#1c7ec4', border: '2px solid #1c7ec4', textDecoration: 'none',
+                            padding: '10px 22px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center',
+                            fontSize: '15px', fontWeight: 'bold'
+                          }}
+                        >
+                          🎰 Sorteo con bombo (pantalla completa)
+                        </a>
+                      )}
                       <button
                         onClick={cerrarTemporada}
                         disabled={sorteando || cerrando}
