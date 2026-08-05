@@ -122,7 +122,7 @@ export default function SorteoShowPage() {
         }
       })
       setSacando(false)
-    }, 1400)
+    }, 3500)
   }
 
   const guardarSorteoCompleto = async () => {
@@ -217,7 +217,7 @@ export default function SorteoShowPage() {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-6px); }
         }
-        .bombo-girando { animation: girarBombo 1.4s ease-in-out; }
+        .bombo-girando { animation: girarBombo 1.1s ease-in-out infinite; }
         .nombre-revelado { animation: revelarNombre 0.5s ease-out; }
         .bola-flotante { animation: flotar 2.4s ease-in-out infinite; }
       `}</style>
