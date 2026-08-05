@@ -68,6 +68,8 @@ export default function ReservasPage() {
   const [misReservas, setMisReservas] = useState<any[]>([])
   const [loadingMisReservas, setLoadingMisReservas] = useState(true)
   const [cancelando, setCancelando] = useState<string | null>(null)
+  const [extendiendo, setExtendiendo] = useState<string | null>(null)
+  const [extenderMsg, setExtenderMsg] = useState('')
 
   useEffect(() => {
     fetch('/api/me')
@@ -81,7 +83,7 @@ export default function ReservasPage() {
     setLoadingMisReservas(true)
     supabase
       .from('reservas_cancha')
-      .select('id, cancha, fecha_hora, estado')
+      .select('id, cancha, fecha_hora, estado, duracion_min')
       .eq('jugador_id', session.id)
       .eq('estado', 'activa')
       .gte('fecha_hora', new Date().toISOString())
@@ -152,16 +154,18 @@ export default function ReservasPage() {
         seSolapan(nuevaHoraMs, DURACION_RESERVA_MIN, new Date(r.fecha_propuesta).getTime(), DURACION_RETO_MIN)
       )
       if (conflictoReto) {
-        const horaOcupada = new Date(conflictoReto.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Esa cancha ya tiene un partido de la escalera a las ${horaOcupada} (bloquea 1h30). Elige otro horario.`)
+        const inicioOcupado = new Date(conflictoReto.fecha_propuesta)
+        const finOcupado = new Date(inicioOcupado.getTime() + DURACION_RETO_MIN * 60000)
+        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        setMsg(`❌ Esa cancha tiene un partido de la escalera a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Puedes reservar desde esa hora en adelante.`)
         setReservando(false)
         return
       }
 
-      // No debe chocar con otras reservas casuales (bloquean 1h) en esa cancha ese día
+      // No debe chocar con otras reservas casuales (bloquean 1h, o 1h30 si tienen la extensión) en esa cancha ese día
       const { data: reservasDia, error: errReservas } = await supabase
         .from('reservas_cancha')
-        .select('id, fecha_hora')
+        .select('id, fecha_hora, duracion_min')
         .eq('cancha', cancha)
         .eq('estado', 'activa')
         .gte('fecha_hora', inicioDia)
@@ -169,11 +173,13 @@ export default function ReservasPage() {
       if (errReservas) throw errReservas
 
       const conflictoReserva = (reservasDia || []).find((r: any) =>
-        seSolapan(nuevaHoraMs, DURACION_RESERVA_MIN, new Date(r.fecha_hora).getTime(), DURACION_RESERVA_MIN)
+        seSolapan(nuevaHoraMs, DURACION_RESERVA_MIN, new Date(r.fecha_hora).getTime(), r.duracion_min || DURACION_RESERVA_MIN)
       )
       if (conflictoReserva) {
-        const horaOcupada = new Date(conflictoReserva.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Esa cancha ya está reservada a las ${horaOcupada} (bloquea 1h). Elige otro horario.`)
+        const inicioOcupado = new Date(conflictoReserva.fecha_hora)
+        const finOcupado = new Date(inicioOcupado.getTime() + (conflictoReserva.duracion_min || DURACION_RESERVA_MIN) * 60000)
+        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        setMsg(`❌ Esa cancha ya está reservada a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Puedes reservar desde esa hora en adelante.`)
         setReservando(false)
         return
       }
@@ -213,6 +219,25 @@ export default function ReservasPage() {
       alert('❌ ' + err.message)
     } finally {
       setCancelando(null)
+    }
+  }
+
+  const extenderReserva = async (reservaId: string) => {
+    setExtendiendo(reservaId)
+    setExtenderMsg('')
+    try {
+      const res = await fetch('/api/jugador/extender-reserva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reservaId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al extender')
+      cargarMisReservas()
+    } catch (err: any) {
+      setExtenderMsg('❌ ' + err.message)
+    } finally {
+      setExtendiendo(null)
     }
   }
 
@@ -352,31 +377,64 @@ export default function ReservasPage() {
             <p style={{ fontSize: '13px', color: 'var(--color-line)' }}>No tienes reservas activas por ahora.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {misReservas.map((r) => (
-                <div key={r.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-                  background: 'rgba(28,126,196,0.06)', border: '1px solid rgba(28,126,196,0.15)',
-                  borderRadius: '4px', padding: '10px 14px', fontSize: '13px', color: 'var(--color-ink)',
-                }}>
-                  <span>
-                    <strong>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</strong>
-                    {' — '}
-                    {new Date(r.fecha_hora).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                    {' · '}
-                    {new Date(r.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  <button
-                    onClick={() => cancelarReserva(r.id)}
-                    disabled={cancelando === r.id}
-                    style={{
-                      background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 12px',
-                      borderRadius: '4px', cursor: cancelando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
-                    }}
-                  >
-                    {cancelando === r.id ? 'Cancelando…' : 'Cancelar'}
-                  </button>
+              {extenderMsg && (
+                <div style={{ padding: '8px 12px', borderRadius: '4px', background: 'rgba(197,60,50,0.1)', color: '#a83226', fontSize: '12px' }}>
+                  {extenderMsg}
                 </div>
-              ))}
+              )}
+              {misReservas.map((r) => {
+                const duracion = r.duracion_min || 60
+                const inicio = new Date(r.fecha_hora)
+                const fin = new Date(inicio.getTime() + duracion * 60000)
+                const yaExtendida = duracion > 60
+                return (
+                  <div key={r.id} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+                    background: 'rgba(28,126,196,0.06)', border: '1px solid rgba(28,126,196,0.15)',
+                    borderRadius: '4px', padding: '10px 14px', fontSize: '13px', color: 'var(--color-ink)',
+                  }}>
+                    <span>
+                      <strong>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</strong>
+                      {' — '}
+                      {inicio.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                      {' · '}
+                      {inicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      {' – '}
+                      {fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      {yaExtendida && (
+                        <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 'bold', color: '#28a745', background: '#d4edda', padding: '2px 6px', borderRadius: '8px' }}>
+                          +30 min
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {!yaExtendida && (
+                        <button
+                          onClick={() => extenderReserva(r.id)}
+                          disabled={extendiendo === r.id}
+                          title="Si nadie reservó justo después, se te asigna media hora más"
+                          style={{
+                            background: extendiendo === r.id ? '#ccc' : '#d4e157', color: 'var(--color-ink)', border: 'none', padding: '5px 12px',
+                            borderRadius: '4px', cursor: extendiendo === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
+                          }}
+                        >
+                          {extendiendo === r.id ? 'Revisando…' : '🎾 +30 min'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => cancelarReserva(r.id)}
+                        disabled={cancelando === r.id}
+                        style={{
+                          background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 12px',
+                          borderRadius: '4px', cursor: cancelando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
+                        }}
+                      >
+                        {cancelando === r.id ? 'Cancelando…' : 'Cancelar'}
+                      </button>
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

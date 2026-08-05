@@ -590,10 +590,11 @@ export default function LadderPage() {
         return
       }
 
-      // También revisamos que no choque con una reserva casual de cancha (bloquean 1 hora)
+      // También revisamos que no choque con una reserva casual de cancha (bloquean 1h,
+      // o 1h30 si el jugador se agregó la media hora extra de cortesía)
       const { data: reservasCancha, error: errReservas } = await supabase
         .from('reservas_cancha')
-        .select('id, fecha_hora')
+        .select('id, fecha_hora, duracion_min')
         .eq('cancha', retoCancha)
         .eq('estado', 'activa')
         .gte('fecha_hora', inicioDia.toISOString())
@@ -604,11 +605,10 @@ export default function LadderPage() {
         return
       }
 
-      const DURACION_RESERVA_MS = 60 * 60 * 1000
       const finNuevoReto = nuevaHoraMs + DURACION_PARTIDO_MS
       const conflictoReserva = (reservasCancha || []).find((r: any) => {
         const inicioReserva = new Date(r.fecha_hora).getTime()
-        const finReserva = inicioReserva + DURACION_RESERVA_MS
+        const finReserva = inicioReserva + (r.duracion_min || 60) * 60 * 1000
         return nuevaHoraMs < finReserva && inicioReserva < finNuevoReto
       })
 

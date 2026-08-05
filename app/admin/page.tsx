@@ -309,7 +309,7 @@ export default function AdminPage() {
 
     const { data: casuales } = await supabase
       .from('reservas_cancha')
-      .select('id, cancha, fecha_hora, estado, jugadores:jugador_id(nombre)')
+      .select('id, cancha, fecha_hora, estado, duracion_min, jugadores:jugador_id(nombre)')
       .eq('estado', 'activa')
       .gte('fecha_hora', inicio.toISOString())
       .lte('fecha_hora', fin.toISOString())
@@ -1983,14 +1983,24 @@ export default function AdminPage() {
                               )
                             }
                             const res = item.data
+                            const finReserva = new Date(new Date(res.fecha_hora).getTime() + (res.duracion_min || 60) * 60000)
                             return (
                               <div key={`reserva-${res.id}`} style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--color-court)' }}>
                                     {new Date(res.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                    {' – '}
+                                    {finReserva.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                   </span>
-                                  <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
-                                    📅 Reserva casual
+                                  <span style={{ display: 'flex', gap: '4px' }}>
+                                    {(res.duracion_min || 60) > 60 && (
+                                      <span style={{ background: '#d4edda', color: '#155724', padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: '700' }}>
+                                        +30 min
+                                      </span>
+                                    )}
+                                    <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
+                                      📅 Reserva casual
+                                    </span>
                                   </span>
                                 </div>
                                 <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#333' }}>
