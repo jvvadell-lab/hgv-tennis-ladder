@@ -89,6 +89,10 @@ export default function AdminPage() {
   const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
   const [reservasCasualesDelDia, setReservasCasualesDelDia] = useState<any[]>([])
   const [loadingReservas, setLoadingReservas] = useState(false)
+  const [historialReservas, setHistorialReservas] = useState<any[]>([])
+  const [loadingHistorialReservas, setLoadingHistorialReservas] = useState(false)
+  const [historialReservasDesde, setHistorialReservasDesde] = useState('')
+  const [historialReservasHasta, setHistorialReservasHasta] = useState('')
   const [filterEstado, setFilterEstado] = useState('')
 
   const [dashStats, setDashStats] = useState({ jugadores: 0, desafiosActivos: 0, partidosJugados: 0, esteMes: 0 })
@@ -285,6 +289,17 @@ export default function AdminPage() {
     }
     if (activeSection === 'reservas') {
       fetchReservasDelDia(fechaReservas)
+      if (!historialReservasDesde || !historialReservasHasta) {
+        const hoy = new Date()
+        const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30)
+        const desde = hace30.toISOString().slice(0, 10)
+        const hasta = hoy.toISOString().slice(0, 10)
+        setHistorialReservasDesde(desde)
+        setHistorialReservasHasta(hasta)
+        fetchHistorialReservas(desde, hasta)
+      } else {
+        fetchHistorialReservas()
+      }
     }
   }, [activeSection])
 
@@ -317,6 +332,23 @@ export default function AdminPage() {
     setReservasCasualesDelDia(casuales || [])
 
     setLoadingReservas(false)
+  }
+
+  const fetchHistorialReservas = async (desde?: string, hasta?: string) => {
+    const fDesde = desde || historialReservasDesde
+    const fHasta = hasta || historialReservasHasta
+    if (!fDesde || !fHasta) return
+    setLoadingHistorialReservas(true)
+    const inicio = new Date(fDesde + 'T00:00:00')
+    const fin = new Date(fHasta + 'T23:59:59.999')
+    const { data } = await supabase
+      .from('reservas_cancha')
+      .select('id, cancha, fecha_hora, estado, duracion_min, jugadores:jugador_id(nombre)')
+      .gte('fecha_hora', inicio.toISOString())
+      .lte('fecha_hora', fin.toISOString())
+      .order('fecha_hora', { ascending: false })
+    setHistorialReservas(data || [])
+    setLoadingHistorialReservas(false)
   }
 
   const cancelarReto = async (retoId: string) => {
@@ -2015,6 +2047,89 @@ export default function AdminPage() {
                   })}
                 </div>
               )}
+
+              {/* Historial de reservas */}
+              <div style={{ marginTop: '30px' }}>
+                <h3 style={{ color: 'var(--color-ink)' }}>📜 Historial de reservas</h3>
+                <div style={{
+                  background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                  marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                  display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap'
+                }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Desde</label>
+                    <input
+                      type="date"
+                      value={historialReservasDesde}
+                      onChange={(e) => setHistorialReservasDesde(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Hasta</label>
+                    <input
+                      type="date"
+                      value={historialReservasHasta}
+                      onChange={(e) => setHistorialReservasHasta(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                    />
+                  </div>
+                  <button
+                    onClick={fetchHistorialReservas}
+                    style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                  >
+                    🔍 Buscar
+                  </button>
+                  <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '13px' }}>
+                    Total: <strong>{historialReservas.length}</strong>
+                  </span>
+                </div>
+
+                {loadingHistorialReservas ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando...</div>
+                ) : historialReservas.length === 0 ? (
+                  <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '30px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                    No hay reservas en ese rango de fechas.
+                  </div>
+                ) : (
+                  <div className="table-scroll" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--color-court)', color: 'var(--color-chalk)' }}>
+                          <th style={{ padding: '10px 14px', textAlign: 'left' }}>Jugador</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'left' }}>Cancha</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'left' }}>Fecha</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'left' }}>Hora</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'left' }}>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historialReservas.map((r: any, i: number) => (
+                          <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
+                            <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.jugadores?.nombre || '—'}</td>
+                            <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</td>
+                            <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
+                              {new Date(r.fecha_hora).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
+                              {new Date(r.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td style={{ padding: '10px 14px' }}>
+                              <span style={{
+                                fontSize: '12px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px',
+                                background: r.estado === 'activa' ? '#d4edda' : '#f8d7da',
+                                color: r.estado === 'activa' ? '#155724' : '#721c24',
+                              }}>
+                                {r.estado}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

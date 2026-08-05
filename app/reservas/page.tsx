@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -9,6 +9,9 @@ const supabase = createClient(
 
 const DURACION_RESERVA_MIN = 60
 const DURACION_RETO_MIN = 90
+const VENTANA_ANTICIPACION_MIN = 180 // máximo 3 horas de anticipación
+const COOLDOWN_MIN = 360 // 6 horas de espera tras terminar una reserva, para volver a reservar el mismo día
+const PASO_MIN = 15 // granularidad de los horarios que se ofrecen (cada 15 min)
 
 function seSolapan(inicio1Ms: number, duracion1Min: number, inicio2Ms: number, duracion2Min: number) {
   const fin1 = inicio1Ms + duracion1Min * 60000
@@ -16,43 +19,26 @@ function seSolapan(inicio1Ms: number, duracion1Min: number, inicio2Ms: number, d
   return inicio1Ms < fin2 && inicio2Ms < fin1
 }
 
-function validarHorarioCancha(cancha: string, fechaStr: string, horaStr: string): { valido: boolean; mensaje?: string } {
-  if (!fechaStr || !horaStr) return { valido: true }
-  const [y, m, d] = fechaStr.split('-').map(Number)
-  const fecha = new Date(y, m - 1, d)
-  const dia = fecha.getDay() // 0 = domingo, 1 = lunes, ... 5 = viernes, 6 = sábado
+// Devuelve si esa cancha, a esa hora exacta de HOY, está dentro de su horario de apertura.
+function horaValidaParaCancha(cancha: string, fecha: Date): boolean {
+  const dia = fecha.getDay() // 0 domingo ... 6 sábado
   const esFinde = dia === 0 || dia === 6
-  if (esFinde) return { valido: true }
+  if (esFinde) return true
 
   const esViernes = dia === 5
-  const [hh, mm] = horaStr.split(':').map(Number)
-  const minutos = hh * 60 + mm
+  const minutos = fecha.getHours() * 60 + fecha.getMinutes()
 
   if (cancha === 'HGV1') {
-    // Viernes: libre desde las 2:00pm hasta medianoche. Lunes-jueves: solo 8:00pm-12:00am.
-    const disponible = esViernes
-      ? minutos >= 840 && minutos < 1440   // 2:00pm – 12:00am
-      : minutos >= 1200 && minutos < 1440  // 8:00pm – 12:00am
-    if (disponible) return { valido: true }
-    return {
-      valido: false,
-      mensaje: esViernes
-        ? 'Los viernes, HGV 1 está disponible a partir de las 2:00pm.'
-        : 'HGV 1 solo está disponible de lunes a jueves de 8:00pm a 12:00am (viernes desde las 2:00pm, fines de semana todo el día).',
-    }
+    return esViernes
+      ? minutos >= 840 && minutos < 1440   // Viernes: 2:00pm – 12:00am
+      : minutos >= 1200 && minutos < 1440  // Lun-Jue: 8:00pm – 12:00am
   }
-
   if (cancha === 'HGV2') {
     const enManana = minutos >= 360 && minutos < 840   // 6:00am – 2:00pm
     const enNoche = minutos >= 1140 && minutos < 1440  // 7:00pm – 12:00am
-    if (enManana || enNoche) return { valido: true }
-    return {
-      valido: false,
-      mensaje: 'HGV 2 solo está disponible de lunes a viernes de 6:00am a 2:00pm y de 7:00pm a 12:00am (fines de semana, todo el día).',
-    }
+    return enManana || enNoche
   }
-
-  return { valido: true }
+  return true
 }
 
 export default function ReservasPage() {
@@ -60,24 +46,13 @@ export default function ReservasPage() {
   const [checking, setChecking] = useState(true)
 
   const [cancha, setCancha] = useState('HGV1')
-  const [fecha, setFecha] = useState('')
-  const [hora, setHora] = useState('12:00')
+  const [horaSeleccionada, setHoraSeleccionada] = useState<string>('') // "HH:MM" en 24h
   const [reservando, setReservando] = useState(false)
   const [msg, setMsg] = useState('')
 
   const [misReservas, setMisReservas] = useState<any[]>([])
   const [loadingMisReservas, setLoadingMisReservas] = useState(true)
   const [cancelando, setCancelando] = useState<string | null>(null)
-  const [extendiendo, setExtendiendo] = useState<string | null>(null)
-  const [extenderMsg, setExtenderMsg] = useState('')
-  const [ahora, setAhora] = useState(Date.now())
-
-  // Refrescamos "ahora" cada 30s para que el botón de +30 min aparezca solo
-  // sin que el jugador tenga que recargar la página manualmente.
-  useEffect(() => {
-    const intervalo = setInterval(() => setAhora(Date.now()), 30000)
-    return () => clearInterval(intervalo)
-  }, [])
 
   useEffect(() => {
     fetch('/api/me')
@@ -86,67 +61,119 @@ export default function ReservasPage() {
       .finally(() => setChecking(false))
   }, [])
 
-  const cargarMisReservas = () => {
+  const cargarMisReservas = useCallback(() => {
     if (!session) return
     setLoadingMisReservas(true)
+    const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
     supabase
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, estado, duracion_min')
       .eq('jugador_id', session.id)
       .eq('estado', 'activa')
-      .gte('fecha_hora', new Date().toISOString())
+      .gte('fecha_hora', inicioHoy.toISOString())
       .order('fecha_hora', { ascending: true })
       .then(({ data }) => {
         setMisReservas(data || [])
         setLoadingMisReservas(false)
       })
-  }
+  }, [session])
 
   useEffect(() => {
     if (session?.role === 'jugador') cargarMisReservas()
-  }, [session])
+  }, [session, cargarMisReservas])
 
-  function partesDesde24(hhmm: string) {
-    const [hStr, mStr] = hhmm.split(':')
-    const h = parseInt(hStr, 10)
-    const ampm: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM'
-    let h12 = h % 12
-    if (h12 === 0) h12 = 12
-    return { h12: String(h12), min: mStr, ampm }
-  }
+  // Genera la lista de horarios válidos para la cancha elegida: entre ahora y
+  // dentro de las próximas 3 horas, cada 15 min, respetando el horario de la cancha.
+  const [horariosDisponibles, setHorariosDisponibles] = useState<{ value: string; label: string }[]>([])
 
-  function combinarA24(h12: string, min: string, ampm: string) {
-    let h = parseInt(h12, 10) % 12
-    if (ampm === 'PM') h += 12
-    return `${String(h).padStart(2, '0')}:${min}`
-  }
+  useEffect(() => {
+    const ahora = new Date()
+    const opciones: { value: string; label: string }[] = []
+    const cursor = new Date(ahora)
+    // Redondeamos hacia el próximo múltiplo de 15 min
+    const minutosSobrantes = cursor.getMinutes() % PASO_MIN
+    if (minutosSobrantes !== 0) cursor.setMinutes(cursor.getMinutes() + (PASO_MIN - minutosSobrantes))
+    cursor.setSeconds(0, 0)
+
+    const limite = new Date(ahora.getTime() + VENTANA_ANTICIPACION_MIN * 60000)
+
+    while (cursor <= limite) {
+      if (horaValidaParaCancha(cancha, cursor)) {
+        const hh = String(cursor.getHours()).padStart(2, '0')
+        const mm = String(cursor.getMinutes()).padStart(2, '0')
+        opciones.push({
+          value: `${hh}:${mm}`,
+          label: cursor.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        })
+      }
+      cursor.setMinutes(cursor.getMinutes() + PASO_MIN)
+    }
+
+    setHorariosDisponibles(opciones)
+    setHoraSeleccionada((actual) => (opciones.some((o) => o.value === actual) ? actual : (opciones[0]?.value || '')))
+  }, [cancha])
 
   const crearReserva = async () => {
     if (!session || session.role !== 'jugador') return
     setMsg('')
 
-    if (!fecha) {
-      setMsg('❌ Falta elegir la fecha — toca la casilla del calendario 📅')
-      return
-    }
-
-    const hoyStr = new Date().toISOString().slice(0, 10)
-    if (fecha < hoyStr) {
-      setMsg('❌ No puedes reservar una fecha que ya pasó.')
-      return
-    }
-
-    const horario = validarHorarioCancha(cancha, fecha, hora)
-    if (!horario.valido) {
-      setMsg('❌ ' + horario.mensaje)
+    if (!horaSeleccionada) {
+      setMsg('❌ No hay horarios disponibles para esta cancha en este momento.')
       return
     }
 
     setReservando(true)
     try {
-      const nuevaHoraMs = new Date(`${fecha}T${hora}`).getTime()
-      const inicioDia = new Date(`${fecha}T00:00:00`).toISOString()
-      const finDia = new Date(`${fecha}T23:59:59`).toISOString()
+      const hoyStr = new Date().toISOString().slice(0, 10)
+      const nuevaHora = new Date(`${hoyStr}T${horaSeleccionada}`)
+      const nuevaHoraMs = nuevaHora.getTime()
+      const ahoraMs = Date.now()
+
+      if (nuevaHoraMs < ahoraMs || nuevaHoraMs > ahoraMs + VENTANA_ANTICIPACION_MIN * 60000) {
+        setMsg('❌ Ese horario ya no está dentro de la ventana de reserva (máximo 3 horas de anticipación). Elige otro.')
+        setReservando(false)
+        return
+      }
+
+      // Revisamos las reservas activas del jugador durante el día de hoy, en cualquier cancha.
+      const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
+      const finHoy = new Date(); finHoy.setHours(23, 59, 59, 999)
+      const { data: misReservasHoy, error: errMisReservas } = await supabase
+        .from('reservas_cancha')
+        .select('id, cancha, fecha_hora, duracion_min')
+        .eq('jugador_id', session.id)
+        .eq('estado', 'activa')
+        .gte('fecha_hora', inicioHoy.toISOString())
+        .lte('fecha_hora', finHoy.toISOString())
+      if (errMisReservas) throw errMisReservas
+
+      const conReservaActiva = (misReservasHoy || []).find((r: any) => {
+        const finR = new Date(r.fecha_hora).getTime() + (r.duracion_min || DURACION_RESERVA_MIN) * 60000
+        return finR > ahoraMs
+      })
+      if (conReservaActiva) {
+        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        setMsg(`❌ Ya tienes una reserva activa hoy (${conReservaActiva.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} a las ${fmt(new Date(conReservaActiva.fecha_hora))}) — no puedes tener más de una a la vez.`)
+        setReservando(false)
+        return
+      }
+
+      const finesDeReservasPasadas = (misReservasHoy || [])
+        .map((r: any) => new Date(r.fecha_hora).getTime() + (r.duracion_min || DURACION_RESERVA_MIN) * 60000)
+        .filter((fin) => fin <= ahoraMs)
+      if (finesDeReservasPasadas.length > 0) {
+        const ultimoFin = Math.max(...finesDeReservasPasadas)
+        const disponibleDesde = ultimoFin + COOLDOWN_MIN * 60000
+        if (nuevaHoraMs < disponibleDesde) {
+          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+          setMsg(`❌ Ya usaste una cancha hoy — puedes volver a reservar a partir de las ${fmt(new Date(disponibleDesde))} (6 horas después).`)
+          setReservando(false)
+          return
+        }
+      }
+
+      const inicioDia = inicioHoy.toISOString()
+      const finDia = finHoy.toISOString()
 
       // No debe chocar con partidos de la escalera (bloquean 1h30) en esa cancha ese día
       const { data: retosDia, error: errRetos } = await supabase
@@ -165,12 +192,12 @@ export default function ReservasPage() {
         const inicioOcupado = new Date(conflictoReto.fecha_propuesta)
         const finOcupado = new Date(inicioOcupado.getTime() + DURACION_RETO_MIN * 60000)
         const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Esa cancha tiene un partido de la escalera a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Puedes reservar desde esa hora en adelante.`)
+        setMsg(`❌ Esa cancha tiene un partido de la escalera a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Elige otro horario.`)
         setReservando(false)
         return
       }
 
-      // No debe chocar con otras reservas casuales (bloquean 1h, o 1h30 si tienen la extensión) en esa cancha ese día
+      // No debe chocar con otras reservas casuales en esa cancha ese día
       const { data: reservasDia, error: errReservas } = await supabase
         .from('reservas_cancha')
         .select('id, fecha_hora, duracion_min')
@@ -187,7 +214,7 @@ export default function ReservasPage() {
         const inicioOcupado = new Date(conflictoReserva.fecha_hora)
         const finOcupado = new Date(inicioOcupado.getTime() + (conflictoReserva.duracion_min || DURACION_RESERVA_MIN) * 60000)
         const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Esa cancha ya está reservada a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Puedes reservar desde esa hora en adelante.`)
+        setMsg(`❌ Esa cancha ya está reservada a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Elige otro horario.`)
         setReservando(false)
         return
       }
@@ -195,14 +222,12 @@ export default function ReservasPage() {
       const { error } = await supabase.from('reservas_cancha').insert([{
         jugador_id: session.id,
         cancha,
-        fecha_hora: new Date(`${fecha}T${hora}`).toISOString(),
+        fecha_hora: nuevaHora.toISOString(),
         estado: 'activa',
       }])
       if (error) throw error
 
       setMsg('✅ ¡Cancha reservada!')
-      setFecha('')
-      setHora('12:00')
       cargarMisReservas()
     } catch (err: any) {
       setMsg('❌ Error al reservar: ' + err.message)
@@ -227,25 +252,6 @@ export default function ReservasPage() {
       alert('❌ ' + err.message)
     } finally {
       setCancelando(null)
-    }
-  }
-
-  const extenderReserva = async (reservaId: string) => {
-    setExtendiendo(reservaId)
-    setExtenderMsg('')
-    try {
-      const res = await fetch('/api/jugador/extender-reserva', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reservaId }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al extender')
-      cargarMisReservas()
-    } catch (err: any) {
-      setExtenderMsg('❌ ' + err.message)
-    } finally {
-      setExtendiendo(null)
     }
   }
 
@@ -274,8 +280,6 @@ export default function ReservasPage() {
     )
   }
 
-  const { h12, min, ampm } = partesDesde24(hora)
-
   return (
     <main className="court-bg" style={{ minHeight: '100vh', padding: '40px 20px' }}>
       <div style={{ maxWidth: '520px', margin: '0 auto' }}>
@@ -292,7 +296,7 @@ export default function ReservasPage() {
         {/* Formulario de reserva */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '28px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
           <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 18px 0' }}>
-            Cada reserva casual bloquea la cancha por 1 hora. No se necesita aprobación — queda confirmada al instante.
+            Las reservas son solo para hoy, con un máximo de 3 horas de anticipación. Cada reserva dura 1 hora y queda confirmada al instante.
           </p>
 
           <div style={{ marginBottom: '14px' }}>
@@ -307,57 +311,28 @@ export default function ReservasPage() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: '140px' }}>
-              <label style={labelStyle}>📅 Fecha</label>
-              <input
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                min={new Date().toISOString().slice(0, 10)}
-                style={inputStyle}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: '180px' }}>
-              <label style={labelStyle}>🕐 Hora</label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <select
-                  value={h12}
-                  onChange={(e) => setHora(combinarA24(e.target.value, min, ampm))}
-                  style={{ ...inputStyle, flex: 1 }}
-                >
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-                <select
-                  value={min}
-                  onChange={(e) => setHora(combinarA24(h12, e.target.value, ampm))}
-                  style={{ ...inputStyle, flex: 1 }}
-                >
-                  {['00', '15', '30', '45'].map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-                <select
-                  value={ampm}
-                  onChange={(e) => setHora(combinarA24(h12, min, e.target.value))}
-                  style={{ ...inputStyle, flex: 1 }}
-                >
-                  <option value="AM">AM</option>
-                  <option value="PM">PM</option>
-                </select>
-              </div>
-            </div>
+          <div style={{ marginBottom: '18px' }}>
+            <label style={labelStyle}>🕐 Horario disponible (próximas 3 horas)</label>
+            {horariosDisponibles.length === 0 ? (
+              <p style={{ fontSize: '13px', color: '#a83226', margin: 0 }}>
+                No hay horarios disponibles para esta cancha en este momento.
+              </p>
+            ) : (
+              <select value={horaSeleccionada} onChange={(e) => setHoraSeleccionada(e.target.value)} style={inputStyle}>
+                {horariosDisponibles.map((h) => (
+                  <option key={h.value} value={h.value}>{h.label}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <button
             onClick={crearReserva}
-            disabled={reservando}
+            disabled={reservando || horariosDisponibles.length === 0}
             style={{
-              width: '100%', padding: '14px', background: reservando ? '#ccc' : 'var(--color-ball)',
+              width: '100%', padding: '14px', background: (reservando || horariosDisponibles.length === 0) ? '#ccc' : 'var(--color-ball)',
               color: 'var(--color-ink)', border: 'none', borderRadius: '4px', fontSize: '15px', fontWeight: 700,
-              cursor: reservando ? 'not-allowed' : 'pointer',
+              cursor: (reservando || horariosDisponibles.length === 0) ? 'not-allowed' : 'pointer',
             }}
           >
             {reservando ? 'Reservando…' : '✅ Reservar cancha'}
@@ -377,7 +352,7 @@ export default function ReservasPage() {
         {/* Mis reservas */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', padding: '24px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 14px 0' }}>
-            📋 Mis próximas reservas
+            📋 Mis reservas de hoy
           </h2>
           {loadingMisReservas ? (
             <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
@@ -385,18 +360,10 @@ export default function ReservasPage() {
             <p style={{ fontSize: '13px', color: 'var(--color-line)' }}>No tienes reservas activas por ahora.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {extenderMsg && (
-                <div style={{ padding: '8px 12px', borderRadius: '4px', background: 'rgba(197,60,50,0.1)', color: '#a83226', fontSize: '12px' }}>
-                  {extenderMsg}
-                </div>
-              )}
               {misReservas.map((r) => {
                 const duracion = r.duracion_min || 60
                 const inicio = new Date(r.fecha_hora)
                 const fin = new Date(inicio.getTime() + duracion * 60000)
-                const yaExtendida = duracion > 60
-                const momentoHabilitado = new Date(fin.getTime() - 5 * 60000) // 5 min antes de que termine su hora
-                const yaSePuedeExtender = ahora >= momentoHabilitado.getTime()
                 return (
                   <div key={r.id} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
@@ -406,47 +373,20 @@ export default function ReservasPage() {
                     <span>
                       <strong>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</strong>
                       {' — '}
-                      {inicio.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                      {' · '}
                       {inicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                       {' – '}
                       {fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                      {yaExtendida && (
-                        <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 'bold', color: '#28a745', background: '#d4edda', padding: '2px 6px', borderRadius: '8px' }}>
-                          +30 min
-                        </span>
-                      )}
-                      {!yaExtendida && !yaSePuedeExtender && (
-                        <span style={{ display: 'block', fontSize: '11px', color: '#6b6b6b', marginTop: '2px' }}>
-                          Podrás pedir +30 min a partir de las {momentoHabilitado.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
                     </span>
-                    <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {!yaExtendida && yaSePuedeExtender && (
-                        <button
-                          onClick={() => extenderReserva(r.id)}
-                          disabled={extendiendo === r.id}
-                          title="Si nadie reservó justo después, se te asigna media hora más"
-                          style={{
-                            background: extendiendo === r.id ? '#ccc' : '#d4e157', color: 'var(--color-ink)', border: 'none', padding: '5px 12px',
-                            borderRadius: '4px', cursor: extendiendo === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
-                          }}
-                        >
-                          {extendiendo === r.id ? 'Revisando…' : '🎾 +30 min'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => cancelarReserva(r.id)}
-                        disabled={cancelando === r.id}
-                        style={{
-                          background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 12px',
-                          borderRadius: '4px', cursor: cancelando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
-                        }}
-                      >
-                        {cancelando === r.id ? 'Cancelando…' : 'Cancelar'}
-                      </button>
-                    </span>
+                    <button
+                      onClick={() => cancelarReserva(r.id)}
+                      disabled={cancelando === r.id}
+                      style={{
+                        background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 12px',
+                        borderRadius: '4px', cursor: cancelando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
+                      }}
+                    >
+                      {cancelando === r.id ? 'Cancelando…' : 'Cancelar'}
+                    </button>
                   </div>
                 )
               })}
