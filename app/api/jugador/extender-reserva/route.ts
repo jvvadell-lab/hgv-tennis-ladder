@@ -42,6 +42,12 @@ export async function POST(request: Request) {
     }
 
     const inicioMs = new Date(reserva.fecha_hora).getTime()
+    const finBaseMs = inicioMs + DURACION_BASE_MIN * 60000
+    const momentoHabilitadoMs = finBaseMs - 5 * 60000 // 5 min antes de que termine su hora
+    if (Date.now() < momentoHabilitadoMs) {
+      return NextResponse.json({ error: 'Todavía es muy temprano — puedes pedir la media hora extra 5 minutos antes de que termine tu hora.' }, { status: 400 })
+    }
+
     const inicioDia = new Date(inicioMs); inicioDia.setHours(0, 0, 0, 0)
     const finDia = new Date(inicioMs); finDia.setHours(23, 59, 59, 999)
 

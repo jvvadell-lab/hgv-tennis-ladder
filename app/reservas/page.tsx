@@ -70,6 +70,14 @@ export default function ReservasPage() {
   const [cancelando, setCancelando] = useState<string | null>(null)
   const [extendiendo, setExtendiendo] = useState<string | null>(null)
   const [extenderMsg, setExtenderMsg] = useState('')
+  const [ahora, setAhora] = useState(Date.now())
+
+  // Refrescamos "ahora" cada 30s para que el botón de +30 min aparezca solo
+  // sin que el jugador tenga que recargar la página manualmente.
+  useEffect(() => {
+    const intervalo = setInterval(() => setAhora(Date.now()), 30000)
+    return () => clearInterval(intervalo)
+  }, [])
 
   useEffect(() => {
     fetch('/api/me')
@@ -387,6 +395,8 @@ export default function ReservasPage() {
                 const inicio = new Date(r.fecha_hora)
                 const fin = new Date(inicio.getTime() + duracion * 60000)
                 const yaExtendida = duracion > 60
+                const momentoHabilitado = new Date(fin.getTime() - 5 * 60000) // 5 min antes de que termine su hora
+                const yaSePuedeExtender = ahora >= momentoHabilitado.getTime()
                 return (
                   <div key={r.id} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
@@ -406,9 +416,14 @@ export default function ReservasPage() {
                           +30 min
                         </span>
                       )}
+                      {!yaExtendida && !yaSePuedeExtender && (
+                        <span style={{ display: 'block', fontSize: '11px', color: '#6b6b6b', marginTop: '2px' }}>
+                          Podrás pedir +30 min a partir de las {momentoHabilitado.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                     </span>
                     <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {!yaExtendida && (
+                      {!yaExtendida && yaSePuedeExtender && (
                         <button
                           onClick={() => extenderReserva(r.id)}
                           disabled={extendiendo === r.id}
