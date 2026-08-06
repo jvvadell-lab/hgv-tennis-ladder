@@ -10,7 +10,7 @@ const supabase = createClient(
 const DURACION_RESERVA_MIN = 60
 const DURACION_RETO_MIN = 90
 const VENTANA_ANTICIPACION_MIN = 180 // máximo 3 horas de anticipación
-const COOLDOWN_MIN = 360 // 6 horas de espera tras terminar una reserva, para volver a reservar el mismo día
+const PENALIDAD_DIAS = 5 // días de espera si usó la cancha, o si no fue y no canceló a tiempo
 const PASO_MIN = 15 // granularidad de los horarios que se ofrecen (cada 15 min)
 
 function seSolapan(inicio1Ms: number, duracion1Min: number, inicio2Ms: number, duracion2Min: number) {
@@ -53,12 +53,21 @@ export default function ReservasPage() {
   const [misReservas, setMisReservas] = useState<any[]>([])
   const [loadingMisReservas, setLoadingMisReservas] = useState(true)
   const [cancelando, setCancelando] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState<string | null>(null)
+  const [ahora, setAhora] = useState(Date.now())
 
   useEffect(() => {
     fetch('/api/me')
       .then((r) => r.json())
       .then((data) => setSession(data.session))
       .finally(() => setChecking(false))
+  }, [])
+
+  // Refrescamos "ahora" cada 30s — así los botones de Cancelar/Confirmar
+  // aparecen o desaparecen solos según va pasando la hora, sin recargar.
+  useEffect(() => {
+    const intervalo = setInterval(() => setAhora(Date.now()), 30000)
+    return () => clearInterval(intervalo)
   }, [])
 
   const cargarMisReservas = useCallback(() => {
@@ -87,15 +96,14 @@ export default function ReservasPage() {
   const [horariosDisponibles, setHorariosDisponibles] = useState<{ value: string; label: string }[]>([])
 
   useEffect(() => {
-    const ahora = new Date()
+    const ahoraDate = new Date()
     const opciones: { value: string; label: string }[] = []
-    const cursor = new Date(ahora)
-    // Redondeamos hacia el próximo múltiplo de 15 min
+    const cursor = new Date(ahoraDate)
     const minutosSobrantes = cursor.getMinutes() % PASO_MIN
     if (minutosSobrantes !== 0) cursor.setMinutes(cursor.getMinutes() + (PASO_MIN - minutosSobrantes))
     cursor.setSeconds(0, 0)
 
-    const limite = new Date(ahora.getTime() + VENTANA_ANTICIPACION_MIN * 60000)
+    const limite = new Date(ahoraDate.getTime() + VENTANA_ANTICIPACION_MIN * 60000)
 
     while (cursor <= limite) {
       if (horaValidaParaCancha(cancha, cursor)) {
@@ -135,43 +143,48 @@ export default function ReservasPage() {
         return
       }
 
-      // Revisamos las reservas activas del jugador durante el día de hoy, en cualquier cancha.
-      const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
-      const finHoy = new Date(); finHoy.setHours(23, 59, 59, 999)
-      const { data: misReservasHoy, error: errMisReservas } = await supabase
+      // Traemos las reservas recientes del jugador (últimos días + hoy) en cualquier cancha,
+      // para revisar tanto si tiene una sin resolver, como si le toca esperar la penalidad.
+      const desdeVentana = new Date(ahoraMs - (PENALIDAD_DIAS + 1) * 24 * 60 * 60 * 1000)
+      const { data: misReservasRecientes, error: errMisReservas } = await supabase
         .from('reservas_cancha')
-        .select('id, cancha, fecha_hora, duracion_min')
+        .select('id, cancha, fecha_hora, estado, duracion_min')
         .eq('jugador_id', session.id)
-        .eq('estado', 'activa')
-        .gte('fecha_hora', inicioHoy.toISOString())
-        .lte('fecha_hora', finHoy.toISOString())
+        .in('estado', ['activa', 'usada'])
+        .gte('fecha_hora', desdeVentana.toISOString())
       if (errMisReservas) throw errMisReservas
 
-      const conReservaActiva = (misReservasHoy || []).find((r: any) => {
-        const finR = new Date(r.fecha_hora).getTime() + (r.duracion_min || DURACION_RESERVA_MIN) * 60000
-        return finR > ahoraMs
+      // 1) ¿Tiene una reserva sin resolver todavía (activa y su hora no ha pasado)?
+      const conReservaActiva = (misReservasRecientes || []).find((r: any) => {
+        if (r.estado !== 'activa') return false
+        return new Date(r.fecha_hora).getTime() > ahoraMs
       })
       if (conReservaActiva) {
         const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Ya tienes una reserva activa hoy (${conReservaActiva.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} a las ${fmt(new Date(conReservaActiva.fecha_hora))}) — no puedes tener más de una a la vez.`)
+        setMsg(`❌ Ya tienes una reserva activa (${conReservaActiva.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} a las ${fmt(new Date(conReservaActiva.fecha_hora))}) — no puedes tener más de una a la vez.`)
         setReservando(false)
         return
       }
 
-      const finesDeReservasPasadas = (misReservasHoy || [])
-        .map((r: any) => new Date(r.fecha_hora).getTime() + (r.duracion_min || DURACION_RESERVA_MIN) * 60000)
-        .filter((fin) => fin <= ahoraMs)
-      if (finesDeReservasPasadas.length > 0) {
-        const ultimoFin = Math.max(...finesDeReservasPasadas)
-        const disponibleDesde = ultimoFin + COOLDOWN_MIN * 60000
-        if (nuevaHoraMs < disponibleDesde) {
-          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-          setMsg(`❌ Ya usaste una cancha hoy — puedes volver a reservar a partir de las ${fmt(new Date(disponibleDesde))} (6 horas después).`)
+      // 2) ¿Tiene alguna reserva "penalizante" reciente? — la usó (estado='usada'),
+      // o quedó activa sin cancelar y su hora ya pasó (no fue y no avisó).
+      const penalizantes = (misReservasRecientes || []).filter((r: any) => {
+        const yaPaso = new Date(r.fecha_hora).getTime() <= ahoraMs
+        return r.estado === 'usada' || (r.estado === 'activa' && yaPaso)
+      })
+      if (penalizantes.length > 0) {
+        const ultimaMs = Math.max(...penalizantes.map((r: any) => new Date(r.fecha_hora).getTime()))
+        const disponibleDesde = ultimaMs + PENALIDAD_DIAS * 24 * 60 * 60 * 1000
+        if (ahoraMs < disponibleDesde) {
+          const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+          setMsg(`❌ Por tu última reserva, puedes volver a reservar a partir del ${fmt(new Date(disponibleDesde))} (${PENALIDAD_DIAS} días después). Si reservas y no puedes ir, cancela antes de la hora para evitar esta espera.`)
           setReservando(false)
           return
         }
       }
 
+      const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
+      const finHoy = new Date(); finHoy.setHours(23, 59, 59, 999)
       const inicioDia = inicioHoy.toISOString()
       const finDia = finHoy.toISOString()
 
@@ -227,7 +240,7 @@ export default function ReservasPage() {
       }])
       if (error) throw error
 
-      setMsg('✅ ¡Cancha reservada!')
+      setMsg('✅ ¡Cancha reservada! No olvides confirmar que llegaste, o cancelarla a tiempo si no vas a poder ir.')
       cargarMisReservas()
     } catch (err: any) {
       setMsg('❌ Error al reservar: ' + err.message)
@@ -237,7 +250,7 @@ export default function ReservasPage() {
   }
 
   const cancelarReserva = async (reservaId: string) => {
-    if (!confirm('¿Cancelar esta reserva?')) return
+    if (!confirm('¿Cancelar esta reserva? Al cancelar a tiempo, no tienes ninguna penalidad y puedes volver a reservar de inmediato.')) return
     setCancelando(reservaId)
     try {
       const res = await fetch('/api/jugador/cancelar-reserva', {
@@ -252,6 +265,24 @@ export default function ReservasPage() {
       alert('❌ ' + err.message)
     } finally {
       setCancelando(null)
+    }
+  }
+
+  const confirmarUso = async (reservaId: string) => {
+    setConfirmando(reservaId)
+    try {
+      const res = await fetch('/api/jugador/confirmar-uso-reserva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reservaId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al confirmar')
+      cargarMisReservas()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setConfirmando(null)
     }
   }
 
@@ -295,9 +326,14 @@ export default function ReservasPage() {
 
         {/* Formulario de reserva */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '28px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-          <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 18px 0' }}>
-            Las reservas son solo para hoy, con un máximo de 3 horas de anticipación. Cada reserva dura 1 hora y queda confirmada al instante.
+          <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 10px 0' }}>
+            Las reservas son solo para hoy, con un máximo de 3 horas de anticipación. Cada reserva dura 1 hora.
           </p>
+          <div style={{ background: 'rgba(230,126,34,0.1)', border: '1px solid rgba(230,126,34,0.3)', borderRadius: '4px', padding: '10px 14px', marginBottom: '18px' }}>
+            <p style={{ fontSize: '12px', color: '#7a4a0e', margin: 0 }}>
+              ⚠️ Si reservas y no puedes ir, <strong>cancela antes de la hora</strong> — no tiene penalidad. Si usas la cancha, o si no vas y no cancelas a tiempo, no podrás volver a reservar hasta dentro de {PENALIDAD_DIAS} días.
+            </p>
+          </div>
 
           <div style={{ marginBottom: '14px' }}>
             <label style={labelStyle}>🎾 Cancha</label>
@@ -364,6 +400,7 @@ export default function ReservasPage() {
                 const duracion = r.duracion_min || 60
                 const inicio = new Date(r.fecha_hora)
                 const fin = new Date(inicio.getTime() + duracion * 60000)
+                const yaEmpezo = ahora >= inicio.getTime()
                 return (
                   <div key={r.id} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
@@ -377,16 +414,32 @@ export default function ReservasPage() {
                       {' – '}
                       {fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    <button
-                      onClick={() => cancelarReserva(r.id)}
-                      disabled={cancelando === r.id}
-                      style={{
-                        background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 12px',
-                        borderRadius: '4px', cursor: cancelando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
-                      }}
-                    >
-                      {cancelando === r.id ? 'Cancelando…' : 'Cancelar'}
-                    </button>
+                    <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {yaEmpezo ? (
+                        <button
+                          onClick={() => confirmarUso(r.id)}
+                          disabled={confirmando === r.id}
+                          title="Confirma que llegaste y usaste la cancha"
+                          style={{
+                            background: confirmando === r.id ? '#ccc' : '#28a745', color: 'white', border: 'none', padding: '5px 12px',
+                            borderRadius: '4px', cursor: confirmando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
+                          }}
+                        >
+                          {confirmando === r.id ? 'Confirmando…' : '✅ Ya llegué'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => cancelarReserva(r.id)}
+                          disabled={cancelando === r.id}
+                          style={{
+                            background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 12px',
+                            borderRadius: '4px', cursor: cancelando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
+                          }}
+                        >
+                          {cancelando === r.id ? 'Cancelando…' : 'Cancelar'}
+                        </button>
+                      )}
+                    </span>
                   </div>
                 )
               })}

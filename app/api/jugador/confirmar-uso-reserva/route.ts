@@ -28,17 +28,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta reserva ya no está activa' }, { status: 400 })
     }
 
-    // Solo se puede cancelar ANTES de que llegue la hora reservada — si ya pasó,
-    // cancelar en este punto sería una forma de esquivar la penalidad por no asistir.
-    if (Date.now() >= new Date(reserva.fecha_hora).getTime()) {
-      return NextResponse.json({ error: 'Ya pasó la hora de tu reserva — no se puede cancelar a esta altura.' }, { status: 400 })
+    // Solo tiene sentido confirmar una vez que ya llegó la hora reservada.
+    if (Date.now() < new Date(reserva.fecha_hora).getTime()) {
+      return NextResponse.json({ error: 'Todavía no llega la hora de tu reserva.' }, { status: 400 })
     }
 
-    const { error } = await db.from('reservas_cancha').update({ estado: 'cancelada' }).eq('id', reservaId)
+    const { error } = await db.from('reservas_cancha').update({ estado: 'usada' }).eq('id', reservaId)
     if (error) throw error
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Error al cancelar la reserva' }, { status: 500 })
+    return NextResponse.json({ error: err.message || 'Error al confirmar' }, { status: 500 })
   }
 }

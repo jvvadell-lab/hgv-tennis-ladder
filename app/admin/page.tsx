@@ -2104,27 +2104,37 @@ export default function AdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {historialReservas.map((r: any, i: number) => (
-                          <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
-                            <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.jugadores?.nombre || '—'}</td>
-                            <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</td>
-                            <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
-                              {new Date(r.fecha_hora).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
-                              {new Date(r.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                            </td>
-                            <td style={{ padding: '10px 14px' }}>
-                              <span style={{
-                                fontSize: '12px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px',
-                                background: r.estado === 'activa' ? '#d4edda' : '#f8d7da',
-                                color: r.estado === 'activa' ? '#155724' : '#721c24',
-                              }}>
-                                {r.estado}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                        {historialReservas.map((r: any, i: number) => {
+                          const yaPaso = new Date(r.fecha_hora).getTime() <= Date.now()
+                          const noAsistio = r.estado === 'activa' && yaPaso
+                          const estadoInfo = r.estado === 'usada'
+                            ? { label: 'usada', bg: '#d1ecf1', color: '#0c5460' }
+                            : r.estado === 'cancelada'
+                            ? { label: 'cancelada', bg: '#f8d7da', color: '#721c24' }
+                            : noAsistio
+                            ? { label: 'no asistió', bg: '#fee2e2', color: '#c0392b' }
+                            : { label: 'activa (pendiente)', bg: '#d4edda', color: '#155724' }
+                          return (
+                            <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
+                              <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.jugadores?.nombre || '—'}</td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
+                                {new Date(r.fecha_hora).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
+                                {new Date(r.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td style={{ padding: '10px 14px' }}>
+                                <span style={{
+                                  fontSize: '12px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px',
+                                  background: estadoInfo.bg, color: estadoInfo.color,
+                                }}>
+                                  {estadoInfo.label}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
