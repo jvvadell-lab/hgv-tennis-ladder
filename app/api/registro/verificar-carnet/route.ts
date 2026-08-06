@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const { data: jugador, error } = await db
       .from('jugadores')
-      .select('foto_carnet_url, numero_accion')
+      .select('foto_carnet_url, numero_accion, estado_verificacion')
       .eq('id', jugadorId)
       .maybeSingle()
     if (error) throw error
@@ -20,9 +20,17 @@ export async function POST(request: Request) {
 
     const { ocr, coincide } = await verificarNumeroAccion(jugador.foto_carnet_url, jugador.numero_accion || '')
 
+    const updateData: any = { numero_accion_ocr: ocr, numero_accion_coincide: coincide }
+    // Si la IA confirma que el número coincide con la foto, verificamos la membresía
+    // automáticamente — así el admin no tiene que revisarlo a mano. Nunca reescribimos
+    // un "no_permitido" que un admin haya puesto a propósito.
+    if (coincide === true && jugador.estado_verificacion !== 'no_permitido') {
+      updateData.estado_verificacion = 'verificado'
+    }
+
     await db
       .from('jugadores')
-      .update({ numero_accion_ocr: ocr, numero_accion_coincide: coincide })
+      .update(updateData)
       .eq('id', jugadorId)
 
     return NextResponse.json({ ok: true, ocr, coincide })

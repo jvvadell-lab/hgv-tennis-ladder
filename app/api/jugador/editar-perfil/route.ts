@@ -43,11 +43,24 @@ export async function POST(request: Request) {
     // La foto ya se sube al bucket desde el cliente antes de llamar aquí — solo guardamos la URL resultante.
     if (fotoCarnetUrl) {
       updateData.foto_carnet_url = fotoCarnetUrl
-      // Verificamos el número de acción contra la foto nueva — no bloquea el guardado,
-      // solo queda registrado para que el admin lo revise si no coincide.
+      // Verificamos el número de acción contra la foto nueva — si la IA confirma que
+      // coincide, verificamos la membresía automáticamente (sin pisar un "no_permitido"
+      // que un admin haya puesto a propósito). Si no coincide o no se pudo leer, queda
+      // pendiente para que el admin lo revise a mano, igual que antes.
       const { ocr, coincide } = await verificarNumeroAccion(fotoCarnetUrl, numeroAccion || '')
       updateData.numero_accion_ocr = ocr
       updateData.numero_accion_coincide = coincide
+
+      if (coincide === true) {
+        const { data: actual } = await db
+          .from('jugadores')
+          .select('estado_verificacion')
+          .eq('id', session.id)
+          .maybeSingle()
+        if (actual?.estado_verificacion !== 'no_permitido') {
+          updateData.estado_verificacion = 'verificado'
+        }
+      }
     }
 
     const { error } = await db.from('jugadores').update(updateData).eq('id', session.id)
