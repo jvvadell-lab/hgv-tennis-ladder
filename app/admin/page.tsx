@@ -2793,48 +2793,6 @@ export default function AdminPage() {
                     )}
                     </>
                   )}
-
-                  {temporadaActiva.sorteo_realizado && Object.keys(ladderPreview).length > 0 && (
-                    <div style={{ marginTop: '30px' }}>
-                      <h3 style={{ color: 'var(--color-ink)' }}>🏆 Premios sugeridos</h3>
-                      <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 16px 0' }}>
-                        Basado en el escalafón actual — el campeón (posición #1) y quien más subió desde su posición inicial, por categoría.
-                      </p>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-                        {Object.entries(ladderPreview).map(([key, lista]) => {
-                          const [catVal, genVal] = key.split('__')
-                          const catLabel = CATEGORIAS.find(c => c.value === catVal)?.label || catVal
-                          const genLabel = GENEROS.find(g => g.value === genVal)?.label || genVal
-
-                          const campeon = lista.find((p: any) => p.posicion === 1)
-
-                          const conProgreso = lista.map((p: any) => ({
-                            ...p,
-                            progreso: (p.posicion_inicial ?? p.posicion) - p.posicion,
-                          }))
-                          const mayorProgreso = conProgreso.reduce(
-                            (max: any, p: any) => (!max || p.progreso > max.progreso ? p : max),
-                            null
-                          )
-
-                          return (
-                            <div key={key} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '18px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderTop: '3px solid var(--color-ball)' }}>
-                              <h4 style={{ color: 'var(--color-ink)', marginTop: 0, marginBottom: '12px' }}>{catLabel} — {genLabel}</h4>
-                              <p style={{ margin: '0 0 8px 0', fontSize: '14px' }}>
-                                🏆 <strong>Campeón:</strong> {campeon?.jugadores?.nombre || '—'}
-                              </p>
-                              <p style={{ margin: 0, fontSize: '14px' }}>
-                                📈 <strong>Mayor progreso:</strong> {mayorProgreso?.jugadores?.nombre || '—'}
-                                {mayorProgreso && mayorProgreso.progreso > 0 && (
-                                  <span style={{ color: '#28a745', fontWeight: 'bold' }}> (+{mayorProgreso.progreso} posiciones)</span>
-                                )}
-                              </p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
 
@@ -2926,6 +2884,45 @@ export default function AdminPage() {
                                     </div>
                                   )
                                 })}
+                              </div>
+                            )}
+
+                            {historialPosiciones[t.id] && Object.keys(historialPosiciones[t.id]).length > 0 && (
+                              <div style={{ marginTop: '20px' }}>
+                                <h5 style={{ margin: '0 0 10px 0', color: 'var(--color-ink)' }}>🏆 Premios sugeridos (resultado final)</h5>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                                  {Object.entries(historialPosiciones[t.id]).map(([key, lista]) => {
+                                    const [catVal, genVal] = key.split('__')
+                                    const catLabel = CATEGORIAS.find(c => c.value === catVal)?.label || catVal
+                                    const genLabel = GENEROS.find(g => g.value === genVal)?.label || genVal
+
+                                    const campeon = (lista as any[]).find((p: any) => p.posicion === 1)
+
+                                    const conProgreso = (lista as any[]).map((p: any) => ({
+                                      ...p,
+                                      progreso: (p.posicion_inicial ?? p.posicion) - p.posicion,
+                                    }))
+                                    const mayorProgreso = conProgreso.reduce(
+                                      (max: any, p: any) => (!max || p.progreso > max.progreso ? p : max),
+                                      null
+                                    )
+
+                                    return (
+                                      <div key={key} style={{ background: '#fff', border: '1px solid #eee', borderRadius: '8px', padding: '12px 14px', borderTop: '3px solid var(--color-ball)' }}>
+                                        <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', color: 'var(--color-ink)', fontSize: '13px' }}>{catLabel} — {genLabel}</p>
+                                        <p style={{ margin: '0 0 6px 0', fontSize: '13px' }}>
+                                          🏆 <strong>Campeón:</strong> {campeon?.jugadores?.nombre || '—'}
+                                        </p>
+                                        <p style={{ margin: 0, fontSize: '13px' }}>
+                                          📈 <strong>Mayor progreso:</strong> {mayorProgreso?.jugadores?.nombre || '—'}
+                                          {mayorProgreso && mayorProgreso.progreso > 0 && (
+                                            <span style={{ color: '#28a745', fontWeight: 'bold' }}> (+{mayorProgreso.progreso} posiciones)</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
                               </div>
                             )}
                           </div>
