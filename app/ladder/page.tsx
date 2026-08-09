@@ -979,10 +979,10 @@ export default function LadderPage() {
           <>
             {/* Filtros */}
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-              <select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={selectStyle}>
+              <select value={categoria} onChange={(e) => setCategoria(e.target.value)} style={selectStyleFiltro}>
                 {CATEGORIAS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
-              <select value={genero} onChange={(e) => setGenero(e.target.value)} style={selectStyle}>
+              <select value={genero} onChange={(e) => setGenero(e.target.value)} style={selectStyleFiltro}>
                 {GENEROS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
               </select>
             </div>
@@ -1791,6 +1791,16 @@ const selectStyle: React.CSSProperties = {
   borderRadius: '8px',
   border: 'none',
   fontSize: '14px',
+}
+
+const selectStyleFiltro: React.CSSProperties = {
+  padding: '12px 18px',
+  borderRadius: '8px',
+  border: 'none',
+  fontSize: '18px',
+  fontWeight: 700,
+  color: '#ffffff',
+  background: 'rgba(247,243,234,0.12)',
 }
 
 const labelStyle: React.CSSProperties = {
