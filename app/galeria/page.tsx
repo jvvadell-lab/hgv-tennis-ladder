@@ -6,6 +6,9 @@ type FotoGaleria = {
   id: string
   foto_url: string
   created_at: string
+  marcador_retador: string | null
+  marcador_retado: string | null
+  no_presentado: boolean | null
   retos: {
     cancha: string | null
     nombre_cancha_foranea: string | null
@@ -24,6 +27,14 @@ function nombreCancha(f: FotoGaleria) {
   return c
 }
 
+// El marcador ya viene listo desde el lado del retador (ej: "6-4, 6-3" o,
+// si hubo walkover, "No presentado"/"W.O.") — solo lo mostramos tal cual.
+function textoMarcador(f: FotoGaleria) {
+  if (!f.marcador_retador) return null
+  if (f.no_presentado) return '⚠️ No se presentó uno de los jugadores'
+  return f.marcador_retador
+}
+
 export default function GaleriaPage() {
   const [fotos, setFotos] = useState<FotoGaleria[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,7 +43,7 @@ export default function GaleriaPage() {
   useEffect(() => {
     supabase
       .from('resultados')
-      .select('id, foto_url, created_at, retos:reto_id(cancha, nombre_cancha_foranea, fecha_propuesta, retador:retador_id(nombre), retado:retado_id(nombre))')
+      .select('id, foto_url, created_at, marcador_retador, marcador_retado, no_presentado, retos:reto_id(cancha, nombre_cancha_foranea, fecha_propuesta, retador:retador_id(nombre), retado:retado_id(nombre))')
       .not('foto_url', 'is', null)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
@@ -113,6 +124,11 @@ export default function GaleriaPage() {
                   <p style={{ color: 'var(--color-chalk)', fontSize: '14px', margin: 0, fontWeight: 600 }}>
                     {f.retos?.retador?.nombre} vs {f.retos?.retado?.nombre}
                   </p>
+                  {textoMarcador(f) && (
+                    <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-chalk)', fontSize: '12px', margin: '4px 0 0 0', opacity: 0.85 }}>
+                      {textoMarcador(f)}
+                    </p>
+                  )}
                   <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px', margin: '5px 0 0 0' }}>
                     {new Date(f.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
@@ -175,7 +191,15 @@ export default function GaleriaPage() {
             }}>
               {fotoSeleccionada.retos?.retador?.nombre} vs {fotoSeleccionada.retos?.retado?.nombre}
             </p>
-            <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '13px', margin: '10px 0 0 0' }}>
+            {textoMarcador(fotoSeleccionada) && (
+              <p style={{
+                fontFamily: 'var(--font-mono)', color: 'var(--color-ball)',
+                fontSize: '16px', fontWeight: 700, margin: '8px 0 0 0',
+              }}>
+                {textoMarcador(fotoSeleccionada)}
+              </p>
+            )}
+            <p style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', fontSize: '13px', margin: '10px 0 0 0' }}>
               {fotoSeleccionada.retos?.fecha_propuesta
                 ? new Date(fotoSeleccionada.retos.fecha_propuesta).toLocaleDateString('es-ES', {
                     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
