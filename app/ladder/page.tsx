@@ -958,6 +958,10 @@ export default function LadderPage() {
                 Mi Perfil
               </a>
               {' — '}
+              <a href="/galeria" style={{ color: 'var(--color-ball)', textDecoration: 'underline', fontSize: 'inherit' }}>
+                🖼️ Galería
+              </a>
+              {' — '}
               <button
                 onClick={cerrarSesion}
                 style={{
