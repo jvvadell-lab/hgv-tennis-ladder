@@ -367,6 +367,27 @@ export default function AdminPage() {
     }
   }
 
+  const [eliminandoReto, setEliminandoReto] = useState<string | null>(null)
+
+  const eliminarReto = async (retoId: string) => {
+    if (!confirm('¿Eliminar este reto rechazado por completo? No se puede deshacer.')) return
+    setEliminandoReto(retoId)
+    try {
+      const res = await fetch('/api/admin/eliminar-reto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al eliminar')
+      fetchRetos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setEliminandoReto(null)
+    }
+  }
+
   const fetchRetos = async () => {
     setLoadingRetos(true)
     const { data } = await supabase
@@ -1919,6 +1940,18 @@ export default function AdminPage() {
                                     style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
                                   >
                                     Cancelar reto
+                                  </button>
+                                )}
+                                {r.estado === 'rechazado' && (
+                                  <button
+                                    onClick={() => eliminarReto(r.id)}
+                                    disabled={eliminandoReto === r.id}
+                                    style={{
+                                      background: eliminandoReto === r.id ? '#ccc' : '#fee2e2', color: '#dc2626', border: 'none',
+                                      padding: '6px 12px', borderRadius: '6px', cursor: eliminandoReto === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {eliminandoReto === r.id ? 'Eliminando…' : '🗑️ Eliminar'}
                                   </button>
                                 )}
                               </td>
