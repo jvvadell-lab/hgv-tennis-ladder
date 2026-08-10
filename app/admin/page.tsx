@@ -1441,9 +1441,17 @@ export default function AdminPage() {
             {menuItems.find(m => m.id === activeSection)?.icon}{' '}
             {menuItems.find(m => m.id === activeSection)?.label}
           </h1>
-          <span style={{ color: '#6b6b6b', fontSize: '14px' }}>
-            🕐 {new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <span style={{ color: '#6b6b6b', fontSize: '14px' }}>
+              🕐 {new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </span>
+            <a href="/" style={{
+              color: 'var(--color-court)', fontSize: '14px', fontWeight: 700, textDecoration: 'none',
+              border: '1px solid var(--color-court)', borderRadius: '6px', padding: '6px 14px', whiteSpace: 'nowrap',
+            }}>
+              🎾 Volver al inicio
+            </a>
+          </div>
         </div>
 
         <div className="admin-content-inner" style={{ padding: '30px' }}>
