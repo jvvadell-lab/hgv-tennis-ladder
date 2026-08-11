@@ -102,6 +102,8 @@ export default function LadderPage() {
   const [standbyMap, setStandbyMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de standby (viaje) en esta temporada
   const [rankingStats, setRankingStats] = useState<Record<string, any>>({}) // jugador_id -> { jugados, ganados, perdidos, noPresentado }
   const [retosConResultadoPendiente, setRetosConResultadoPendiente] = useState<Set<string>>(new Set())
+  const [resultadosPorReto, setResultadosPorReto] = useState<Record<string, { id: string; foto_url: string | null }>>({})
+  const [subiendoFotoResultadoId, setSubiendoFotoResultadoId] = useState<string | null>(null)
   const [proximosPartidos, setProximosPartidos] = useState<ProximoPartido[]>([])
   const [historial, setHistorial] = useState<any[]>([])
   const [historialAbierto, setHistorialAbierto] = useState<string | null>(null)
@@ -269,6 +271,16 @@ export default function LadderPage() {
           .eq('validado', false)
         setRetosConResultadoPendiente(new Set((resultadosPend || []).map((r: any) => r.reto_id)))
 
+        // Traemos el resultado (id + foto) de cada reto, sin importar si ya está
+        // validado o no — así el jugador puede agregar/cambiar la foto después.
+        const { data: resultadosTodos } = await supabase
+          .from('resultados')
+          .select('id, reto_id, foto_url')
+          .in('reto_id', retoIds)
+        const mapaResultados: Record<string, { id: string; foto_url: string | null }> = {}
+        ;(resultadosTodos || []).forEach((r: any) => { mapaResultados[r.reto_id] = { id: r.id, foto_url: r.foto_url } })
+        setResultadosPorReto(mapaResultados)
+
         // Calcular "enfriamiento": si un rival me ganó hace menos de 5 días,
         // no puedo volver a retarlo hasta que se cumplan esos 5 días.
         const { data: resultadosJugados } = await supabase
@@ -298,6 +310,7 @@ export default function LadderPage() {
       } else {
         setRetosConResultadoPendiente(new Set())
         setCooldowns({})
+        setResultadosPorReto({})
       }
     }
 
@@ -838,6 +851,32 @@ export default function LadderPage() {
     setResultadoRetoId(null)
     setModoNoPresentado(null)
     cargarDatos()
+  }
+
+  async function subirFotoResultadoPosterior(resultadoId: string, file: File) {
+    setSubiendoFotoResultadoId(resultadoId)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${resultadoId}-${Date.now()}.${ext}`
+      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, file)
+      if (errSubida) throw errSubida
+      const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
+
+      const res = await fetch('/api/jugador/agregar-foto-resultado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultadoId, fotoUrl: urlData.publicUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar la foto')
+
+      setActionMsg('✅ Foto agregada.')
+      cargarDatos()
+    } catch (err: any) {
+      setActionMsg('❌ Error al subir la foto: ' + err.message)
+    } finally {
+      setSubiendoFotoResultadoId(null)
+    }
   }
 
   async function cerrarSesion() {
@@ -1404,6 +1443,37 @@ export default function LadderPage() {
                         <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#5c5c5c', fontStyle: 'italic' }}>
                           💬 {r.comentarios}
                         </p>
+                      )}
+
+                      {resultadosPorReto[r.id] && (
+                        <div style={{ margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                          {resultadosPorReto[r.id].foto_url && (
+                            <img
+                              src={resultadosPorReto[r.id].foto_url!}
+                              alt="Foto del partido"
+                              style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ddd' }}
+                            />
+                          )}
+                          <label style={{
+                            fontSize: '12px', color: 'var(--color-court)', fontWeight: 'bold', cursor: 'pointer',
+                            border: '1px solid var(--color-court)', borderRadius: '6px', padding: '5px 10px',
+                          }}>
+                            {subiendoFotoResultadoId === resultadosPorReto[r.id].id
+                              ? '⏳ Subiendo…'
+                              : resultadosPorReto[r.id].foto_url ? '📷 Cambiar foto' : '📷 Agregar foto'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              disabled={subiendoFotoResultadoId === resultadosPorReto[r.id].id}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) subirFotoResultadoPosterior(resultadosPorReto[r.id].id, file)
+                                e.target.value = ''
+                              }}
+                            />
+                          </label>
+                        </div>
                       )}
 
                       {/* Aceptar / rechazar si me retaron a mí */}
