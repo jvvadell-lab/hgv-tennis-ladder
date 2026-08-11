@@ -107,6 +107,7 @@ export default function AdminPage() {
   const [loadingResultados, setLoadingResultados] = useState(false)
   const [aprobando, setAprobando] = useState<string | null>(null)
   const [resultadosMsg, setResultadosMsg] = useState('')
+  const [subiendoFotoResultadoId, setSubiendoFotoResultadoId] = useState<string | null>(null)
 
   const [fotosGaleria, setFotosGaleria] = useState<any[]>([])
   const [loadingFotos, setLoadingFotos] = useState(false)
@@ -136,7 +137,7 @@ export default function AdminPage() {
     const { data } = await supabase
       .from('resultados')
       .select(`
-        id, marcador_retador, marcador_retado, posiciones_intercambiadas, observaciones, created_at, validado, ganador_id, no_presentado,
+        id, marcador_retador, marcador_retado, posiciones_intercambiadas, observaciones, created_at, validado, ganador_id, no_presentado, foto_url,
         ganador:ganador_id(nombre),
         retos:reto_id(
           id, temporada_id, retador_id, retado_id, cancha, nombre_cancha_foranea, fecha_propuesta,
@@ -170,6 +171,32 @@ export default function AdminPage() {
       setResultadosMsg('❌ Error al aprobar: ' + err.message)
     } finally {
       setAprobando(null)
+    }
+  }
+
+  const subirFotoResultadoAdmin = async (resultadoId: string, file: File) => {
+    setSubiendoFotoResultadoId(resultadoId)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${resultadoId}-${Date.now()}.${ext}`
+      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, file)
+      if (errSubida) throw errSubida
+      const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
+
+      const res = await fetch('/api/admin/agregar-foto-resultado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultadoId, fotoUrl: urlData.publicUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar la foto')
+
+      setResultadosMsg('✅ Foto agregada.')
+      fetchResultados()
+    } catch (err: any) {
+      setResultadosMsg('❌ Error al subir la foto: ' + err.message)
+    } finally {
+      setSubiendoFotoResultadoId(null)
     }
   }
 
@@ -1356,6 +1383,35 @@ export default function AdminPage() {
     return colors[cat] || '#666'
   }
 
+  const FotoResultadoControl = ({ r }: { r: any }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {r.foto_url && (
+        <img
+          src={r.foto_url}
+          alt="Foto del partido"
+          style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ddd' }}
+        />
+      )}
+      <label style={{
+        fontSize: '11px', color: 'var(--color-court)', fontWeight: 'bold', cursor: 'pointer',
+        border: '1px solid var(--color-court)', borderRadius: '6px', padding: '4px 8px', whiteSpace: 'nowrap',
+      }}>
+        {subiendoFotoResultadoId === r.id ? '⏳...' : r.foto_url ? '📷 Cambiar' : '📷 Agregar'}
+        <input
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          disabled={subiendoFotoResultadoId === r.id}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) subirFotoResultadoAdmin(r.id, file)
+            e.target.value = ''
+          }}
+        />
+      </label>
+    </div>
+  )
+
   if (checkingSession) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="loading-row">
@@ -2244,17 +2300,20 @@ export default function AdminPage() {
                               {' · '}Enviado {new Date(r.created_at).toLocaleDateString('es-ES')}
                             </p>
                           </div>
-                          <button
-                            onClick={() => aprobarResultado(r)}
-                            disabled={aprobando === r.id}
-                            style={{
-                              background: aprobando === r.id ? '#ccc' : '#28a745', color: 'var(--color-chalk)', border: 'none',
-                              padding: '10px 18px', borderRadius: '8px', cursor: aprobando === r.id ? 'not-allowed' : 'pointer',
-                              fontSize: '14px', fontWeight: 'bold'
-                            }}
-                          >
-                            {aprobando === r.id ? '⏳ Aprobando...' : '✅ Aprobar'}
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <FotoResultadoControl r={r} />
+                            <button
+                              onClick={() => aprobarResultado(r)}
+                              disabled={aprobando === r.id}
+                              style={{
+                                background: aprobando === r.id ? '#ccc' : '#28a745', color: 'var(--color-chalk)', border: 'none',
+                                padding: '10px 18px', borderRadius: '8px', cursor: aprobando === r.id ? 'not-allowed' : 'pointer',
+                                fontSize: '14px', fontWeight: 'bold'
+                              }}
+                            >
+                              {aprobando === r.id ? '⏳ Aprobando...' : '✅ Aprobar'}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2277,6 +2336,7 @@ export default function AdminPage() {
                             <th style={{ padding: '14px 16px', textAlign: 'left' }}>🔀 Intercambio</th>
                             <th style={{ padding: '14px 16px', textAlign: 'left' }}>🏆 Categoría</th>
                             <th style={{ padding: '14px 16px', textAlign: 'left' }}>📅 Validado</th>
+                            <th style={{ padding: '14px 16px', textAlign: 'left' }}>📷 Foto</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2307,6 +2367,9 @@ export default function AdminPage() {
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b6b6b' }}>
                                 {new Date(r.created_at).toLocaleDateString('es-ES')}
+                              </td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <FotoResultadoControl r={r} />
                               </td>
                             </tr>
                           ))}
