@@ -271,7 +271,9 @@ export default function LadderPage() {
       setMisRetos((retos as any) || [])
 
       const { data: fm } = await supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle()
-      const hoyStr = new Date().toISOString().slice(0, 10)
+      // Venezuela es UTC-4 fijo — calculamos "hoy" así en vez de con toISOString()
+      // directo, para que no se adelante un día pasadas las 8:00pm hora local.
+      const hoyStr = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
       setFuerzaMayorActivo(!!fm?.activo && fm?.fecha === hoyStr)
 
       const retoIds = (retos || []).map((r: any) => r.id)
@@ -551,8 +553,10 @@ export default function LadderPage() {
       return
     }
 
-    const hoyStr = new Date().toISOString().slice(0, 10)
-    const fechaOriginal = new Date(reto.fecha_propuesta).toISOString().slice(0, 10)
+    // Venezuela es UTC-4 fijo — restamos 4 horas antes de leer la fecha en ambos
+    // lados, para que la comparación no se rompa pasadas las 8:00pm hora local.
+    const hoyStr = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const fechaOriginal = new Date(new Date(reto.fecha_propuesta).getTime() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
     if (fechaOriginal !== hoyStr) {
       setReagendoMsg('❌ Este partido no está programado para hoy — el reagendamiento por fuerza mayor solo aplica a los de hoy.')
       return
@@ -1568,7 +1572,8 @@ export default function LadderPage() {
                       )}
 
                       {fuerzaMayorActivo && ['pendiente', 'aceptado'].includes(r.estado) && r.fecha_propuesta &&
-                        new Date(r.fecha_propuesta).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) && (
+                        new Date(new Date(r.fecha_propuesta).getTime() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10) ===
+                          new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10) && (
                         <div style={{ margin: '0 0 10px 0' }}>
                           {reagendandoRetoId === r.id ? (
                             <div style={{ background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '8px', padding: '10px 12px' }}>

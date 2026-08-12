@@ -316,7 +316,8 @@ export default function AdminPage() {
     if (activeSection === 'challenges') {
       fetchRetos()
       supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle().then(({ data }) => {
-        const hoy = new Date().toISOString().slice(0, 10)
+        // Mismo cálculo de "hoy" en hora de Venezuela (UTC-4) usado en toda esta función.
+        const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
         setFuerzaMayorActivo(!!data?.activo && data?.fecha === hoy)
       })
     }
