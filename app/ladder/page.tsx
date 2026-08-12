@@ -1588,12 +1588,39 @@ export default function LadderPage() {
                                   min={new Date().toISOString().slice(0, 10)}
                                   style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
                                 />
-                                <input
-                                  type="time"
-                                  value={nuevaHoraReagendar}
-                                  onChange={(e) => setNuevaHoraReagendar(e.target.value)}
-                                  style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
-                                />
+                                {(() => {
+                                  const { h12, min, ampm } = partesDesde24(nuevaHoraReagendar)
+                                  return (
+                                    <>
+                                      <select
+                                        value={h12}
+                                        onChange={(e) => setNuevaHoraReagendar(combinarA24(e.target.value, min, ampm))}
+                                        style={{ padding: '6px 4px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
+                                      >
+                                        {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
+                                          <option key={n} value={n}>{n}</option>
+                                        ))}
+                                      </select>
+                                      <select
+                                        value={min}
+                                        onChange={(e) => setNuevaHoraReagendar(combinarA24(h12 || '12', e.target.value, ampm))}
+                                        style={{ padding: '6px 4px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
+                                      >
+                                        {['00', '15', '30', '45'].map((m) => (
+                                          <option key={m} value={m}>{m}</option>
+                                        ))}
+                                      </select>
+                                      <select
+                                        value={ampm}
+                                        onChange={(e) => setNuevaHoraReagendar(combinarA24(h12 || '12', min, e.target.value))}
+                                        style={{ padding: '6px 4px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
+                                      >
+                                        <option value="AM">AM</option>
+                                        <option value="PM">PM</option>
+                                      </select>
+                                    </>
+                                  )
+                                })()}
                                 <select
                                   value={nuevaCanchaReagendar}
                                   onChange={(e) => setNuevaCanchaReagendar(e.target.value)}
