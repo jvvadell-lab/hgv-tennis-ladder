@@ -553,15 +553,6 @@ export default function LadderPage() {
       return
     }
 
-    // Venezuela es UTC-4 fijo — restamos 4 horas antes de leer la fecha en ambos
-    // lados, para que la comparación no se rompa pasadas las 8:00pm hora local.
-    const hoyStr = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const fechaOriginal = new Date(new Date(reto.fecha_propuesta).getTime() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    if (fechaOriginal !== hoyStr) {
-      setReagendoMsg('❌ Este partido no está programado para hoy — el reagendamiento por fuerza mayor solo aplica a los de hoy.')
-      return
-    }
-
     if (!nuevaFechaReagendar || !nuevaHoraReagendar) {
       setReagendoMsg('❌ Elige la nueva fecha y hora.')
       return
@@ -584,67 +575,19 @@ export default function LadderPage() {
     setGuardandoReagendo(true)
     try {
       const nuevaFechaHora = new Date(`${nuevaFechaReagendar}T${nuevaHoraReagendar}`)
-      const nuevaHoraMs = nuevaFechaHora.getTime()
-      const DURACION_PARTIDO_MS = 90 * 60 * 1000
 
-      if (cancha && cancha !== 'FORANEA') {
-        const inicioDia = new Date(`${nuevaFechaReagendar}T00:00:00`)
-        const finDia = new Date(`${nuevaFechaReagendar}T23:59:59`)
-
-        const { data: partidosCancha, error: errCancha } = await supabase
-          .from('retos')
-          .select('id, fecha_propuesta')
-          .eq('temporada_id', temporadaId)
-          .eq('cancha', cancha)
-          .in('estado', ['pendiente', 'aceptado'])
-          .neq('id', reto.id)
-          .gte('fecha_propuesta', inicioDia.toISOString())
-          .lte('fecha_propuesta', finDia.toISOString())
-        if (errCancha) throw errCancha
-
-        const conflicto = (partidosCancha || []).find((r: any) =>
-          Math.abs(new Date(r.fecha_propuesta).getTime() - nuevaHoraMs) < DURACION_PARTIDO_MS
-        )
-        if (conflicto) {
-          const horaConflicto = new Date(conflicto.fecha_propuesta)
-          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-          setReagendoMsg(`❌ ${cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene otro partido cerca de esa hora (${fmt(horaConflicto)}). Elige otro horario.`)
-          setGuardandoReagendo(false)
-          return
-        }
-
-        const { data: reservasCancha, error: errReservas } = await supabase
-          .from('reservas_cancha')
-          .select('id, fecha_hora, duracion_min')
-          .eq('cancha', cancha)
-          .eq('estado', 'activa')
-          .gte('fecha_hora', inicioDia.toISOString())
-          .lte('fecha_hora', finDia.toISOString())
-        if (errReservas) throw errReservas
-
-        const finNuevo = nuevaHoraMs + DURACION_PARTIDO_MS
-        const conflictoReserva = (reservasCancha || []).find((r: any) => {
-          const inicioReserva = new Date(r.fecha_hora).getTime()
-          const finReserva = inicioReserva + (r.duracion_min || 60) * 60 * 1000
-          return nuevaHoraMs < finReserva && inicioReserva < finNuevo
-        })
-        if (conflictoReserva) {
-          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-          setReagendoMsg(`❌ ${cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual cerca de esa hora (${fmt(new Date(conflictoReserva.fecha_hora))}). Elige otro horario.`)
-          setGuardandoReagendo(false)
-          return
-        }
-      }
-
-      const { error } = await supabase
-        .from('retos')
-        .update({
-          fecha_propuesta: nuevaFechaHora.toISOString(),
+      const res = await fetch('/api/jugador/reagendar-reto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          retoId: reto.id,
+          nuevaFechaHora: nuevaFechaHora.toISOString(),
           cancha: nuevaCanchaReagendar,
-          nombre_cancha_foranea: nuevaCanchaReagendar === 'FORANEA' ? nuevaCanchaForaneaReagendar.trim() : null,
-        })
-        .eq('id', reto.id)
-      if (error) throw error
+          nombreCanchaForanea: nuevaCanchaForaneaReagendar,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al reagendar')
 
       setReagendandoRetoId(null)
       setReagendoMsg('')
