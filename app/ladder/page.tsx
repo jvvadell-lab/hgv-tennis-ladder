@@ -101,6 +101,8 @@ export default function LadderPage() {
   const [reagendandoRetoId, setReagendandoRetoId] = useState<string | null>(null)
   const [nuevaFechaReagendar, setNuevaFechaReagendar] = useState('')
   const [nuevaHoraReagendar, setNuevaHoraReagendar] = useState('19:00')
+  const [nuevaCanchaReagendar, setNuevaCanchaReagendar] = useState('HGV1')
+  const [nuevaCanchaForaneaReagendar, setNuevaCanchaForaneaReagendar] = useState('')
   const [guardandoReagendo, setGuardandoReagendo] = useState(false)
   const [reagendoMsg, setReagendoMsg] = useState('')
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
@@ -561,7 +563,12 @@ export default function LadderPage() {
       return
     }
 
-    const cancha = reto.cancha
+    if (nuevaCanchaReagendar === 'FORANEA' && !nuevaCanchaForaneaReagendar.trim()) {
+      setReagendoMsg('❌ Escribe el nombre de la cancha foránea.')
+      return
+    }
+
+    const cancha = nuevaCanchaReagendar
     if (cancha && cancha !== 'FORANEA') {
       const horario = validarHorarioCancha(cancha, nuevaFechaReagendar, nuevaHoraReagendar)
       if (!horario.valido) {
@@ -627,7 +634,11 @@ export default function LadderPage() {
 
       const { error } = await supabase
         .from('retos')
-        .update({ fecha_propuesta: nuevaFechaHora.toISOString() })
+        .update({
+          fecha_propuesta: nuevaFechaHora.toISOString(),
+          cancha: nuevaCanchaReagendar,
+          nombre_cancha_foranea: nuevaCanchaReagendar === 'FORANEA' ? nuevaCanchaForaneaReagendar.trim() : null,
+        })
         .eq('id', reto.id)
       if (error) throw error
 
@@ -1578,7 +1589,25 @@ export default function LadderPage() {
                                   onChange={(e) => setNuevaHoraReagendar(e.target.value)}
                                   style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
                                 />
+                                <select
+                                  value={nuevaCanchaReagendar}
+                                  onChange={(e) => setNuevaCanchaReagendar(e.target.value)}
+                                  style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
+                                >
+                                  <option value="HGV1">HGV 1</option>
+                                  <option value="HGV2">HGV 2</option>
+                                  <option value="FORANEA">Foránea</option>
+                                </select>
                               </div>
+                              {nuevaCanchaReagendar === 'FORANEA' && (
+                                <input
+                                  type="text"
+                                  value={nuevaCanchaForaneaReagendar}
+                                  onChange={(e) => setNuevaCanchaForaneaReagendar(e.target.value)}
+                                  placeholder="Nombre de la cancha foránea"
+                                  style={{ width: '100%', padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }}
+                                />
+                              )}
                               {reagendoMsg && (
                                 <p style={{ fontSize: '12px', color: '#a83226', margin: '0 0 8px 0' }}>{reagendoMsg}</p>
                               )}
@@ -1604,6 +1633,8 @@ export default function LadderPage() {
                                 setReagendandoRetoId(r.id)
                                 setNuevaFechaReagendar(new Date().toISOString().slice(0, 10))
                                 setNuevaHoraReagendar('19:00')
+                                setNuevaCanchaReagendar(r.cancha || 'HGV1')
+                                setNuevaCanchaForaneaReagendar(r.nombre_cancha_foranea || '')
                                 setReagendoMsg('')
                               }}
                               style={{
