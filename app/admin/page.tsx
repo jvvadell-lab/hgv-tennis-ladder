@@ -89,6 +89,8 @@ export default function AdminPage() {
   const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
   const [reservasCasualesDelDia, setReservasCasualesDelDia] = useState<any[]>([])
   const [loadingReservas, setLoadingReservas] = useState(false)
+  const [fuerzaMayorActivo, setFuerzaMayorActivo] = useState(false)
+  const [cargandoFuerzaMayor, setCargandoFuerzaMayor] = useState(false)
   const [historialReservas, setHistorialReservas] = useState<any[]>([])
   const [loadingHistorialReservas, setLoadingHistorialReservas] = useState(false)
   const [historialReservasDesde, setHistorialReservasDesde] = useState('')
@@ -313,6 +315,10 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeSection === 'challenges') {
       fetchRetos()
+      supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle().then(({ data }) => {
+        const hoy = new Date().toISOString().slice(0, 10)
+        setFuerzaMayorActivo(!!data?.activo && data?.fecha === hoy)
+      })
     }
     if (activeSection === 'reservas') {
       fetchReservasDelDia(fechaReservas)
@@ -376,6 +382,26 @@ export default function AdminPage() {
       .order('fecha_hora', { ascending: false })
     setHistorialReservas(data || [])
     setLoadingHistorialReservas(false)
+  }
+
+  const toggleFuerzaMayor = async () => {
+    const activar = !fuerzaMayorActivo
+    if (activar && !confirm('¿Activar el reagendamiento por fuerza mayor para HOY? Los jugadores con partido programado hoy van a poder cambiarle la fecha/hora.')) return
+    setCargandoFuerzaMayor(true)
+    try {
+      const res = await fetch('/api/admin/fuerza-mayor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activar }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar')
+      setFuerzaMayorActivo(activar)
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setCargandoFuerzaMayor(false)
+    }
   }
 
   const cancelarReto = async (retoId: string) => {
@@ -1910,6 +1936,32 @@ export default function AdminPage() {
           {/* DESAFÍOS */}
           {activeSection === 'challenges' && (
             <div>
+              <div style={{
+                background: fuerzaMayorActivo ? '#fff3cd' : 'var(--color-chalk)',
+                border: fuerzaMayorActivo ? '2px solid #e67e22' : 'none',
+                borderRadius: '12px', padding: '20px',
+                marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap'
+              }}>
+                <span style={{ fontWeight: 'bold', color: '#333' }}>
+                  ⚠️ Reagendamiento por fuerza mayor: {fuerzaMayorActivo ? '🟢 Activo hoy' : '🔴 Inactivo'}
+                </span>
+                <p style={{ margin: 0, fontSize: '13px', color: '#6b6b6b', flex: '1 1 260px' }}>
+                  Al activarlo, los jugadores que tengan un partido programado HOY van a poder cambiarle la fecha/hora sin tocar a los jugadores. Se desactiva solo a medianoche.
+                </p>
+                <button
+                  onClick={toggleFuerzaMayor}
+                  disabled={cargandoFuerzaMayor}
+                  style={{
+                    background: cargandoFuerzaMayor ? '#ccc' : (fuerzaMayorActivo ? '#dc2626' : '#e67e22'),
+                    color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px',
+                    cursor: cargandoFuerzaMayor ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold',
+                  }}
+                >
+                  {cargandoFuerzaMayor ? '⏳...' : fuerzaMayorActivo ? 'Desactivar' : 'Activar para hoy'}
+                </button>
+              </div>
+
               <div style={{
                 background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
                 marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',

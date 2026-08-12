@@ -97,6 +97,12 @@ export default function LadderPage() {
     }
   }
   const [misRetos, setMisRetos] = useState<Reto[]>([])
+  const [fuerzaMayorActivo, setFuerzaMayorActivo] = useState(false)
+  const [reagendandoRetoId, setReagendandoRetoId] = useState<string | null>(null)
+  const [nuevaFechaReagendar, setNuevaFechaReagendar] = useState('')
+  const [nuevaHoraReagendar, setNuevaHoraReagendar] = useState('19:00')
+  const [guardandoReagendo, setGuardandoReagendo] = useState(false)
+  const [reagendoMsg, setReagendoMsg] = useState('')
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
   const [jugadoresOcupados, setJugadoresOcupados] = useState<Set<string>>(new Set()) // cualquiera con un reto pendiente/aceptado, sin importar quién lo inició
   const [standbyMap, setStandbyMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de standby (viaje) en esta temporada
@@ -261,6 +267,10 @@ export default function LadderPage() {
         .order('created_at', { ascending: false })
 
       setMisRetos((retos as any) || [])
+
+      const { data: fm } = await supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle()
+      const hoyStr = new Date().toISOString().slice(0, 10)
+      setFuerzaMayorActivo(!!fm?.activo && fm?.fecha === hoyStr)
 
       const retoIds = (retos || []).map((r: any) => r.id)
       if (retoIds.length > 0) {
@@ -528,6 +538,107 @@ export default function LadderPage() {
     }
 
     return { valido: true }
+  }
+
+  async function reagendarReto(reto: any) {
+    if (!session || session.role !== 'jugador') return
+    setReagendoMsg('')
+
+    if (!fuerzaMayorActivo) {
+      setReagendoMsg('❌ El reagendamiento por fuerza mayor no está activo en este momento.')
+      return
+    }
+
+    const hoyStr = new Date().toISOString().slice(0, 10)
+    const fechaOriginal = new Date(reto.fecha_propuesta).toISOString().slice(0, 10)
+    if (fechaOriginal !== hoyStr) {
+      setReagendoMsg('❌ Este partido no está programado para hoy — el reagendamiento por fuerza mayor solo aplica a los de hoy.')
+      return
+    }
+
+    if (!nuevaFechaReagendar || !nuevaHoraReagendar) {
+      setReagendoMsg('❌ Elige la nueva fecha y hora.')
+      return
+    }
+
+    const cancha = reto.cancha
+    if (cancha && cancha !== 'FORANEA') {
+      const horario = validarHorarioCancha(cancha, nuevaFechaReagendar, nuevaHoraReagendar)
+      if (!horario.valido) {
+        setReagendoMsg('❌ ' + horario.mensaje)
+        return
+      }
+    }
+
+    setGuardandoReagendo(true)
+    try {
+      const nuevaFechaHora = new Date(`${nuevaFechaReagendar}T${nuevaHoraReagendar}`)
+      const nuevaHoraMs = nuevaFechaHora.getTime()
+      const DURACION_PARTIDO_MS = 90 * 60 * 1000
+
+      if (cancha && cancha !== 'FORANEA') {
+        const inicioDia = new Date(`${nuevaFechaReagendar}T00:00:00`)
+        const finDia = new Date(`${nuevaFechaReagendar}T23:59:59`)
+
+        const { data: partidosCancha, error: errCancha } = await supabase
+          .from('retos')
+          .select('id, fecha_propuesta')
+          .eq('temporada_id', temporadaId)
+          .eq('cancha', cancha)
+          .in('estado', ['pendiente', 'aceptado'])
+          .neq('id', reto.id)
+          .gte('fecha_propuesta', inicioDia.toISOString())
+          .lte('fecha_propuesta', finDia.toISOString())
+        if (errCancha) throw errCancha
+
+        const conflicto = (partidosCancha || []).find((r: any) =>
+          Math.abs(new Date(r.fecha_propuesta).getTime() - nuevaHoraMs) < DURACION_PARTIDO_MS
+        )
+        if (conflicto) {
+          const horaConflicto = new Date(conflicto.fecha_propuesta)
+          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+          setReagendoMsg(`❌ ${cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene otro partido cerca de esa hora (${fmt(horaConflicto)}). Elige otro horario.`)
+          setGuardandoReagendo(false)
+          return
+        }
+
+        const { data: reservasCancha, error: errReservas } = await supabase
+          .from('reservas_cancha')
+          .select('id, fecha_hora, duracion_min')
+          .eq('cancha', cancha)
+          .eq('estado', 'activa')
+          .gte('fecha_hora', inicioDia.toISOString())
+          .lte('fecha_hora', finDia.toISOString())
+        if (errReservas) throw errReservas
+
+        const finNuevo = nuevaHoraMs + DURACION_PARTIDO_MS
+        const conflictoReserva = (reservasCancha || []).find((r: any) => {
+          const inicioReserva = new Date(r.fecha_hora).getTime()
+          const finReserva = inicioReserva + (r.duracion_min || 60) * 60 * 1000
+          return nuevaHoraMs < finReserva && inicioReserva < finNuevo
+        })
+        if (conflictoReserva) {
+          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+          setReagendoMsg(`❌ ${cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual cerca de esa hora (${fmt(new Date(conflictoReserva.fecha_hora))}). Elige otro horario.`)
+          setGuardandoReagendo(false)
+          return
+        }
+      }
+
+      const { error } = await supabase
+        .from('retos')
+        .update({ fecha_propuesta: nuevaFechaHora.toISOString() })
+        .eq('id', reto.id)
+      if (error) throw error
+
+      setReagendandoRetoId(null)
+      setReagendoMsg('')
+      cargarDatos()
+    } catch (err: any) {
+      setReagendoMsg('❌ ' + err.message)
+    } finally {
+      setGuardandoReagendo(false)
+    }
   }
 
   async function lanzarReto() {
@@ -1443,6 +1554,67 @@ export default function LadderPage() {
                         <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#5c5c5c', fontStyle: 'italic' }}>
                           💬 {r.comentarios}
                         </p>
+                      )}
+
+                      {fuerzaMayorActivo && ['pendiente', 'aceptado'].includes(r.estado) && r.fecha_propuesta &&
+                        new Date(r.fecha_propuesta).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) && (
+                        <div style={{ margin: '0 0 10px 0' }}>
+                          {reagendandoRetoId === r.id ? (
+                            <div style={{ background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '8px', padding: '10px 12px' }}>
+                              <p style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: 'bold', color: '#7a4a0e' }}>
+                                ⚠️ Reagendar por fuerza mayor — no cambia a los jugadores, solo la fecha/hora.
+                              </p>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                <input
+                                  type="date"
+                                  value={nuevaFechaReagendar}
+                                  onChange={(e) => setNuevaFechaReagendar(e.target.value)}
+                                  min={new Date().toISOString().slice(0, 10)}
+                                  style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
+                                />
+                                <input
+                                  type="time"
+                                  value={nuevaHoraReagendar}
+                                  onChange={(e) => setNuevaHoraReagendar(e.target.value)}
+                                  style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
+                                />
+                              </div>
+                              {reagendoMsg && (
+                                <p style={{ fontSize: '12px', color: '#a83226', margin: '0 0 8px 0' }}>{reagendoMsg}</p>
+                              )}
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  onClick={() => reagendarReto(r)}
+                                  disabled={guardandoReagendo}
+                                  style={btnPequeno(guardandoReagendo ? '#ccc' : '#e67e22')}
+                                >
+                                  {guardandoReagendo ? 'Guardando…' : 'Confirmar nueva fecha'}
+                                </button>
+                                <button
+                                  onClick={() => { setReagendandoRetoId(null); setReagendoMsg('') }}
+                                  style={btnPequeno('#6b6b6b')}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setReagendandoRetoId(r.id)
+                                setNuevaFechaReagendar(new Date().toISOString().slice(0, 10))
+                                setNuevaHoraReagendar('19:00')
+                                setReagendoMsg('')
+                              }}
+                              style={{
+                                background: 'none', border: '1px solid #e67e22', color: '#e67e22',
+                                borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer',
+                              }}
+                            >
+                              ⚠️ Reagendar por fuerza mayor
+                            </button>
+                          )}
+                        </div>
                       )}
 
                       {resultadosPorReto[r.id] && (
