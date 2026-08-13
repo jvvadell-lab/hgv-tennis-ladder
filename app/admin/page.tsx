@@ -90,6 +90,7 @@ export default function AdminPage() {
   const [reservasCasualesDelDia, setReservasCasualesDelDia] = useState<any[]>([])
   const [loadingReservas, setLoadingReservas] = useState(false)
   const [permisosMedicosPendientes, setPermisosMedicosPendientes] = useState<any[]>([])
+  const [permisosMedicosActivos, setPermisosMedicosActivos] = useState<any[]>([])
   const [loadingPermisosMedicos, setLoadingPermisosMedicos] = useState(false)
   const [diasAprobarPermiso, setDiasAprobarPermiso] = useState<Record<string, string>>({})
   const [procesandoPermisoId, setProcesandoPermisoId] = useState<string | null>(null)
@@ -97,6 +98,7 @@ export default function AdminPage() {
   const [jugadorDirectoId, setJugadorDirectoId] = useState('')
   const [diasDirecto, setDiasDirecto] = useState('')
   const [motivoDirecto, setMotivoDirecto] = useState('')
+  const [informeDirectoArchivo, setInformeDirectoArchivo] = useState<File | null>(null)
   const [activandoDirecto, setActivandoDirecto] = useState(false)
   const [permisoMedicoMsgAdmin, setPermisoMedicoMsgAdmin] = useState('')
   const [fuerzaMayorActivo, setFuerzaMayorActivo] = useState(false)
@@ -407,6 +409,15 @@ export default function AdminPage() {
       .order('created_at', { ascending: true })
     setPermisosMedicosPendientes(data || [])
 
+    const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const { data: activos } = await supabase
+      .from('permisos_medicos')
+      .select('id, dias, motivo, informe_url, fecha_inicio, fecha_fin, jugadores:jugador_id(nombre)')
+      .eq('estado', 'aprobado')
+      .gte('fecha_fin', hoy)
+      .order('fecha_fin', { ascending: true })
+    setPermisosMedicosActivos(activos || [])
+
     const { data: jugadoresActivos } = await supabase
       .from('jugadores')
       .select('id, nombre')
@@ -459,6 +470,25 @@ export default function AdminPage() {
     }
   }
 
+  const desactivarPermisoMedico = async (permisoId: string) => {
+    if (!confirm('¿Desactivar este permiso médico? El jugador queda libre para retar y ser retado de inmediato.')) return
+    setProcesandoPermisoId(permisoId)
+    try {
+      const res = await fetch('/api/admin/permisos-medicos/desactivar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permisoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al desactivar')
+      fetchPermisosMedicos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setProcesandoPermisoId(null)
+    }
+  }
+
   const activarPermisoMedicoDirecto = async () => {
     setPermisoMedicoMsgAdmin('')
     const dias = Number(diasDirecto)
@@ -472,10 +502,25 @@ export default function AdminPage() {
     }
     setActivandoDirecto(true)
     try {
+      let informeUrl: string | null = null
+      if (informeDirectoArchivo) {
+        const extension = informeDirectoArchivo.name.split('.').pop() || 'jpg'
+        const nombreArchivo = `informes-medicos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+        const { error: errorSubida } = await supabase.storage
+          .from('fotos-partidos')
+          .upload(nombreArchivo, informeDirectoArchivo)
+        if (errorSubida) throw new Error('No se pudo subir el informe: ' + errorSubida.message)
+
+        const { data: publicUrlData } = supabase.storage
+          .from('fotos-partidos')
+          .getPublicUrl(nombreArchivo)
+        informeUrl = publicUrlData.publicUrl
+      }
+
       const res = await fetch('/api/admin/permisos-medicos/activar-directo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jugadorId: jugadorDirectoId, dias, motivo: motivoDirecto }),
+        body: JSON.stringify({ jugadorId: jugadorDirectoId, dias, motivo: motivoDirecto, informeUrl }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al activar')
@@ -483,6 +528,8 @@ export default function AdminPage() {
       setJugadorDirectoId('')
       setDiasDirecto('')
       setMotivoDirecto('')
+      setInformeDirectoArchivo(null)
+      fetchPermisosMedicos()
     } catch (err: any) {
       setPermisoMedicoMsgAdmin('❌ ' + err.message)
     } finally {
@@ -2444,6 +2491,15 @@ export default function AdminPage() {
                       style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
                     />
                   </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Informe médico (opcional)</label>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => setInformeDirectoArchivo(e.target.files?.[0] || null)}
+                      style={{ fontSize: '12px' }}
+                    />
+                  </div>
                   <button
                     onClick={activarPermisoMedicoDirecto}
                     disabled={activandoDirecto}
@@ -2461,6 +2517,40 @@ export default function AdminPage() {
                   </p>
                 )}
               </div>
+
+              {permisosMedicosActivos.length > 0 && (
+                <>
+                  <h3 style={{ color: 'var(--color-ink)' }}>🩹 Permisos médicos activos</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                    {permisosMedicosActivos.map((p: any) => (
+                      <div key={p.id} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '18px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderLeft: '4px solid #1c7ec4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div>
+                          <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.jugadores?.nombre || '—'}</p>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#555' }}>
+                            {p.dias} días — hasta el {new Date(p.fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+                          </p>
+                          {p.motivo && <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#777' }}>💬 {p.motivo}</p>}
+                          {p.informe_url && (
+                            <a href={p.informe_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-court)', fontSize: '12px', fontWeight: 'bold' }}>
+                              📄 Ver informe médico
+                            </a>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => desactivarPermisoMedico(p.id)}
+                          disabled={procesandoPermisoId === p.id}
+                          style={{
+                            background: procesandoPermisoId === p.id ? '#ccc' : '#28a745', color: 'white', border: 'none',
+                            padding: '9px 16px', borderRadius: '6px', cursor: procesandoPermisoId === p.id ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {procesandoPermisoId === p.id ? 'Procesando…' : '✅ Se recuperó — desactivar'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <h3 style={{ color: 'var(--color-ink)' }}>⏳ Solicitudes pendientes</h3>
               {loadingPermisosMedicos ? (

@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta acción requiere permisos de administrador completo.' }, { status: 403 })
     }
 
-    const { jugadorId, dias, motivo } = await request.json()
+    const { jugadorId, dias, motivo, informeUrl } = await request.json()
     const diasNum = Number(dias)
     if (!jugadorId) return NextResponse.json({ error: 'Falta el jugador' }, { status: 400 })
     if (!Number.isInteger(diasNum) || diasNum < 1) {
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       fecha_inicio: fechaInicio,
       fecha_fin: fechaFin.toISOString().slice(0, 10),
       motivo: motivo || null,
+      informe_url: informeUrl || null,
       estado: 'aprobado',
       creado_por: 'admin',
     }])
