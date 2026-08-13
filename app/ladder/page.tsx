@@ -1962,7 +1962,7 @@ export default function LadderPage() {
               >
                 <div style={{
                   background: 'var(--color-chalk)', borderRadius: '10px', padding: '12px 16px',
-                  width: '140px', height: '78px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '180px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
                 }}>
                   <img
@@ -1972,7 +1972,7 @@ export default function LadderPage() {
                   />
                 </div>
                 <p style={{
-                  fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.6)', fontSize: '11px',
+                  fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.6)', fontSize: '13px',
                   margin: '6px 0 0 0',
                 }}>
                   @{s.instagram}
