@@ -3420,10 +3420,13 @@ export default function AdminPage() {
                           style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' }}
                         >
                           <option value="">-- Selecciona --</option>
-                          {jugadoresParaPago.map((j) => (
+                          {jugadoresParaPago.filter((j) => !pagaronSet.has(j.id)).map((j) => (
                             <option key={j.id} value={j.id}>{j.nombre}</option>
                           ))}
                         </select>
+                        <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0 0' }}>
+                          Solo se muestran los que aún no tienen pago validado en esta temporada.
+                        </p>
                       </div>
                       <div>
                         <label style={{ fontSize: '13px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Tipo de pago</label>
