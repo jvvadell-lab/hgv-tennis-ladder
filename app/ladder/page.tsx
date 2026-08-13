@@ -108,6 +108,7 @@ export default function LadderPage() {
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
   const [jugadoresOcupados, setJugadoresOcupados] = useState<Set<string>>(new Set()) // cualquiera con un reto pendiente/aceptado, sin importar quién lo inició
   const [standbyMap, setStandbyMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de standby (viaje) en esta temporada
+  const [permisoMedicoMap, setPermisoMedicoMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de permiso médico aprobado en esta temporada
   const [rankingStats, setRankingStats] = useState<Record<string, any>>({}) // jugador_id -> { jugados, ganados, perdidos, noPresentado }
   const [retosConResultadoPendiente, setRetosConResultadoPendiente] = useState<Set<string>>(new Set())
   const [resultadosPorReto, setResultadosPorReto] = useState<Record<string, { id: string; foto_url: string | null }>>({})
@@ -211,6 +212,22 @@ export default function LadderPage() {
       mapaStandby[s.jugador_id] = { fecha_inicio: s.fecha_inicio, fecha_fin: s.fecha_fin }
     })
     setStandbyMap(mapaStandby)
+
+    // Jugadores con permiso médico aprobado en esta temporada — igual que el
+    // standby de viaje, no pueden retar ni ser retados mientras dure.
+    const { data: permisosRows } = await supabase
+      .from('permisos_medicos')
+      .select('jugador_id, fecha_inicio, fecha_fin')
+      .eq('temporada_id', temporadaId)
+      .eq('estado', 'aprobado')
+
+    const mapaPermisos: Record<string, { fecha_inicio: string; fecha_fin: string }> = {}
+    ;(permisosRows || []).forEach((p: any) => {
+      if (p.fecha_inicio && p.fecha_fin) {
+        mapaPermisos[p.jugador_id] = { fecha_inicio: p.fecha_inicio, fecha_fin: p.fecha_fin }
+      }
+    })
+    setPermisoMedicoMap(mapaPermisos)
 
     // Estadísticas públicas del ranking (partidos jugados/ganados/perdidos/no presentado)
     const { data: retosTemp } = await supabase
@@ -971,19 +988,6 @@ export default function LadderPage() {
 
   const bloqueado = tengoRetoPendiente || tengoInvitacionPendiente || tengoPartidoEnCurso
 
-  const esElegible = (p: Posicion) => {
-    if (!session || session.role !== 'jugador' || !miPosicion) return false
-    if (p.jugador_id === session.id) return false
-    const diferencia = miPosicion.posicion - p.posicion
-    return diferencia > 0 && diferencia <= RANGO_RETO
-  }
-
-  const enEnfriamiento = (jugadorId: string) => {
-    const fecha = cooldowns[jugadorId]
-    if (!fecha) return false
-    return new Date() < new Date(fecha)
-  }
-
   // "Hoy" comparado como texto YYYY-MM-DD contra fecha_inicio/fecha_fin (también
   // texto), para no meternos en líos de huso horario con new Date() a medianoche.
   const enStandby = (jugadorId: string) => {
@@ -993,7 +997,40 @@ export default function LadderPage() {
     return hoy >= s.fecha_inicio && hoy <= s.fecha_fin
   }
 
+  const enPermisoMedico = (jugadorId: string) => {
+    const p = permisoMedicoMap[jugadorId]
+    if (!p) return false
+    const hoy = new Date().toISOString().slice(0, 10)
+    return hoy >= p.fecha_inicio && hoy <= p.fecha_fin
+  }
+
+  // Un jugador "congelado" (de viaje o con permiso médico) no puede retar ni ser
+  // retado, y se salta al contar cuántos puestos hay que subir para llegar a él —
+  // así nadie se queda trabado esperando a que vuelva.
+  const congelado = (jugadorId: string) => enStandby(jugadorId) || enPermisoMedico(jugadorId)
+
   const yoEstoyEnStandby = session?.role === 'jugador' ? enStandby(session.id) : false
+  const yoEstoyCongelado = session?.role === 'jugador' ? congelado(session.id) : false
+
+  const esElegible = (p: Posicion) => {
+    if (!session || session.role !== 'jugador' || !miPosicion) return false
+    if (p.jugador_id === session.id) return false
+    if (p.posicion >= miPosicion.posicion) return false
+    if (congelado(p.jugador_id)) return false
+    // Contamos solo los puestos NO congelados entre el objetivo (inclusive) y yo
+    // (exclusive) — los que están de viaje o con permiso médico no "gastan" un
+    // puesto del rango de 3, se saltan como si no estuvieran ahí.
+    const puestosEntreMedio = posiciones.filter((x) =>
+      x.posicion >= p.posicion && x.posicion < miPosicion!.posicion && !congelado(x.jugador_id)
+    ).length
+    return puestosEntreMedio > 0 && puestosEntreMedio <= RANGO_RETO
+  }
+
+  const enEnfriamiento = (jugadorId: string) => {
+    const fecha = cooldowns[jugadorId]
+    if (!fecha) return false
+    return new Date() < new Date(fecha)
+  }
 
   const puedoRetar = (p: Posicion) => {
     return (
@@ -1003,8 +1040,8 @@ export default function LadderPage() {
       !retandoA &&
       !enEnfriamiento(p.jugador_id) &&
       !jugadoresOcupados.has(p.jugador_id) &&
-      !enStandby(p.jugador_id) &&
-      !yoEstoyEnStandby
+      !congelado(p.jugador_id) &&
+      !yoEstoyCongelado
     )
   }
 
@@ -1171,6 +1208,20 @@ export default function LadderPage() {
               </div>
             )}
 
+            {session?.role === 'jugador' && enPermisoMedico(session.id) && (
+              <div style={{
+                background: '#d1ecf1', border: '1px solid #1c7ec4', borderRadius: '12px',
+                padding: '16px 20px', marginBottom: '24px', textAlign: 'center',
+              }}>
+                <p style={{ margin: 0, color: '#0c5460', fontWeight: 'bold', fontSize: '14px' }}>
+                  🩹 Tienes permiso médico hasta el {new Date(permisoMedicoMap[session.id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+                </p>
+                <p style={{ margin: '4px 0 0 0', color: '#0c5460', fontSize: '12px' }}>
+                  Tu posición queda congelada — no puedes retar ni ser retado durante este periodo.
+                </p>
+              </div>
+            )}
+
             {/* Aviso para anotarse a la temporada activa */}
             {session?.role === 'jugador' && yaAnotado === false && (() => {
               const hoy = new Date().toISOString().slice(0, 10)
@@ -1283,6 +1334,11 @@ export default function LadderPage() {
                                 🧳 de viaje hasta {new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                               </span>
                             )}
+                            {enPermisoMedico(p.jugador_id) && (
+                              <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 'bold', color: '#0c5460', background: '#d1ecf1', padding: '2px 6px', borderRadius: '10px' }}>
+                                🩹 permiso médico hasta {new Date(permisoMedicoMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                              </span>
+                            )}
                           </td>
                           <td style={{ padding: '10px', textAlign: 'center', color: '#6b6b6b', fontSize: '13px' }}>
                             {temporadaSorteada ? (
@@ -1307,10 +1363,12 @@ export default function LadderPage() {
                                   title={
                                     !temporadaSorteada
                                       ? 'El sorteo de esta temporada todavía no se ha realizado'
-                                      : yoEstoyEnStandby
-                                      ? 'Estás en modo standby — no puedes retar mientras dure'
+                                      : yoEstoyCongelado
+                                      ? (yoEstoyEnStandby ? 'Estás en modo standby — no puedes retar mientras dure' : 'Tienes un permiso médico activo — no puedes retar mientras dure')
                                       : enStandby(p.jugador_id)
                                       ? `Este jugador está de viaje hasta el ${new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES')}`
+                                      : enPermisoMedico(p.jugador_id)
+                                      ? `Este jugador tiene permiso médico hasta el ${new Date(permisoMedicoMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES')}`
                                       : enEnfriamiento(p.jugador_id)
                                       ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES')}`
                                       : jugadoresOcupados.has(p.jugador_id)
@@ -1320,7 +1378,7 @@ export default function LadderPage() {
                                 >
                                   ⚔️ Retar
                                 </button>
-                                {temporadaSorteada && !enEnfriamiento(p.jugador_id) && !enStandby(p.jugador_id) && jugadoresOcupados.has(p.jugador_id) && (
+                                {temporadaSorteada && !enEnfriamiento(p.jugador_id) && !congelado(p.jugador_id) && jugadoresOcupados.has(p.jugador_id) && (
                                   <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
                                     Ocupado en otro reto
                                   </p>

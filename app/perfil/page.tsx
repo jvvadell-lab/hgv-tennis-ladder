@@ -64,6 +64,12 @@ export default function PerfilPage() {
   const [mensaje, setMensaje] = useState('')
   const [tasaBcv, setTasaBcv] = useState<{ valor: number; fecha: string } | null>(null)
   const [standbyActual, setStandbyActual] = useState<{ dias: number; fecha_inicio: string; fecha_fin: string } | null>(null)
+  const [permisoMedico, setPermisoMedico] = useState<{ estado: string; dias: number | null; fecha_inicio: string | null; fecha_fin: string | null } | null>(null)
+  const [loadingPermisoMedico, setLoadingPermisoMedico] = useState(true)
+  const [informeArchivo, setInformeArchivo] = useState<File | null>(null)
+  const [motivoPermiso, setMotivoPermiso] = useState('')
+  const [enviandoPermiso, setEnviandoPermiso] = useState(false)
+  const [permisoMedicoMsg, setPermisoMedicoMsg] = useState('')
   const [loadingStandby, setLoadingStandby] = useState(true)
   const [activandoStandby, setActivandoStandby] = useState<number | null>(null)
   const [standbyMsg, setStandbyMsg] = useState('')
@@ -166,7 +172,57 @@ export default function PerfilPage() {
       .eq('id', temporadaPagos.id)
       .maybeSingle()
       .then(({ data }) => setTemporadaSorteada(!!data?.sorteo_realizado))
+    setLoadingPermisoMedico(true)
+    supabase
+      .from('permisos_medicos')
+      .select('estado, dias, fecha_inicio, fecha_fin')
+      .eq('jugador_id', session.id)
+      .eq('temporada_id', temporadaPagos.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        setPermisoMedico(data || null)
+        setLoadingPermisoMedico(false)
+      })
   }, [session, temporadaPagos])
+
+  const solicitarPermisoMedico = async () => {
+    setEnviandoPermiso(true)
+    setPermisoMedicoMsg('')
+    try {
+      let informeUrl: string | null = null
+      if (informeArchivo) {
+        const extension = informeArchivo.name.split('.').pop() || 'jpg'
+        const nombreArchivo = `informes-medicos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
+        const { error: errorSubida } = await supabase.storage
+          .from('fotos-partidos')
+          .upload(nombreArchivo, informeArchivo)
+        if (errorSubida) throw new Error('No se pudo subir el informe: ' + errorSubida.message)
+
+        const { data: publicUrlData } = supabase.storage
+          .from('fotos-partidos')
+          .getPublicUrl(nombreArchivo)
+        informeUrl = publicUrlData.publicUrl
+      }
+
+      const res = await fetch('/api/jugador/solicitar-permiso-medico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ informeUrl, motivo: motivoPermiso }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al enviar la solicitud')
+
+      setPermisoMedico({ estado: 'pendiente', dias: null, fecha_inicio: null, fecha_fin: null })
+      setInformeArchivo(null)
+      setMotivoPermiso('')
+    } catch (err: any) {
+      setPermisoMedicoMsg('❌ ' + err.message)
+    } finally {
+      setEnviandoPermiso(false)
+    }
+  }
 
   const activarStandby = async (dias: number) => {
     setActivandoStandby(dias)
@@ -732,6 +788,79 @@ export default function PerfilPage() {
                     color: standbyMsg.includes('✅') ? 'var(--color-net)' : '#a83226',
                   }}>
                     {standbyMsg}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {temporadaPagos && (
+          <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid rgba(15,27,38,0.1)' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 8px 0' }}>
+              🩹 Permiso por lesión
+            </h2>
+            {loadingPermisoMedico ? (
+              <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
+            ) : permisoMedico?.estado === 'pendiente' ? (
+              <div style={{ background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '4px', padding: '12px 14px' }}>
+                <p style={{ margin: 0, fontSize: '13px', color: '#7a4a0e' }}>
+                  ⏳ Tu solicitud de permiso médico está pendiente de revisión por el admin.
+                </p>
+              </div>
+            ) : permisoMedico?.estado === 'aprobado' && permisoMedico.fecha_fin && new Date().toISOString().slice(0, 10) <= permisoMedico.fecha_fin ? (
+              <div style={{ background: '#d1ecf1', border: '1px solid #1c7ec4', borderRadius: '4px', padding: '12px 14px' }}>
+                <p style={{ margin: 0, fontSize: '13px', color: '#0c5460' }}>
+                  🩹 Tienes permiso médico activo: <strong>{permisoMedico.dias} días</strong>, hasta el {new Date(permisoMedico.fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}. Tu posición queda congelada mientras dure — no puedes retar ni ser retado.
+                </p>
+              </div>
+            ) : (
+              <>
+                <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 10px 0' }}>
+                  Si estás lesionado y el médico te indicó reposo, solicita el permiso aquí — tu posición queda congelada mientras dure (no te pueden retar, y tú tampoco puedes retar). El admin revisa la solicitud y confirma los días.
+                </p>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-ink)', marginBottom: '6px' }}>
+                    Informe médico (opcional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => setInformeArchivo(e.target.files?.[0] || null)}
+                    style={{ fontSize: '13px' }}
+                  />
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-ink)', marginBottom: '6px' }}>
+                    Cuéntanos qué pasó (opcional)
+                  </label>
+                  <textarea
+                    value={motivoPermiso}
+                    onChange={(e) => setMotivoPermiso(e.target.value)}
+                    placeholder="Ej: me lesioné el tobillo jugando, el médico me mandó 15 días de reposo"
+                    rows={3}
+                    style={{
+                      width: '100%', padding: '8px 10px', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.2)',
+                      fontSize: '13px', fontFamily: 'var(--font-body)', boxSizing: 'border-box', resize: 'vertical',
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={solicitarPermisoMedico}
+                  disabled={enviandoPermiso}
+                  style={{
+                    background: enviandoPermiso ? '#ccc' : 'var(--color-ball)', color: 'var(--color-ink)', border: 'none',
+                    padding: '10px 20px', borderRadius: '4px', cursor: enviandoPermiso ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700,
+                  }}
+                >
+                  {enviandoPermiso ? 'Enviando…' : 'Solicitar permiso médico'}
+                </button>
+                {permisoMedicoMsg && (
+                  <div style={{
+                    marginTop: '10px', padding: '10px 12px', borderRadius: '4px', fontSize: '13px',
+                    background: 'rgba(197,60,50,0.1)', color: '#a83226',
+                  }}>
+                    {permisoMedicoMsg}
                   </div>
                 )}
               </>

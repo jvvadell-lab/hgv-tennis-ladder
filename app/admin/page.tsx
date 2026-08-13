@@ -89,6 +89,16 @@ export default function AdminPage() {
   const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
   const [reservasCasualesDelDia, setReservasCasualesDelDia] = useState<any[]>([])
   const [loadingReservas, setLoadingReservas] = useState(false)
+  const [permisosMedicosPendientes, setPermisosMedicosPendientes] = useState<any[]>([])
+  const [loadingPermisosMedicos, setLoadingPermisosMedicos] = useState(false)
+  const [diasAprobarPermiso, setDiasAprobarPermiso] = useState<Record<string, string>>({})
+  const [procesandoPermisoId, setProcesandoPermisoId] = useState<string | null>(null)
+  const [jugadoresParaPermiso, setJugadoresParaPermiso] = useState<any[]>([])
+  const [jugadorDirectoId, setJugadorDirectoId] = useState('')
+  const [diasDirecto, setDiasDirecto] = useState('')
+  const [motivoDirecto, setMotivoDirecto] = useState('')
+  const [activandoDirecto, setActivandoDirecto] = useState(false)
+  const [permisoMedicoMsgAdmin, setPermisoMedicoMsgAdmin] = useState('')
   const [fuerzaMayorActivo, setFuerzaMayorActivo] = useState(false)
   const [cargandoFuerzaMayor, setCargandoFuerzaMayor] = useState(false)
   const [historialReservas, setHistorialReservas] = useState<any[]>([])
@@ -335,6 +345,9 @@ export default function AdminPage() {
         fetchHistorialReservas()
       }
     }
+    if (activeSection === 'permisos') {
+      fetchPermisosMedicos()
+    }
   }, [activeSection])
 
   useEffect(() => {
@@ -383,6 +396,98 @@ export default function AdminPage() {
       .order('fecha_hora', { ascending: false })
     setHistorialReservas(data || [])
     setLoadingHistorialReservas(false)
+  }
+
+  const fetchPermisosMedicos = async () => {
+    setLoadingPermisosMedicos(true)
+    const { data } = await supabase
+      .from('permisos_medicos')
+      .select('id, dias, motivo, informe_url, estado, created_at, jugadores:jugador_id(nombre)')
+      .eq('estado', 'pendiente')
+      .order('created_at', { ascending: true })
+    setPermisosMedicosPendientes(data || [])
+
+    const { data: jugadoresActivos } = await supabase
+      .from('jugadores')
+      .select('id, nombre')
+      .eq('activo', true)
+      .order('nombre', { ascending: true })
+    setJugadoresParaPermiso(jugadoresActivos || [])
+
+    setLoadingPermisosMedicos(false)
+  }
+
+  const aprobarPermisoMedico = async (permisoId: string) => {
+    const dias = Number(diasAprobarPermiso[permisoId])
+    if (!dias || dias < 1) {
+      alert('Escribe cuántos días de reposo indicó el médico.')
+      return
+    }
+    setProcesandoPermisoId(permisoId)
+    try {
+      const res = await fetch('/api/admin/permisos-medicos/aprobar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permisoId, dias }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al aprobar')
+      fetchPermisosMedicos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setProcesandoPermisoId(null)
+    }
+  }
+
+  const rechazarPermisoMedico = async (permisoId: string) => {
+    if (!confirm('¿Rechazar esta solicitud de permiso médico?')) return
+    setProcesandoPermisoId(permisoId)
+    try {
+      const res = await fetch('/api/admin/permisos-medicos/rechazar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permisoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al rechazar')
+      fetchPermisosMedicos()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setProcesandoPermisoId(null)
+    }
+  }
+
+  const activarPermisoMedicoDirecto = async () => {
+    setPermisoMedicoMsgAdmin('')
+    const dias = Number(diasDirecto)
+    if (!jugadorDirectoId) {
+      setPermisoMedicoMsgAdmin('❌ Elige el jugador.')
+      return
+    }
+    if (!dias || dias < 1) {
+      setPermisoMedicoMsgAdmin('❌ Escribe la cantidad de días.')
+      return
+    }
+    setActivandoDirecto(true)
+    try {
+      const res = await fetch('/api/admin/permisos-medicos/activar-directo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId: jugadorDirectoId, dias, motivo: motivoDirecto }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al activar')
+      setPermisoMedicoMsgAdmin('✅ Permiso médico activado.')
+      setJugadorDirectoId('')
+      setDiasDirecto('')
+      setMotivoDirecto('')
+    } catch (err: any) {
+      setPermisoMedicoMsgAdmin('❌ ' + err.message)
+    } finally {
+      setActivandoDirecto(false)
+    }
   }
 
   const toggleFuerzaMayor = async () => {
@@ -1380,6 +1485,7 @@ export default function AdminPage() {
     { id: 'challenges', icon: '⚔️', label: 'Desafíos' },
     { id: 'results', icon: '🏆', label: 'Resultados' },
     { id: 'ladder', icon: '🎾', label: 'Escalafón' },
+    { id: 'permisos', icon: '🩹', label: 'Permisos médicos' },
     { id: 'reservas', icon: '📅', label: 'Reservas' },
     { id: 'galeria', icon: '🖼️', label: 'Galería' },
     { id: 'payments', icon: '💳', label: 'Pagos' },
@@ -2290,6 +2396,129 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* PERMISOS MÉDICOS */}
+          {activeSection === 'permisos' && (
+            <div>
+              <div style={{
+                background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+              }}>
+                <h3 style={{ marginTop: 0, color: 'var(--color-ink)' }}>🩹 Activar permiso médico directo</h3>
+                <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 14px 0' }}>
+                  Para cuando te enteras de una lesión de palabra, sin que el jugador tenga que solicitarlo desde la app.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Jugador</label>
+                    <select
+                      value={jugadorDirectoId}
+                      onChange={(e) => setJugadorDirectoId(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', minWidth: '220px' }}
+                    >
+                      <option value="">Selecciona un jugador…</option>
+                      {jugadoresParaPermiso.map((j) => (
+                        <option key={j.id} value={j.id}>{j.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Días de reposo</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={diasDirecto}
+                      onChange={(e) => setDiasDirecto(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', width: '90px' }}
+                    />
+                  </div>
+                  <div style={{ flex: '1 1 200px' }}>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Motivo (opcional)</label>
+                    <input
+                      type="text"
+                      value={motivoDirecto}
+                      onChange={(e) => setMotivoDirecto(e.target.value)}
+                      placeholder="Ej: se lesionó el hombro, reposo indicado de palabra"
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <button
+                    onClick={activarPermisoMedicoDirecto}
+                    disabled={activandoDirecto}
+                    style={{
+                      background: activandoDirecto ? '#ccc' : '#e67e22', color: 'white', border: 'none',
+                      padding: '9px 20px', borderRadius: '6px', cursor: activandoDirecto ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold',
+                    }}
+                  >
+                    {activandoDirecto ? 'Activando…' : 'Activar'}
+                  </button>
+                </div>
+                {permisoMedicoMsgAdmin && (
+                  <p style={{ fontSize: '13px', marginTop: '10px', color: permisoMedicoMsgAdmin.includes('✅') ? '#155724' : '#a83226' }}>
+                    {permisoMedicoMsgAdmin}
+                  </p>
+                )}
+              </div>
+
+              <h3 style={{ color: 'var(--color-ink)' }}>⏳ Solicitudes pendientes</h3>
+              {loadingPermisosMedicos ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando...</div>
+              ) : permisosMedicosPendientes.length === 0 ? (
+                <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '30px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                  No hay solicitudes de permiso médico pendientes.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {permisosMedicosPendientes.map((p: any) => (
+                    <div key={p.id} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '18px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderLeft: '4px solid #e67e22' }}>
+                      <p style={{ margin: '0 0 6px 0', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.jugadores?.nombre || '—'}</p>
+                      {p.motivo && <p style={{ margin: '0 0 6px 0', fontSize: '13px', color: '#555' }}>💬 {p.motivo}</p>}
+                      {p.informe_url && (
+                        <p style={{ margin: '0 0 10px 0' }}>
+                          <a href={p.informe_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-court)', fontSize: '13px', fontWeight: 'bold' }}>
+                            📄 Ver informe médico
+                          </a>
+                        </p>
+                      )}
+                      <p style={{ margin: '0 0 12px 0', fontSize: '11px', color: '#999' }}>
+                        Solicitado el {new Date(p.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Días"
+                          value={diasAprobarPermiso[p.id] || ''}
+                          onChange={(e) => setDiasAprobarPermiso({ ...diasAprobarPermiso, [p.id]: e.target.value })}
+                          style={{ padding: '7px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', width: '80px' }}
+                        />
+                        <button
+                          onClick={() => aprobarPermisoMedico(p.id)}
+                          disabled={procesandoPermisoId === p.id}
+                          style={{
+                            background: procesandoPermisoId === p.id ? '#ccc' : '#28a745', color: 'white', border: 'none',
+                            padding: '8px 16px', borderRadius: '6px', cursor: procesandoPermisoId === p.id ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold',
+                          }}
+                        >
+                          ✅ Aprobar
+                        </button>
+                        <button
+                          onClick={() => rechazarPermisoMedico(p.id)}
+                          disabled={procesandoPermisoId === p.id}
+                          style={{
+                            background: '#fee2e2', color: '#dc2626', border: 'none',
+                            padding: '8px 16px', borderRadius: '6px', cursor: procesandoPermisoId === p.id ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold',
+                          }}
+                        >
+                          ❌ Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
