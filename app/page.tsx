@@ -425,15 +425,43 @@ export default function Home() {
       <div style={{ marginTop: '56px', textAlign: 'center' }}>
         <p style={{
           fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.5)', fontSize: '10px',
-          letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 12px 0',
+          letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 16px 0',
         }}>
           Con el apoyo de nuestros patrocinantes
         </p>
-        <img
-          src="https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/Patrocinio%201.png"
-          alt="Patrocinantes HGV Tennis Club"
-          style={{ maxWidth: '95%', width: '575px', height: 'auto', opacity: 0.92, display: 'block', margin: '0 auto' }}
-        />
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
+          {[
+            { nombre: "Cauchos Q'Barato", archivo: 'cauchos-qbarato.png', instagram: 'cauchosqbarato' },
+            { nombre: 'Timoboll', archivo: 'timoboll.png', instagram: 'autopartesjafenza' },
+            { nombre: 'PetSmall', archivo: 'petsmall.png', instagram: 'petsmall' },
+          ].map((s) => (
+            <a
+              key={s.instagram}
+              href={`https://instagram.com/${s.instagram}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: 'none', display: 'block' }}
+            >
+              <div style={{
+                background: 'var(--color-chalk)', borderRadius: '10px', padding: '12px 16px',
+                width: '140px', height: '78px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+              }}>
+                <img
+                  src={`https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/${s.archivo}`}
+                  alt={s.nombre}
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+              </div>
+              <p style={{
+                fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.6)', fontSize: '11px',
+                margin: '6px 0 0 0',
+              }}>
+                @{s.instagram}
+              </p>
+            </a>
+          ))}
+        </div>
       </div>
 
       {/* Footer */}
