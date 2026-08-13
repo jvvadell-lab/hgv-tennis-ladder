@@ -97,6 +97,7 @@ export default function LadderPage() {
     }
   }
   const [misRetos, setMisRetos] = useState<Reto[]>([])
+  const [ajustandoFechaRetoId, setAjustandoFechaRetoId] = useState<string | null>(null)
   const [fuerzaMayorActivo, setFuerzaMayorActivo] = useState(false)
   const [reagendandoRetoId, setReagendandoRetoId] = useState<string | null>(null)
   const [nuevaFechaReagendar, setNuevaFechaReagendar] = useState('')
@@ -640,6 +641,13 @@ export default function LadderPage() {
       return
     }
 
+    const maxFechaReto = new Date()
+    maxFechaReto.setDate(maxFechaReto.getDate() + 6)
+    if (retoFecha > maxFechaReto.toISOString().slice(0, 10)) {
+      setRetoFormMsg('❌ No puedes proponer una fecha a más de 6 días — dejarías al otro jugador esperando demasiado tiempo. Elige una fecha más cercana.')
+      return
+    }
+
     if (retoCancha === 'FORANEA' && !retoCanchaForanea.trim()) {
       setRetoFormMsg('❌ Escribe el nombre de la cancha foránea')
       return
@@ -811,16 +819,17 @@ export default function LadderPage() {
     }
   }
 
-  async function responderReto(retoId: string, nuevoEstado: 'aceptado' | 'rechazado') {
+  async function responderReto(retoId: string, nuevoEstado: 'aceptado' | 'rechazado', ajusteDias?: number) {
     try {
       const res = await fetch('/api/jugador/responder-reto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ retoId, nuevoEstado }),
+        body: JSON.stringify({ retoId, nuevoEstado, ajusteDias }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al responder')
 
+      setAjustandoFechaRetoId(null)
       cargarDatos()
       cargarProximosPartidos()
     } catch (err: any) {
@@ -1413,7 +1422,11 @@ export default function LadderPage() {
                         value={retoFecha}
                         onChange={(e) => setRetoFecha(e.target.value)}
                         min={temporadaInicio || undefined}
-                        max={temporadaFin || undefined}
+                        max={(() => {
+                          const en6Dias = new Date(); en6Dias.setDate(en6Dias.getDate() + 6)
+                          const en6DiasStr = en6Dias.toISOString().slice(0, 10)
+                          return temporadaFin ? (en6DiasStr < temporadaFin ? en6DiasStr : temporadaFin) : en6DiasStr
+                        })()}
                         style={inputPequeno}
                       />
                     </div>
@@ -1718,9 +1731,31 @@ export default function LadderPage() {
                           <p style={{ fontSize: '13px', color: '#c0392b', margin: '4px 0' }}>
                             Tienes un partido en curso — resuélvelo antes de aceptar este reto.
                           </p>
+                        ) : ajustandoFechaRetoId === r.id ? (
+                          <div style={{ background: '#f0f7fc', border: '1px solid #1c7ec4', borderRadius: '8px', padding: '10px 12px' }}>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#0c5460' }}>
+                              Aceptas el reto, pero con la fecha ajustada:
+                            </p>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button onClick={() => responderReto(r.id, 'aceptado', -1)} style={btnPequeno('#1c7ec4')}>
+                                Un día antes
+                              </button>
+                              <button onClick={() => responderReto(r.id, 'aceptado', 2)} style={btnPequeno('#1c7ec4')}>
+                                Dos días después
+                              </button>
+                              <button onClick={() => setAjustandoFechaRetoId(null)} style={btnPequeno('#6b6b6b')}>
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
                         ) : (
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <button onClick={() => responderReto(r.id, 'aceptado')} style={btnPequeno('#28a745')}>Aceptar</button>
+                            {r.cancha && r.cancha !== 'FORANEA' && (
+                              <button onClick={() => setAjustandoFechaRetoId(r.id)} style={btnPequeno('#1c7ec4')}>
+                                📅 Aceptar con otra fecha
+                              </button>
+                            )}
                             <button onClick={() => responderReto(r.id, 'rechazado')} style={btnPequeno('#dc3545')}>Rechazar</button>
                           </div>
                         )
