@@ -42,6 +42,76 @@ function tablaPartido(retador: string, fecha: string, cancha: string) {
   `
 }
 
+// Cada 3 días que dura un permiso médico activo, el jugador baja una posición
+// en su escalafón (intercambia con quien esté justo debajo) — así se
+// desalienta usar el permiso con otra intención, sin depender de nadie más.
+async function aplicarDescensosPermisosMedicos(db: any, hoy: string) {
+  let descensosAplicados = 0
+  const errores: string[] = []
+
+  const { data: activos } = await db
+    .from('permisos_medicos')
+    .select('id, jugador_id, temporada_id, fecha_inicio, fecha_fin, posiciones_bajadas')
+    .eq('estado', 'aprobado')
+    .lte('fecha_inicio', hoy)
+
+  for (const permiso of activos || []) {
+    try {
+      const hastaFecha = permiso.fecha_fin && permiso.fecha_fin < hoy ? permiso.fecha_fin : hoy
+      const diasTranscurridos = diasEntre(permiso.fecha_inicio, hastaFecha)
+      const dropsEsperados = Math.floor(diasTranscurridos / 3)
+      const dropsPendientes = dropsEsperados - (permiso.posiciones_bajadas || 0)
+      if (dropsPendientes <= 0) continue
+
+      const { data: miFila } = await db
+        .from('ladder_posiciones')
+        .select('id, categoria, genero, posicion')
+        .eq('temporada_id', permiso.temporada_id)
+        .eq('jugador_id', permiso.jugador_id)
+        .maybeSingle()
+      if (!miFila) continue
+
+      let posicionActual = miFila.posicion
+      let bajadasReales = 0
+
+      for (let i = 0; i < dropsPendientes; i++) {
+        const { data: filaDebajo } = await db
+          .from('ladder_posiciones')
+          .select('id, posicion')
+          .eq('temporada_id', permiso.temporada_id)
+          .eq('categoria', miFila.categoria)
+          .eq('genero', miFila.genero)
+          .eq('posicion', posicionActual + 1)
+          .maybeSingle()
+
+        // Ya está en el último puesto de su categoría — no hay más a dónde bajar.
+        if (!filaDebajo) break
+
+        // Usamos un valor temporal negativo para no chocar con la restricción
+        // de posición única mientras se hace el intercambio.
+        await db.from('ladder_posiciones').update({ posicion: -1 }).eq('id', miFila.id)
+        await db.from('ladder_posiciones').update({ posicion: posicionActual }).eq('id', filaDebajo.id)
+        await db.from('ladder_posiciones').update({ posicion: posicionActual + 1 }).eq('id', miFila.id)
+
+        posicionActual = posicionActual + 1
+        bajadasReales++
+      }
+
+      if (bajadasReales > 0) {
+        await db
+          .from('permisos_medicos')
+          .update({ posiciones_bajadas: (permiso.posiciones_bajadas || 0) + bajadasReales })
+          .eq('id', permiso.id)
+        descensosAplicados += bajadasReales
+      }
+    } catch (err: any) {
+      errores.push(`permiso ${permiso.id}: ${err.message}`)
+    }
+  }
+
+  return { descensosAplicados, errores }
+}
+
 export async function GET(request: Request) {
   // Verificamos que la llamada venga realmente del cron de Vercel, y no de
   // cualquiera que le pegue a esta URL pública.
@@ -52,7 +122,7 @@ export async function GET(request: Request) {
 
   const db = supabaseServer()
   const hoy = fechaVenezuela()
-  const resumen = { recordatorio1: 0, recordatorio2: 0, autoAceptados: 0, avisoDelDia: 0, errores: [] as string[] }
+  const resumen = { recordatorio1: 0, recordatorio2: 0, autoAceptados: 0, avisoDelDia: 0, descensosPermisoMedico: 0, errores: [] as string[] }
 
   try {
     // 1) Retos pendientes: recordatorios día 1 y 2, aceptación automática al día 3
@@ -72,7 +142,6 @@ export async function GET(request: Request) {
 
       try {
         if (dias >= 3) {
-          // Se acepta automáticamente — ya se le dio suficiente tiempo para responder.
           const { error } = await db.from('retos').update({ estado: 'aceptado' }).eq('id', r.id)
           if (error) throw error
           resumen.autoAceptados++
@@ -160,6 +229,11 @@ export async function GET(request: Request) {
         resumen.errores.push(`reto ${r.id} (aviso del día): ${err.message}`)
       }
     }
+
+    // 3) Permisos médicos activos: descuento de posición cada 3 días
+    const { descensosAplicados, errores: erroresPermiso } = await aplicarDescensosPermisosMedicos(db, hoy)
+    resumen.descensosPermisoMedico = descensosAplicados
+    resumen.errores.push(...erroresPermiso)
 
     return NextResponse.json({ ok: true, resumen })
   } catch (err: any) {
