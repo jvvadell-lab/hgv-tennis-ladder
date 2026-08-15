@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import RegistrarServiceWorker from "./registrar-sw";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -23,6 +24,24 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "HGV Tennis Club",
   description: "Challenger Ladder — HGV Tennis Club",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "HGV Tennis",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0f1b26",
 };
 
 export default function RootLayout({
@@ -35,7 +54,10 @@ export default function RootLayout({
       lang="es"
       className={`${fraunces.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <RegistrarServiceWorker />
+        {children}
+      </body>
     </html>
   );
 }
