@@ -136,7 +136,7 @@ export async function GET(request: Request) {
       const retador: any = r.retador
       const retado: any = r.retado
       const fechaFmt = r.fecha_propuesta
-        ? new Date(r.fecha_propuesta).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+        ? new Date(r.fecha_propuesta).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
         : 'Por definir'
       const canchaFmt = nombreCancha(r.cancha, r.nombre_cancha_foranea)
 
@@ -204,7 +204,7 @@ export async function GET(request: Request) {
     for (const r of partidosHoy || []) {
       const retador: any = r.retador
       const retado: any = r.retado
-      const horaFmt = new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+      const horaFmt = new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
       const canchaFmt = nombreCancha(r.cancha, r.nombre_cancha_foranea)
 
       try {

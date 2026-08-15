@@ -41,9 +41,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, aviso: 'El rival no tiene email registrado, no se envió correo.' })
     }
 
+    // OJO: este código corre en el servidor de Vercel, que trabaja en horario UTC —
+    // sin especificar timeZone aquí, la hora que sale en el correo queda 4 horas
+    // adelantada respecto a la hora real de Venezuela.
     const fecha = reto.fecha_propuesta
       ? new Date(reto.fecha_propuesta).toLocaleString('es-ES', {
           weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+          timeZone: 'America/Caracas',
         })
       : 'Por definir'
 
