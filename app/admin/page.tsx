@@ -594,6 +594,28 @@ export default function AdminPage() {
     }
   }
 
+  const [reenviandoNotifId, setReenviandoNotifId] = useState<string | null>(null)
+
+  const reenviarNotificacionPrueba = async (retoId: string) => {
+    setReenviandoNotifId(retoId)
+    try {
+      const res = await fetch('/api/admin/reenviar-notificacion-reto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retoId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al reenviar')
+      alert(data.tieneTelefonoRetador
+        ? '✅ Correo de prueba reenviado — el retador sí tiene teléfono registrado, debería salir el bloque de WhatsApp.'
+        : '✅ Correo de prueba reenviado — OJO: el retador NO tiene teléfono registrado, por eso no va a salir el bloque de WhatsApp.')
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setReenviandoNotifId(null)
+    }
+  }
+
   const fetchRetos = async () => {
     setLoadingRetos(true)
     const { data } = await supabase
@@ -2207,7 +2229,7 @@ export default function AdminPage() {
                                 {['pendiente', 'aceptado'].includes(r.estado) && (
                                   <button
                                     onClick={() => cancelarReto(r.id)}
-                                    style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                                    style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', marginRight: '6px', marginBottom: '4px' }}
                                   >
                                     Cancelar reto
                                   </button>
@@ -2218,10 +2240,23 @@ export default function AdminPage() {
                                     disabled={eliminandoReto === r.id}
                                     style={{
                                       background: eliminandoReto === r.id ? '#ccc' : '#fee2e2', color: '#dc2626', border: 'none',
-                                      padding: '6px 12px', borderRadius: '6px', cursor: eliminandoReto === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold'
+                                      padding: '6px 12px', borderRadius: '6px', cursor: eliminandoReto === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold', marginRight: '6px', marginBottom: '4px'
                                     }}
                                   >
                                     {eliminandoReto === r.id ? 'Eliminando…' : '🗑️ Eliminar'}
+                                  </button>
+                                )}
+                                {r.retado?.nombre && (
+                                  <button
+                                    onClick={() => reenviarNotificacionPrueba(r.id)}
+                                    disabled={reenviandoNotifId === r.id}
+                                    title="Reenvía el correo de 'te han retado' sin tocar el escalafón — útil para probar cambios al correo"
+                                    style={{
+                                      background: reenviandoNotifId === r.id ? '#ccc' : 'none', color: '#1c7ec4', border: '1px solid #1c7ec4',
+                                      padding: '6px 12px', borderRadius: '6px', cursor: reenviandoNotifId === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px'
+                                    }}
+                                  >
+                                    {reenviandoNotifId === r.id ? 'Enviando…' : '📧 Reenviar correo (prueba)'}
                                   </button>
                                 )}
                               </td>
