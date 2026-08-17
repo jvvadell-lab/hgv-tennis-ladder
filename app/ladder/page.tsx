@@ -127,6 +127,10 @@ export default function LadderPage() {
   const [set1Retado, setSet1Retado] = useState('')
   const [set2Retador, setSet2Retador] = useState('')
   const [set2Retado, setSet2Retado] = useState('')
+  const [set1TbRetador, setSet1TbRetador] = useState('')
+  const [set1TbRetado, setSet1TbRetado] = useState('')
+  const [set2TbRetador, setSet2TbRetador] = useState('')
+  const [set2TbRetado, setSet2TbRetado] = useState('')
   const [tbRetador, setTbRetador] = useState('')
   const [tbRetado, setTbRetado] = useState('')
   const [modoNoPresentado, setModoNoPresentado] = useState<string | null>(null)
@@ -837,28 +841,59 @@ export default function LadderPage() {
     }
   }
 
-  // Calcula sets ganados por cada lado, si hace falta tie-break, y quién ganó
+  // Evalúa un set individual: si quedó 6-6, hace falta su propio tie-break (distinto
+  // del Super Tiebreak que decide el PARTIDO cuando queda 1 set a 1). Devuelve si el
+  // set ya está completo/válido, quién lo ganó, y el texto para el marcador guardado.
+  function evaluarSet(
+    golesRetador: string, golesRetado: string, tbRetadorStr: string, tbRetadoStr: string
+  ): { completo: boolean; ganadorEsRetador: boolean | null; textoRetador: string } {
+    const gr = parseInt(golesRetador, 10)
+    const gd = parseInt(golesRetado, 10)
+    if (isNaN(gr) || isNaN(gd)) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
+
+    const es66 = gr === 6 && gd === 6
+    if (es66) {
+      const tbr = parseInt(tbRetadorStr, 10)
+      const tbd = parseInt(tbRetadoStr, 10)
+      if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) {
+        return { completo: false, ganadorEsRetador: null, textoRetador: '' }
+      }
+      const ganadorEsRetador = tbr > tbd
+      const textoRetador = ganadorEsRetador ? `7-6(${tbr}-${tbd})` : `6-7(${tbd}-${tbr})`
+      return { completo: true, ganadorEsRetador, textoRetador }
+    }
+
+    if (gr === gd) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
+    return { completo: true, ganadorEsRetador: gr > gd, textoRetador: `${gr}-${gd}` }
+  }
+
+  // Da vuelta un texto de marcador de set ("7-6(7-4)" -> "6-7(4-7)", "6-3" -> "3-6")
+  // para mostrárselo al retado desde su propia perspectiva.
+  function invertirMarcadorSet(texto: string): string {
+    const match = texto.match(/^(\d+)-(\d+)(\((\d+)-(\d+)\))?$/)
+    if (!match) return texto
+    const [, a, b, , tba, tbb] = match
+    return tba ? `${b}-${a}(${tbb}-${tba})` : `${b}-${a}`
+  }
+
+  // Calcula sets ganados por cada lado (con soporte de tie-break de set a 6-6),
+  // si hace falta Super Tiebreak (partido 1-1 en sets), y quién ganó el partido.
   function calcularResultadoPartido() {
-    const s1r = parseInt(set1Retador, 10)
-    const s1d = parseInt(set1Retado, 10)
-    const s2r = parseInt(set2Retador, 10)
-    const s2d = parseInt(set2Retado, 10)
+    const set1 = evaluarSet(set1Retador, set1Retado, set1TbRetador, set1TbRetado)
+    const set2 = evaluarSet(set2Retador, set2Retado, set2TbRetador, set2TbRetado)
 
-    const set1Valido = !isNaN(s1r) && !isNaN(s1d) && s1r !== s1d
-    const set2Valido = !isNaN(s2r) && !isNaN(s2d) && s2r !== s2d
+    if (!set1.completo || !set2.completo) return { valido: false as const }
 
-    if (!set1Valido || !set2Valido) return { valido: false as const }
-
-    const setsRetador = (s1r > s1d ? 1 : 0) + (s2r > s2d ? 1 : 0)
+    const setsRetador = (set1.ganadorEsRetador ? 1 : 0) + (set2.ganadorEsRetador ? 1 : 0)
     const setsRetado = 2 - setsRetador
-    const necesitaTiebreak = setsRetador === 1 && setsRetado === 1
+    const necesitaSuperTiebreak = setsRetador === 1 && setsRetado === 1
 
-    if (!necesitaTiebreak) {
+    if (!necesitaSuperTiebreak) {
       return {
         valido: true as const,
         ganadorEsRetador: setsRetador === 2,
-        marcadorRetador: `${s1r}-${s1d}, ${s2r}-${s2d}`,
-        marcadorRetado: `${s1d}-${s1r}, ${s2d}-${s2r}`,
+        marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}`,
+        marcadorRetado: `${invertirMarcadorSet(set1.textoRetador)}, ${invertirMarcadorSet(set2.textoRetador)}`,
       }
     }
 
@@ -869,15 +904,15 @@ export default function LadderPage() {
     return {
       valido: true as const,
       ganadorEsRetador: tbr > tbd,
-      marcadorRetador: `${s1r}-${s1d}, ${s2r}-${s2d}, TB ${tbr}-${tbd}`,
-      marcadorRetado: `${s1d}-${s1r}, ${s2d}-${s2r}, TB ${tbd}-${tbr}`,
+      marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}, ST ${tbr}-${tbd}`,
+      marcadorRetado: `${invertirMarcadorSet(set1.textoRetador)}, ${invertirMarcadorSet(set2.textoRetador)}, ST ${tbd}-${tbr}`,
     }
   }
 
   async function registrarResultado(reto: Reto) {
     const resultado = calcularResultadoPartido()
     if (!resultado.valido) {
-      setActionMsg('❌ Completa los 2 sets (y el tie-break si quedó 1-1) con marcadores válidos')
+      setActionMsg('❌ Completa los 2 sets (y los tie-breaks que hagan falta) con marcadores válidos')
       return
     }
 
@@ -919,6 +954,10 @@ export default function LadderPage() {
     setSet1Retado('')
     setSet2Retador('')
     setSet2Retado('')
+    setSet1TbRetador('')
+    setSet1TbRetado('')
+    setSet2TbRetador('')
+    setSet2TbRetado('')
     setTbRetador('')
     setTbRetado('')
     setFotoFile(null)
@@ -1830,7 +1869,7 @@ export default function LadderPage() {
                           {modoNoPresentado === null && (
                             <>
                               <p style={{ fontSize: '12px', color: '#5c5c5c', margin: '0 0 8px 0' }}>
-                                Juegos ganados por set (2 sets; si queda 1-1 se pide tie-break)
+                                Juegos ganados por set (2 sets). Si un set queda 6-6, se pide el tie-break de ESE set. Si el partido queda 1 set a 1, se pide el Super Tiebreak para desempatar.
                               </p>
 
                               <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
@@ -1839,24 +1878,38 @@ export default function LadderPage() {
                                 <input type="number" min="0" placeholder={r.retado?.nombre} value={set1Retado} onChange={(e) => setSet1Retado(e.target.value)} style={inputPequeno} />
                               </div>
 
+                              {parseInt(set1Retador, 10) === 6 && parseInt(set1Retado, 10) === 6 && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
+                                  <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 1</span>
+                                  <input type="number" min="0" placeholder={r.retador?.nombre} value={set1TbRetador} onChange={(e) => setSet1TbRetador(e.target.value)} style={inputPequeno} />
+                                  <input type="number" min="0" placeholder={r.retado?.nombre} value={set1TbRetado} onChange={(e) => setSet1TbRetado(e.target.value)} style={inputPequeno} />
+                                </div>
+                              )}
+
                               <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                                 <span style={{ fontSize: '12px', color: '#555' }}>Set 2</span>
                                 <input type="number" min="0" placeholder={r.retador?.nombre} value={set2Retador} onChange={(e) => setSet2Retador(e.target.value)} style={inputPequeno} />
                                 <input type="number" min="0" placeholder={r.retado?.nombre} value={set2Retado} onChange={(e) => setSet2Retado(e.target.value)} style={inputPequeno} />
                               </div>
 
+                              {parseInt(set2Retador, 10) === 6 && parseInt(set2Retado, 10) === 6 && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
+                                  <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 2</span>
+                                  <input type="number" min="0" placeholder={r.retador?.nombre} value={set2TbRetador} onChange={(e) => setSet2TbRetador(e.target.value)} style={inputPequeno} />
+                                  <input type="number" min="0" placeholder={r.retado?.nombre} value={set2TbRetado} onChange={(e) => setSet2TbRetado(e.target.value)} style={inputPequeno} />
+                                </div>
+                              )}
+
                               {(() => {
-                                const s1r = parseInt(set1Retador, 10), s1d = parseInt(set1Retado, 10)
-                                const s2r = parseInt(set2Retador, 10), s2d = parseInt(set2Retado, 10)
-                                const set1Ok = !isNaN(s1r) && !isNaN(s1d) && s1r !== s1d
-                                const set2Ok = !isNaN(s2r) && !isNaN(s2d) && s2r !== s2d
-                                const setsRetador = (set1Ok && s1r > s1d ? 1 : 0) + (set2Ok && s2r > s2d ? 1 : 0)
-                                const setsRetado = (set1Ok && s1d > s1r ? 1 : 0) + (set2Ok && s2d > s2r ? 1 : 0)
-                                const necesitaTiebreak = set1Ok && set2Ok && setsRetador === 1 && setsRetado === 1
-                                if (!necesitaTiebreak) return null
+                                const set1 = evaluarSet(set1Retador, set1Retado, set1TbRetador, set1TbRetado)
+                                const set2 = evaluarSet(set2Retador, set2Retado, set2TbRetador, set2TbRetado)
+                                const setsRetador = (set1.completo && set1.ganadorEsRetador ? 1 : 0) + (set2.completo && set2.ganadorEsRetador ? 1 : 0)
+                                const setsRetado = (set1.completo && set1.ganadorEsRetador === false ? 1 : 0) + (set2.completo && set2.ganadorEsRetador === false ? 1 : 0)
+                                const necesitaSuperTiebreak = set1.completo && set2.completo && setsRetador === 1 && setsRetado === 1
+                                if (!necesitaSuperTiebreak) return null
                                 return (
                                   <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '10px' }}>
-                                    <span style={{ fontSize: '12px', color: '#c0392b', fontWeight: 'bold' }}>Tie-break</span>
+                                    <span style={{ fontSize: '12px', color: '#c0392b', fontWeight: 'bold' }}>Super TB</span>
                                     <input type="number" min="0" placeholder={r.retador?.nombre} value={tbRetador} onChange={(e) => setTbRetador(e.target.value)} style={inputPequeno} />
                                     <input type="number" min="0" placeholder={r.retado?.nombre} value={tbRetado} onChange={(e) => setTbRetado(e.target.value)} style={inputPequeno} />
                                   </div>
