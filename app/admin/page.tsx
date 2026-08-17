@@ -120,6 +120,11 @@ export default function AdminPage() {
   const [resultados, setResultados] = useState<any[]>([])
   const [loadingResultados, setLoadingResultados] = useState(false)
   const [aprobando, setAprobando] = useState<string | null>(null)
+  const [editandoResultadoId, setEditandoResultadoId] = useState<string | null>(null)
+  const [editMarcadorRetador, setEditMarcadorRetador] = useState('')
+  const [editMarcadorRetado, setEditMarcadorRetado] = useState('')
+  const [editGanadorId, setEditGanadorId] = useState('')
+  const [guardandoEditResultado, setGuardandoEditResultado] = useState(false)
   const [resultadosMsg, setResultadosMsg] = useState('')
   const [subiendoFotoResultadoId, setSubiendoFotoResultadoId] = useState<string | null>(null)
 
@@ -162,6 +167,44 @@ export default function AdminPage() {
       .order('created_at', { ascending: false })
     setResultados(data || [])
     setLoadingResultados(false)
+  }
+
+  const abrirEdicionResultado = (r: any) => {
+    setEditandoResultadoId(r.id)
+    setEditMarcadorRetador(r.marcador_retador || '')
+    setEditMarcadorRetado(r.marcador_retado || '')
+    setEditGanadorId(r.ganador_id || '')
+  }
+
+  const guardarEdicionResultado = async (r: any) => {
+    if (!editMarcadorRetador.trim() || !editMarcadorRetado.trim() || !editGanadorId) {
+      setResultadosMsg('❌ Completa el marcador de ambos lados y elige el ganador.')
+      return
+    }
+    setGuardandoEditResultado(true)
+    setResultadosMsg('')
+    try {
+      const res = await fetch('/api/admin/editar-resultado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resultadoId: r.id,
+          marcadorRetador: editMarcadorRetador,
+          marcadorRetado: editMarcadorRetado,
+          ganadorId: editGanadorId,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar')
+
+      setResultadosMsg('✅ Marcador actualizado.')
+      setEditandoResultadoId(null)
+      fetchResultados()
+    } catch (err: any) {
+      setResultadosMsg('❌ ' + err.message)
+    } finally {
+      setGuardandoEditResultado(false)
+    }
   }
 
   const aprobarResultado = async (resultado: any) => {
@@ -2689,7 +2732,8 @@ export default function AdminPage() {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '30px' }}>
                       {resultados.filter(r => !r.validado).map((r) => (
-                        <div key={r.id} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '18px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                        <div key={r.id} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '18px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                           <div>
                             <p style={{ margin: '0 0 4px 0', fontWeight: '600', color: '#333' }}>
                               {r.retos?.retador?.nombre} vs {r.retos?.retado?.nombre}
@@ -2709,6 +2753,17 @@ export default function AdminPage() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <FotoResultadoControl r={r} />
+                            {!r.no_presentado && (
+                              <button
+                                onClick={() => abrirEdicionResultado(r)}
+                                style={{
+                                  background: 'none', color: '#1c7ec4', border: '1px solid #1c7ec4',
+                                  padding: '9px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold',
+                                }}
+                              >
+                                ✏️ Editar marcador
+                              </button>
+                            )}
                             <button
                               onClick={() => aprobarResultado(r)}
                               disabled={aprobando === r.id}
@@ -2721,6 +2776,67 @@ export default function AdminPage() {
                               {aprobando === r.id ? '⏳ Aprobando...' : '✅ Aprobar'}
                             </button>
                           </div>
+                          </div>
+                          {editandoResultadoId === r.id && (
+                            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #eee' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                                <div>
+                                  <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>
+                                    Marcador de {r.retos?.retador?.nombre}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editMarcadorRetador}
+                                    onChange={(e) => setEditMarcadorRetador(e.target.value)}
+                                    placeholder="Ej: 7-6(7-4), 6-3"
+                                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box', fontSize: '13px' }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>
+                                    Marcador de {r.retos?.retado?.nombre}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editMarcadorRetado}
+                                    onChange={(e) => setEditMarcadorRetado(e.target.value)}
+                                    placeholder="Ej: 6-7(4-7), 3-6"
+                                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box', fontSize: '13px' }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Ganador</label>
+                                  <select
+                                    value={editGanadorId}
+                                    onChange={(e) => setEditGanadorId(e.target.value)}
+                                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box', fontSize: '13px' }}
+                                  >
+                                    <option value="">-- Selecciona --</option>
+                                    <option value={r.retos?.retador_id}>{r.retos?.retador?.nombre}</option>
+                                    <option value={r.retos?.retado_id}>{r.retos?.retado?.nombre}</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  onClick={() => guardarEdicionResultado(r)}
+                                  disabled={guardandoEditResultado}
+                                  style={{
+                                    background: guardandoEditResultado ? '#ccc' : '#1c7ec4', color: 'white', border: 'none',
+                                    padding: '8px 16px', borderRadius: '6px', cursor: guardandoEditResultado ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold',
+                                  }}
+                                >
+                                  {guardandoEditResultado ? 'Guardando…' : '✅ Guardar cambios'}
+                                </button>
+                                <button
+                                  onClick={() => setEditandoResultadoId(null)}
+                                  style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
