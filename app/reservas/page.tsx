@@ -384,16 +384,35 @@ export default function ReservasPage() {
 
         {/* Formulario de reserva */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '28px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '17px', margin: '0 0 10px 0' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '17px', margin: '0 0 14px 0' }}>
             🕐 Horarios que puedes reservar
           </h2>
-          <ul style={{ margin: '0 0 16px 0', paddingLeft: '20px', fontSize: '13px', color: 'var(--color-line)', lineHeight: 1.7 }}>
-            <li><strong>Mismo día:</strong> desde las <strong>6:00am</strong> de ese día.</li>
-            <li><strong>Día siguiente</strong> (solo <strong>HGV 2</strong>, de 6:00am a 2:00pm): se habilita desde las <strong>6:00pm del día anterior</strong>.</li>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '18px' }}>
+            <div style={{ background: '#f0f7fc', border: '1px solid rgba(28,126,196,0.25)', borderRadius: '6px', padding: '14px 16px' }}>
+              <p style={{ margin: '0 0 4px 0', fontSize: '13px', fontWeight: 700, color: 'var(--color-court)' }}>
+                🎾 ¿Quieres jugar el mismo día?
+              </p>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-ink)' }}>
+                Puedes reservar desde las <strong>6:00am</strong> de ese día.
+              </p>
+            </div>
+            <div style={{ background: '#f0f7fc', border: '1px solid rgba(28,126,196,0.25)', borderRadius: '6px', padding: '14px 16px' }}>
+              <p style={{ margin: '0 0 4px 0', fontSize: '13px', fontWeight: 700, color: 'var(--color-court)' }}>
+                📅 ¿Quieres jugar el día siguiente?
+              </p>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-ink)' }}>
+                Solo en <strong>HGV 2</strong>, de 6:00am a 2:00pm — puedes reservar desde las <strong>6:00pm del día anterior</strong>.
+              </p>
+            </div>
+          </div>
+
+          <ul style={{ margin: '0 0 16px 0', paddingLeft: '20px', fontSize: '13px', color: 'var(--color-line)', lineHeight: 1.8 }}>
             <li>Cada reserva dura <strong>1 hora en Single</strong> o <strong>1h30 en Dobles</strong>.</li>
+            <li>Recuerda, al llegar a la cancha, confirmar desde la app que ya llegaste (botón <strong>"Ya llegué"</strong> en tus reservas).</li>
             <li>Si reservas y no puedes ir, <strong>cancela antes de la hora</strong> — no tiene ninguna penalidad.</li>
             <li>Si no cancelas a tiempo y no te presentas, no podrás reservar hasta dentro de <strong>{PENALIDAD_NO_PRESENTADO_DIAS} días</strong>.</li>
-            <li>Si usas la cancha, las reservas son <strong>día por medio</strong> — jugaste hoy, el siguiente día no puedes reservar, pero el de después sí.</li>
+            <li>Si usas la cancha, puedes hacer una nueva reserva <strong>día por medio</strong> — jugaste hoy, el siguiente día no puedes reservar, pero el de después sí.</li>
           </ul>
 
           <div style={{ marginBottom: '14px' }}>
