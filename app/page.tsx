@@ -118,7 +118,6 @@ export default function Home() {
       alignItems: 'center',
       padding: '60px 20px 40px',
     }}>
-
       {/* Logo y título */}
       <div style={{ textAlign: 'center', marginBottom: '28px' }}>
         <img
@@ -133,7 +132,6 @@ export default function Home() {
             filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.45))',
           }}
         />
-
         <h1 style={{
           fontFamily: 'var(--font-display)',
           fontWeight: 900,
@@ -145,7 +143,6 @@ export default function Home() {
         }}>
           HGV Tennis Club
         </h1>
-
         <p style={{
           fontFamily: 'var(--font-mono)',
           color: 'var(--color-ball)',
@@ -156,11 +153,9 @@ export default function Home() {
         }}>
           Challenger Ladder · 2026
         </p>
-
         <div style={{ margin: '20px 0' }}>
           <LineaDeCancha />
         </div>
-
         <p style={{
           color: 'rgba(247,243,234,0.75)',
           fontSize: '16px',
@@ -170,7 +165,6 @@ export default function Home() {
         }}>
           Compite, sube posiciones y conviértete en el campeón del club
         </p>
-
         {!checking && session && (
           <p style={{ fontSize: '14px', marginTop: '18px' }}>
             <span style={{ color: 'rgba(247,243,234,0.6)' }}>Conectado como </span>
@@ -255,7 +249,7 @@ export default function Home() {
                     </span>
                   )}
                   <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', whiteSpace: 'nowrap' }}>
-                    {new Date(item.hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(item.hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}
                     {' · '}
                     {item.tipo === 'escalera'
                       ? nombreCanchaCorta(item.data.cancha, item.data.nombre_cancha_foranea)
@@ -320,7 +314,6 @@ export default function Home() {
         }}>
           Ver Escalera
         </Link>
-
         <Link href="/galeria" style={{
           backgroundColor: 'transparent',
           color: 'var(--color-chalk)',
@@ -334,44 +327,19 @@ export default function Home() {
         }}>
           Galería
         </Link>
-
-        {/* Reservar Cancha — deshabilitado temporalmente. Se deja visible para
-            anticipar la función, pero no navega a /reservas hasta que esté lista.
-            Para reactivarlo: volver a un <Link href="/reservas"> como los de arriba
-            y quitar este bloque + el span "Próximamente". */}
-        <span
-          aria-disabled="true"
-          title="Próximamente"
-          style={{
-            backgroundColor: 'transparent',
-            color: 'rgba(247,243,234,0.35)',
-            padding: '14px 30px',
-            borderRadius: '4px',
-            fontWeight: 700,
-            fontSize: '15px',
-            fontFamily: 'var(--font-body)',
-            border: '1px solid rgba(247,243,234,0.15)',
-            cursor: 'not-allowed',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
+        <Link href="/reservas" style={{
+          backgroundColor: 'transparent',
+          color: 'var(--color-chalk)',
+          padding: '14px 30px',
+          borderRadius: '4px',
+          textDecoration: 'none',
+          fontWeight: 700,
+          fontSize: '15px',
+          fontFamily: 'var(--font-body)',
+          border: '1px solid rgba(247,243,234,0.4)',
+        }}>
           Reservar Cancha
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '9px',
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: 'var(--color-ink)',
-            background: 'var(--color-ball)',
-            padding: '2px 6px',
-            borderRadius: '3px',
-          }}>
-            Próximamente
-          </span>
-        </span>
-
+        </Link>
         {!checking && session ? (
           session.role === 'admin' && (
             <Link href="/admin" style={{
@@ -403,7 +371,6 @@ export default function Home() {
             }}>
               Registrarse
             </Link>
-
             <Link href="/login" style={{
               backgroundColor: 'transparent',
               color: 'var(--color-ball)',
@@ -474,7 +441,6 @@ export default function Home() {
       }}>
         © 2026 HGV Tennis Club
       </p>
-
     </main>
   )
 }
