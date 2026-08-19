@@ -126,6 +126,21 @@ export default function AdminPage() {
   const [editGanadorId, setEditGanadorId] = useState('')
   const [guardandoEditResultado, setGuardandoEditResultado] = useState(false)
   const [resultadosMsg, setResultadosMsg] = useState('')
+  const [retosSinResultado, setRetosSinResultado] = useState<any[]>([])
+  const [retoDirectoId, setRetoDirectoId] = useState('')
+  const [set1RetadorD, setSet1RetadorD] = useState('')
+  const [set1RetadoD, setSet1RetadoD] = useState('')
+  const [set2RetadorD, setSet2RetadorD] = useState('')
+  const [set2RetadoD, setSet2RetadoD] = useState('')
+  const [set1TbRetadorD, setSet1TbRetadorD] = useState('')
+  const [set1TbRetadoD, setSet1TbRetadoD] = useState('')
+  const [set2TbRetadorD, setSet2TbRetadorD] = useState('')
+  const [set2TbRetadoD, setSet2TbRetadoD] = useState('')
+  const [tbRetadorD, setTbRetadorD] = useState('')
+  const [tbRetadoD, setTbRetadoD] = useState('')
+  const [noPresentadoDirectoId, setNoPresentadoDirectoId] = useState('')
+  const [fotoDirectoFile, setFotoDirectoFile] = useState<File | null>(null)
+  const [guardandoDirecto, setGuardandoDirecto] = useState(false)
   const [subiendoFotoResultadoId, setSubiendoFotoResultadoId] = useState<string | null>(null)
 
   const [fotosGaleria, setFotosGaleria] = useState<any[]>([])
@@ -148,8 +163,162 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeSection === 'results') {
       fetchResultados()
+      fetchRetosSinResultado()
     }
   }, [activeSection])
+
+  const fetchRetosSinResultado = async () => {
+    const { data: resultadosExistentes } = await supabase.from('resultados').select('reto_id')
+    const idsConResultado = new Set((resultadosExistentes || []).map((r: any) => r.reto_id))
+
+    const { data: todosLosRetos } = await supabase
+      .from('retos')
+      .select('id, estado, fecha_propuesta, retador_id, retado_id, retador:retador_id(nombre), retado:retado_id(nombre)')
+      .order('created_at', { ascending: false })
+
+    setRetosSinResultado((todosLosRetos || []).filter((r: any) => !idsConResultado.has(r.id)))
+  }
+
+  // Misma lógica que usa el jugador para cargar su resultado — un set en 6-6
+  // pide su propio tie-break, y si el partido queda 1-1 en sets, se pide el
+  // Super Tiebreak para desempatar. La repetimos aquí para el ingreso directo del admin.
+  function evaluarSetDirecto(
+    golesRetador: string, golesRetado: string, tbRetadorStr: string, tbRetadoStr: string
+  ): { completo: boolean; ganadorEsRetador: boolean | null; textoRetador: string } {
+    const gr = parseInt(golesRetador, 10)
+    const gd = parseInt(golesRetado, 10)
+    if (isNaN(gr) || isNaN(gd)) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
+
+    const es66 = gr === 6 && gd === 6
+    if (es66) {
+      const tbr = parseInt(tbRetadorStr, 10)
+      const tbd = parseInt(tbRetadoStr, 10)
+      if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) {
+        return { completo: false, ganadorEsRetador: null, textoRetador: '' }
+      }
+      const ganadorEsRetador = tbr > tbd
+      return { completo: true, ganadorEsRetador, textoRetador: ganadorEsRetador ? `7-6(${tbr}-${tbd})` : `6-7(${tbd}-${tbr})` }
+    }
+
+    if (gr === gd) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
+    return { completo: true, ganadorEsRetador: gr > gd, textoRetador: `${gr}-${gd}` }
+  }
+
+  function invertirMarcadorSetDirecto(texto: string): string {
+    const match = texto.match(/^(\d+)-(\d+)(\((\d+)-(\d+)\))?$/)
+    if (!match) return texto
+    const [, a, b, , tba, tbb] = match
+    return tba ? `${b}-${a}(${tbb}-${tba})` : `${b}-${a}`
+  }
+
+  function calcularResultadoDirecto() {
+    const set1 = evaluarSetDirecto(set1RetadorD, set1RetadoD, set1TbRetadorD, set1TbRetadoD)
+    const set2 = evaluarSetDirecto(set2RetadorD, set2RetadoD, set2TbRetadorD, set2TbRetadoD)
+    if (!set1.completo || !set2.completo) return { valido: false as const }
+
+    const setsRetador = (set1.ganadorEsRetador ? 1 : 0) + (set2.ganadorEsRetador ? 1 : 0)
+    const necesitaSuperTiebreak = setsRetador === 1
+
+    if (!necesitaSuperTiebreak) {
+      return {
+        valido: true as const,
+        ganadorEsRetador: setsRetador === 2,
+        marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}`,
+        marcadorRetado: `${invertirMarcadorSetDirecto(set1.textoRetador)}, ${invertirMarcadorSetDirecto(set2.textoRetador)}`,
+      }
+    }
+
+    const tbr = parseInt(tbRetadorD, 10)
+    const tbd = parseInt(tbRetadoD, 10)
+    if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) return { valido: false as const }
+
+    return {
+      valido: true as const,
+      ganadorEsRetador: tbr > tbd,
+      marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}, ST ${tbr}-${tbd}`,
+      marcadorRetado: `${invertirMarcadorSetDirecto(set1.textoRetador)}, ${invertirMarcadorSetDirecto(set2.textoRetador)}, ST ${tbd}-${tbr}`,
+    }
+  }
+
+  const limpiarFormularioDirecto = () => {
+    setRetoDirectoId('')
+    setSet1RetadorD(''); setSet1RetadoD(''); setSet2RetadorD(''); setSet2RetadoD('')
+    setSet1TbRetadorD(''); setSet1TbRetadoD(''); setSet2TbRetadorD(''); setSet2TbRetadoD('')
+    setTbRetadorD(''); setTbRetadoD('')
+    setNoPresentadoDirectoId('')
+    setFotoDirectoFile(null)
+  }
+
+  const cargarResultadoDirecto = async () => {
+    const reto = retosSinResultado.find((r: any) => r.id === retoDirectoId)
+    if (!reto) {
+      setResultadosMsg('❌ Elige el partido.')
+      return
+    }
+
+    setGuardandoDirecto(true)
+    setResultadosMsg('')
+    try {
+      let ganadorId: string
+      let marcadorRetador = ''
+      let marcadorRetado = ''
+      let noPresentado = false
+
+      if (noPresentadoDirectoId) {
+        noPresentado = true
+        ganadorId = noPresentadoDirectoId === reto.retador_id ? reto.retado_id : reto.retador_id
+        marcadorRetador = noPresentadoDirectoId === reto.retador_id ? 'No presentado' : 'W.O.'
+        marcadorRetado = noPresentadoDirectoId === reto.retado_id ? 'No presentado' : 'W.O.'
+      } else {
+        const resultado = calcularResultadoDirecto()
+        if (!resultado.valido) {
+          setResultadosMsg('❌ Completa los 2 sets (y los tie-breaks que hagan falta) con marcadores válidos, o marca "No se presentó".')
+          setGuardandoDirecto(false)
+          return
+        }
+        ganadorId = resultado.ganadorEsRetador ? reto.retador_id : reto.retado_id
+        marcadorRetador = resultado.marcadorRetador
+        marcadorRetado = resultado.marcadorRetado
+      }
+
+      let fotoUrl: string | null = null
+      if (fotoDirectoFile) {
+        const ext = fotoDirectoFile.name.split('.').pop()
+        const path = `${reto.id}-${Date.now()}.${ext}`
+        const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoDirectoFile)
+        if (errSubida) throw errSubida
+        const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
+        fotoUrl = urlData.publicUrl
+      }
+
+      // Si el reto no estaba aceptado (ej: quedó rechazado pero sí se jugó), lo
+      // dejamos como aceptado para que el resto del flujo (aprobar, ranking) funcione normal.
+      if (reto.estado !== 'aceptado') {
+        const { error: errReto } = await supabase.from('retos').update({ estado: 'aceptado' }).eq('id', reto.id)
+        if (errReto) throw errReto
+      }
+
+      const { error: errResultado } = await supabase.from('resultados').insert([{
+        reto_id: reto.id,
+        ganador_id: ganadorId,
+        marcador_retador: marcadorRetador,
+        marcador_retado: marcadorRetado,
+        foto_url: fotoUrl,
+        no_presentado: noPresentado,
+        validado: false,
+      }])
+      if (errResultado) throw errResultado
+
+      setResultadosMsg('✅ Resultado cargado — queda en "Pendientes de validar" para aprobarlo abajo.')
+      limpiarFormularioDirecto()
+      fetchRetosSinResultado()
+      fetchResultados()
+    } catch (err: any) {
+      setResultadosMsg('❌ ' + err.message)
+    } finally {
+      setGuardandoDirecto(false)
+    }
+  }
 
   const fetchResultados = async () => {
     setLoadingResultados(true)
@@ -2711,6 +2880,144 @@ export default function AdminPage() {
                 <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
                   Total: <strong>{resultados.length}</strong> resultados
                 </span>
+              </div>
+
+              <div style={{
+                background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+              }}>
+                <h3 style={{ marginTop: 0, color: 'var(--color-ink)' }}>➕ Cargar resultado directo</h3>
+                <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '0 0 14px 0' }}>
+                  Para cuando el partido sí se jugó pero el reto no está aceptado en el sistema (ej: fue rechazado por error), o cuando prefieres cargarlo tú mismo en vez de que lo haga un jugador.
+                </p>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Partido</label>
+                  <select
+                    value={retoDirectoId}
+                    onChange={(e) => { setRetoDirectoId(e.target.value); setNoPresentadoDirectoId('') }}
+                    style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', width: '100%', maxWidth: '420px' }}
+                  >
+                    <option value="">Selecciona un partido…</option>
+                    {retosSinResultado.map((r: any) => (
+                      <option key={r.id} value={r.id}>
+                        {r.retador?.nombre} vs {r.retado?.nombre} — {r.fecha_propuesta ? new Date(r.fecha_propuesta).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' }) : 'sin fecha'} ({r.estado})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {retoDirectoId && (() => {
+                  const reto = retosSinResultado.find((r: any) => r.id === retoDirectoId)
+                  if (!reto) return null
+                  return (
+                    <>
+                      <p style={{ margin: '0 0 10px 0' }}>
+                        <button
+                          type="button"
+                          onClick={() => setNoPresentadoDirectoId(noPresentadoDirectoId ? '' : reto.retador_id)}
+                          style={{ background: 'none', border: 'none', color: '#c0392b', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0 }}
+                        >
+                          {noPresentadoDirectoId ? '← Volver a cargar marcador' : '❌ Uno de los dos no se presentó'}
+                        </button>
+                      </p>
+
+                      {noPresentadoDirectoId ? (
+                        <div style={{ marginBottom: '14px' }}>
+                          <p style={{ fontSize: '13px', color: '#c0392b', fontWeight: 'bold', margin: '0 0 8px 0' }}>¿Quién no se presentó?</p>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setNoPresentadoDirectoId(reto.retador_id)}
+                              style={{
+                                background: noPresentadoDirectoId === reto.retador_id ? '#c0392b' : '#fee2e2',
+                                color: noPresentadoDirectoId === reto.retador_id ? 'white' : '#c0392b',
+                                border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold',
+                              }}
+                            >
+                              {reto.retador?.nombre}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNoPresentadoDirectoId(reto.retado_id)}
+                              style={{
+                                background: noPresentadoDirectoId === reto.retado_id ? '#c0392b' : '#fee2e2',
+                                color: noPresentadoDirectoId === reto.retado_id ? 'white' : '#c0392b',
+                                border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold',
+                              }}
+                            >
+                              {reto.retado?.nombre}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p style={{ fontSize: '12px', color: '#6b6b6b', margin: '0 0 8px 0' }}>
+                            Juegos ganados por set. Si un set queda 6-6, se pide su tie-break. Si el partido queda 1-1 en sets, se pide el Super Tiebreak.
+                          </p>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
+                            <span style={{ fontSize: '12px', color: '#555' }}>Set 1</span>
+                            <input type="number" min="0" placeholder={reto.retador?.nombre} value={set1RetadorD} onChange={(e) => setSet1RetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                            <input type="number" min="0" placeholder={reto.retado?.nombre} value={set1RetadoD} onChange={(e) => setSet1RetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                          </div>
+
+                          {parseInt(set1RetadorD, 10) === 6 && parseInt(set1RetadoD, 10) === 6 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
+                              <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 1</span>
+                              <input type="number" min="0" placeholder={reto.retador?.nombre} value={set1TbRetadorD} onChange={(e) => setSet1TbRetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                              <input type="number" min="0" placeholder={reto.retado?.nombre} value={set1TbRetadoD} onChange={(e) => setSet1TbRetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                            </div>
+                          )}
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
+                            <span style={{ fontSize: '12px', color: '#555' }}>Set 2</span>
+                            <input type="number" min="0" placeholder={reto.retador?.nombre} value={set2RetadorD} onChange={(e) => setSet2RetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                            <input type="number" min="0" placeholder={reto.retado?.nombre} value={set2RetadoD} onChange={(e) => setSet2RetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                          </div>
+
+                          {parseInt(set2RetadorD, 10) === 6 && parseInt(set2RetadoD, 10) === 6 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
+                              <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 2</span>
+                              <input type="number" min="0" placeholder={reto.retador?.nombre} value={set2TbRetadorD} onChange={(e) => setSet2TbRetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                              <input type="number" min="0" placeholder={reto.retado?.nombre} value={set2TbRetadoD} onChange={(e) => setSet2TbRetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                            </div>
+                          )}
+
+                          {(() => {
+                            const set1 = evaluarSetDirecto(set1RetadorD, set1RetadoD, set1TbRetadorD, set1TbRetadoD)
+                            const set2 = evaluarSetDirecto(set2RetadorD, set2RetadoD, set2TbRetadorD, set2TbRetadoD)
+                            const setsRetador = (set1.completo && set1.ganadorEsRetador ? 1 : 0) + (set2.completo && set2.ganadorEsRetador ? 1 : 0)
+                            if (!(set1.completo && set2.completo && setsRetador === 1)) return null
+                            return (
+                              <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '10px', maxWidth: '420px' }}>
+                                <span style={{ fontSize: '12px', color: '#c0392b', fontWeight: 'bold' }}>Super TB</span>
+                                <input type="number" min="0" placeholder={reto.retador?.nombre} value={tbRetadorD} onChange={(e) => setTbRetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                                <input type="number" min="0" placeholder={reto.retado?.nombre} value={tbRetadoD} onChange={(e) => setTbRetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                              </div>
+                            )
+                          })()}
+
+                          <div style={{ marginBottom: '12px' }}>
+                            <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>📸 Foto del partido (opcional)</label>
+                            <input type="file" accept="image/*" onChange={(e) => setFotoDirectoFile(e.target.files?.[0] || null)} style={{ fontSize: '13px' }} />
+                          </div>
+                        </>
+                      )}
+
+                      <button
+                        onClick={cargarResultadoDirecto}
+                        disabled={guardandoDirecto}
+                        style={{
+                          background: guardandoDirecto ? '#ccc' : '#28a745', color: 'white', border: 'none',
+                          padding: '10px 20px', borderRadius: '8px', cursor: guardandoDirecto ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold',
+                        }}
+                      >
+                        {guardandoDirecto ? 'Guardando…' : '✅ Cargar resultado'}
+                      </button>
+                    </>
+                  )
+                })()}
               </div>
 
               {resultadosMsg && (
