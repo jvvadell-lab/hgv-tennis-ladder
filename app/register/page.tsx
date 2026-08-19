@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import CropperCarnet from './CropperCarnet'
@@ -51,7 +51,7 @@ function formatTelefonoLocal(digits: string) {
   return out
 }
 
-export default function RegisterPage() {
+function RegisterForm() {
   const searchParams = useSearchParams()
   const nextParam = searchParams.get('next') || ''
   // Solo aceptamos rutas internas relativas (empiezan con "/" pero no "//"),
@@ -457,5 +457,16 @@ export default function RegisterPage() {
         />
       )}
     </div>
+  )
+}
+
+// useSearchParams() exige que el componente que lo usa esté envuelto en
+// Suspense — si no, Next.js no puede generar la página estáticamente y el
+// build falla. Este export es el que realmente usa Next.js como la página.
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   )
 }
