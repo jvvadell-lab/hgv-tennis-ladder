@@ -701,7 +701,7 @@ export default function LadderPage() {
         const horaConflicto = new Date(conflicto.fecha_propuesta)
         const ocupadaDesde = new Date(horaConflicto.getTime() - DURACION_PARTIDO_MS)
         const ocupadaHasta = new Date(horaConflicto.getTime() + DURACION_PARTIDO_MS)
-        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
         setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido). Elige un horario fuera de ese rango.`)
         return
       }
@@ -729,7 +729,7 @@ export default function LadderPage() {
       })
 
       if (conflictoReserva) {
-        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
         setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual a las ${fmt(new Date(conflictoReserva.fecha_hora))}. Elige otro horario.`)
         return
       }
@@ -787,7 +787,7 @@ export default function LadderPage() {
       if (resultadoReciente) {
         const libera = new Date(resultadoReciente.validado_at)
         libera.setDate(libera.getDate() + 5)
-        setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${libera.toLocaleDateString('es-ES')}.`)
+        setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${libera.toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}.`)
         return
       }
     }
@@ -1208,7 +1208,7 @@ export default function LadderPage() {
                     </p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#5c5c5c' }}>
                       {new Date(partido.fecha_propuesta).toLocaleString('es-ES', {
-                        weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+                        weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas',
                       })}
                       {' · '}
                       {partido.cancha === 'FORANEA'
@@ -1423,7 +1423,7 @@ export default function LadderPage() {
                                       : enPermisoMedico(p.jugador_id)
                                       ? `Este jugador tiene permiso médico hasta el ${new Date(permisoMedicoMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES')}`
                                       : enEnfriamiento(p.jugador_id)
-                                      ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES')}`
+                                      ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}`
                                       : jugadoresOcupados.has(p.jugador_id)
                                       ? 'Este jugador ya tiene un reto pendiente o en curso con otra persona'
                                       : bloqueado ? 'Tienes un reto pendiente o un partido en curso' : ''
@@ -1438,7 +1438,7 @@ export default function LadderPage() {
                                 )}
                                 {enEnfriamiento(p.jugador_id) && (
                                   <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
-                                    Disponible el {new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES')}
+                                    Disponible el {new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}
                                   </p>
                                 )}
                               </>
@@ -1614,7 +1614,7 @@ export default function LadderPage() {
                       {r.fecha_propuesta && (
                         <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#555' }}>
                           📅 {new Date(r.fecha_propuesta).toLocaleString('es-ES', {
-                            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+                            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas',
                           })}
                         </p>
                       )}
@@ -1820,7 +1820,7 @@ export default function LadderPage() {
                         if (!puedeCargar) {
                           return (
                             <p style={{ fontSize: '13px', color: '#666', background: '#f0f0f0', padding: '8px 12px', borderRadius: '6px', margin: 0 }}>
-                              🕐 Podrás cargar el resultado a partir del {new Date(r.fecha_propuesta!).toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}, o antes si un administrador lo autoriza.
+                              🕐 Podrás cargar el resultado a partir del {new Date(r.fecha_propuesta!).toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}, o antes si un administrador lo autoriza.
                             </p>
                           )
                         }
@@ -2190,7 +2190,7 @@ export default function LadderPage() {
                         <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '11px' }}>
                           vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
                           <br />
-                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
+                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' }) : ''}</span>
                         </div>
                       ))}
                     </div>

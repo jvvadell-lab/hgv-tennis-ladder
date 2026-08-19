@@ -806,7 +806,7 @@ export default function AdminPage() {
   const notificarPagoPendiente = async (jugadorId: string) => {
     const previos = recordatoriosDe(jugadorId)
     if (previos.length > 0) {
-      const ultima = new Date(previos[0].enviado_at).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' })
+      const ultima = new Date(previos[0].enviado_at).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Caracas' })
       const continuar = confirm(`Ya se le enviaron ${previos.length} recordatorio(s) a este jugador — el último el ${ultima}. ¿Enviar otro de todas formas?`)
       if (!continuar) return
     }
@@ -1744,7 +1744,7 @@ export default function AdminPage() {
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <span style={{ color: '#6b6b6b', fontSize: '14px' }}>
-              🕐 {new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              🕐 {new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Caracas' })}
             </span>
             <a href="/" style={{
               color: 'var(--color-court)', fontSize: '14px', fontWeight: 700, textDecoration: 'none',
@@ -2024,7 +2024,7 @@ export default function AdminPage() {
                               )}
                             </td>
                             <td style={{ padding: '12px 16px', color: '#6b6b6b', fontSize: '13px' }}>
-                              {player.created_at ? new Date(player.created_at).toLocaleDateString('es-ES') : '—'}
+                              {player.created_at ? new Date(player.created_at).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' }) : '—'}
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                               <button
@@ -2246,7 +2246,7 @@ export default function AdminPage() {
                                 {GENEROS.find(g => g.value === r.retador?.genero)?.label || '—'}
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
-                                {r.fecha_propuesta ? new Date(r.fecha_propuesta).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                {r.fecha_propuesta ? new Date(r.fecha_propuesta).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' }) : '—'}
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
                                 {r.cancha === 'FORANEA' ? (r.nombre_cancha_foranea || 'Foránea') : r.cancha === 'HGV1' ? 'HGV 1' : r.cancha === 'HGV2' ? 'HGV 2' : '—'}
@@ -2370,7 +2370,7 @@ export default function AdminPage() {
                                 <div key={`reto-${r.id}`} style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                     <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--color-court)' }}>
-                                      {new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                      {new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}
                                     </span>
                                     <span style={{ display: 'flex', gap: '6px' }}>
                                       <span style={{ background: '#e0f2fe', color: '#075985', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
@@ -2401,9 +2401,9 @@ export default function AdminPage() {
                               <div key={`reserva-${res.id}`} style={{ borderTop: '1px solid #eee', paddingTop: '10px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold', color: 'var(--color-court)' }}>
-                                    {new Date(res.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                    {new Date(res.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}
                                     {' – '}
-                                    {finReserva.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                    {finReserva.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}
                                   </span>
                                   <span style={{ display: 'flex', gap: '4px' }}>
                                     <span style={{
@@ -2504,10 +2504,10 @@ export default function AdminPage() {
                               <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</td>
                               <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.tipo_juego === 'doble' ? 'Dobles' : 'Single'}</td>
                               <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
-                                {new Date(r.fecha_hora).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {new Date(r.fecha_hora).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Caracas' })}
                               </td>
                               <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
-                                {new Date(r.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                {new Date(r.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}
                               </td>
                               <td style={{ padding: '10px 14px' }}>
                                 <span style={{
@@ -2655,7 +2655,7 @@ export default function AdminPage() {
                         </p>
                       )}
                       <p style={{ margin: '0 0 12px 0', fontSize: '11px', color: '#999' }}>
-                        Solicitado el {new Date(p.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        Solicitado el {new Date(p.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Caracas' })}
                       </p>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                         <input
@@ -2752,7 +2752,7 @@ export default function AdminPage() {
                             </p>
                             <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>
                               {CATEGORIAS.find(c => c.value === r.retos?.retador?.categoria)?.label} — {GENEROS.find(g => g.value === r.retos?.retador?.genero)?.label}
-                              {' · '}Enviado {new Date(r.created_at).toLocaleDateString('es-ES')}
+                              {' · '}Enviado {new Date(r.created_at).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}
                             </p>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -2893,7 +2893,7 @@ export default function AdminPage() {
                                 {GENEROS.find(g => g.value === r.retos?.retador?.genero)?.label || '—'}
                               </td>
                               <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b6b6b' }}>
-                                {new Date(r.created_at).toLocaleDateString('es-ES')}
+                                {new Date(r.created_at).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}
                               </td>
                               <td style={{ padding: '12px 16px' }}>
                                 <FotoResultadoControl r={r} />
@@ -2958,7 +2958,7 @@ export default function AdminPage() {
                           {f.retos?.retador?.nombre || '—'} vs {f.retos?.retado?.nombre || '—'}
                         </p>
                         <p style={{ margin: '4px 0 10px 0', fontSize: '12px', color: '#6b6b6b' }}>
-                          {new Date(f.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {new Date(f.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Caracas' })}
                         </p>
                         <button
                           onClick={() => eliminarFoto(f.id)}
@@ -3867,7 +3867,7 @@ export default function AdminPage() {
                                           <span style={{ color: '#e67e22', fontSize: '12px' }}>
                                             📧 {recordatoriosDe(j.jugador_id).length} recordatorio{recordatoriosDe(j.jugador_id).length > 1 ? 's' : ''}
                                             {' · último '}
-                                            {new Date(recordatoriosDe(j.jugador_id)[0].enviado_at).toLocaleDateString('es-ES')}
+                                            {new Date(recordatoriosDe(j.jugador_id)[0].enviado_at).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}
                                           </span>
                                         )}
                                         <button
@@ -4144,7 +4144,7 @@ export default function AdminPage() {
                         <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '11px' }}>
                           vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
                           <br />
-                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
+                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' }) : ''}</span>
                         </div>
                       ))}
                     </div>
