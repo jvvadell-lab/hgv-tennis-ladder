@@ -9,9 +9,14 @@ const supabase = createClient(
 
 const DURACION_RESERVA_MIN = 60
 const DURACION_RETO_MIN = 90
-const VENTANA_ANTICIPACION_MIN = 180 // máximo 3 horas de anticipación
-const PENALIDAD_DIAS = 5 // días de espera si usó la cancha, o si no fue y no canceló a tiempo
+const PENALIDAD_NO_PRESENTADO_DIAS = 5 // si reservaste y no fuiste (ni cancelaste a tiempo)
 const PASO_MIN = 15 // granularidad de los horarios que se ofrecen (cada 15 min)
+
+// Ventanas en las que se abre cada tipo de reserva (en minutos desde medianoche)
+const APERTURA_MISMO_DIA_MIN = 600  // 10:00am — desde aquí se puede reservar para HOY
+const APERTURA_MANANA_MIN = 960     // 4:00pm — desde aquí se puede reservar la mañana de MAÑANA (solo HGV2)
+const MANANA_HGV2_INICIO_MIN = 360  // 6:00am
+const MANANA_HGV2_FIN_MIN = 720     // 12:00pm (mediodía)
 
 function seSolapan(inicio1Ms: number, duracion1Min: number, inicio2Ms: number, duracion2Min: number) {
   const fin1 = inicio1Ms + duracion1Min * 60000
@@ -19,7 +24,7 @@ function seSolapan(inicio1Ms: number, duracion1Min: number, inicio2Ms: number, d
   return inicio1Ms < fin2 && inicio2Ms < fin1
 }
 
-// Devuelve si esa cancha, a esa hora exacta de HOY, está dentro de su horario de apertura.
+// Devuelve si esa cancha, a esa hora exacta, está dentro de su horario de apertura normal.
 function horaValidaParaCancha(cancha: string, fecha: Date): boolean {
   const dia = fecha.getDay() // 0 domingo ... 6 sábado
   const esFinde = dia === 0 || dia === 6
@@ -30,7 +35,7 @@ function horaValidaParaCancha(cancha: string, fecha: Date): boolean {
 
   if (cancha === 'HGV1') {
     return esViernes
-      ? minutos >= 840 && minutos < 1440   // Viernes: 2:00pm – 12:00am
+      ? minutos >= 1080 && minutos < 1440  // Viernes: 6:00pm – 12:00am
       : minutos >= 1200 && minutos < 1440  // Lun-Jue: 8:00pm – 12:00am
   }
   if (cancha === 'HGV2') {
@@ -41,12 +46,18 @@ function horaValidaParaCancha(cancha: string, fecha: Date): boolean {
   return true
 }
 
+function fechaAlInicioDelDia(base: Date): Date {
+  const d = new Date(base)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
 export default function ReservasPage() {
   const [session, setSession] = useState<any>(null)
   const [checking, setChecking] = useState(true)
 
   const [cancha, setCancha] = useState('HGV1')
-  const [horaSeleccionada, setHoraSeleccionada] = useState<string>('') // "HH:MM" en 24h
+  const [horaSeleccionada, setHoraSeleccionada] = useState<string>('') // ISO completo (fecha + hora) de la opción elegida
   const [reservando, setReservando] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -63,8 +74,8 @@ export default function ReservasPage() {
       .finally(() => setChecking(false))
   }, [])
 
-  // Refrescamos "ahora" cada 30s — así los botones de Cancelar/Confirmar
-  // aparecen o desaparecen solos según va pasando la hora, sin recargar.
+  // Refrescamos "ahora" cada 30s — así los botones de Cancelar/Confirmar, y
+  // las ventanas de apertura (10am / 4pm), aparecen o desaparecen solos.
   useEffect(() => {
     const intervalo = setInterval(() => setAhora(Date.now()), 30000)
     return () => clearInterval(intervalo)
@@ -73,7 +84,7 @@ export default function ReservasPage() {
   const cargarMisReservas = useCallback(() => {
     if (!session) return
     setLoadingMisReservas(true)
-    const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
+    const inicioHoy = fechaAlInicioDelDia(new Date())
     supabase
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, estado, duracion_min')
@@ -91,61 +102,82 @@ export default function ReservasPage() {
     if (session?.role === 'jugador') cargarMisReservas()
   }, [session, cargarMisReservas])
 
-  // Genera la lista de horarios válidos para la cancha elegida: entre ahora y
-  // dentro de las próximas 3 horas, cada 15 min, respetando el horario de la cancha.
+  // Genera la lista de horarios que se pueden reservar AHORA MISMO, combinando
+  // las dos ventanas: hoy (si ya son las 10am) y, solo para HGV2, la mañana de
+  // mañana (si ya son las 4pm) — cada opción guarda su fecha y hora completas,
+  // porque ahora puede tratarse de dos días distintos.
   const [horariosDisponibles, setHorariosDisponibles] = useState<{ value: string; label: string }[]>([])
 
   useEffect(() => {
     const ahoraDate = new Date()
+    const horaActualMin = ahoraDate.getHours() * 60 + ahoraDate.getMinutes()
     const opciones: { value: string; label: string }[] = []
-    const cursor = new Date(ahoraDate)
-    const minutosSobrantes = cursor.getMinutes() % PASO_MIN
-    if (minutosSobrantes !== 0) cursor.setMinutes(cursor.getMinutes() + (PASO_MIN - minutosSobrantes))
-    cursor.setSeconds(0, 0)
 
-    const limite = new Date(ahoraDate.getTime() + VENTANA_ANTICIPACION_MIN * 60000)
+    const agregarSiValido = (fecha: Date, etiquetaDia: string) => {
+      if (!horaValidaParaCancha(cancha, fecha)) return
+      opciones.push({
+        value: fecha.toISOString(),
+        label: `${etiquetaDia} ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
+      })
+    }
 
-    while (cursor <= limite) {
-      if (horaValidaParaCancha(cancha, cursor)) {
-        const hh = String(cursor.getHours()).padStart(2, '0')
-        const mm = String(cursor.getMinutes()).padStart(2, '0')
-        opciones.push({
-          value: `${hh}:${mm}`,
-          label: cursor.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-        })
+    // Ventana de HOY — abierta desde las 10:00am
+    if (horaActualMin >= APERTURA_MISMO_DIA_MIN) {
+      const cursor = new Date(ahoraDate)
+      const sobran = cursor.getMinutes() % PASO_MIN
+      if (sobran !== 0) cursor.setMinutes(cursor.getMinutes() + (PASO_MIN - sobran))
+      cursor.setSeconds(0, 0)
+      const finHoy = new Date(ahoraDate); finHoy.setHours(23, 59, 59, 999)
+      while (cursor <= finHoy) {
+        agregarSiValido(new Date(cursor), 'Hoy')
+        cursor.setMinutes(cursor.getMinutes() + PASO_MIN)
       }
-      cursor.setMinutes(cursor.getMinutes() + PASO_MIN)
+    }
+
+    // Ventana de MAÑANA en la mañana — solo HGV2, abierta desde las 4:00pm de hoy
+    if (cancha === 'HGV2' && horaActualMin >= APERTURA_MANANA_MIN) {
+      const inicioManana = new Date(ahoraDate)
+      inicioManana.setDate(inicioManana.getDate() + 1)
+      inicioManana.setHours(Math.floor(MANANA_HGV2_INICIO_MIN / 60), MANANA_HGV2_INICIO_MIN % 60, 0, 0)
+      const finManana = new Date(ahoraDate)
+      finManana.setDate(finManana.getDate() + 1)
+      finManana.setHours(Math.floor(MANANA_HGV2_FIN_MIN / 60), MANANA_HGV2_FIN_MIN % 60, 0, 0)
+
+      const cursor2 = new Date(inicioManana)
+      while (cursor2 <= finManana) {
+        agregarSiValido(new Date(cursor2), 'Mañana')
+        cursor2.setMinutes(cursor2.getMinutes() + PASO_MIN)
+      }
     }
 
     setHorariosDisponibles(opciones)
     setHoraSeleccionada((actual) => (opciones.some((o) => o.value === actual) ? actual : (opciones[0]?.value || '')))
-  }, [cancha])
+  }, [cancha, ahora])
 
   const crearReserva = async () => {
     if (!session || session.role !== 'jugador') return
     setMsg('')
 
     if (!horaSeleccionada) {
-      setMsg('❌ No hay horarios disponibles para esta cancha en este momento.')
+      setMsg('❌ No hay horarios disponibles para reservar en este momento.')
       return
     }
 
     setReservando(true)
     try {
-      const hoyStr = new Date().toISOString().slice(0, 10)
-      const nuevaHora = new Date(`${hoyStr}T${horaSeleccionada}`)
+      const nuevaHora = new Date(horaSeleccionada)
       const nuevaHoraMs = nuevaHora.getTime()
       const ahoraMs = Date.now()
 
-      if (nuevaHoraMs < ahoraMs || nuevaHoraMs > ahoraMs + VENTANA_ANTICIPACION_MIN * 60000) {
-        setMsg('❌ Ese horario ya no está dentro de la ventana de reserva (máximo 3 horas de anticipación). Elige otro.')
+      if (nuevaHoraMs < ahoraMs) {
+        setMsg('❌ Ese horario ya pasó. Elige otro.')
         setReservando(false)
         return
       }
 
-      // Traemos las reservas recientes del jugador (últimos días + hoy) en cualquier cancha,
-      // para revisar tanto si tiene una sin resolver, como si le toca esperar la penalidad.
-      const desdeVentana = new Date(ahoraMs - (PENALIDAD_DIAS + 1) * 24 * 60 * 60 * 1000)
+      // Traemos las reservas recientes del jugador (últimos días + próximas), para
+      // revisar tanto si tiene una sin resolver, como si le toca esperar alguna penalidad.
+      const desdeVentana = new Date(ahoraMs - (PENALIDAD_NO_PRESENTADO_DIAS + 1) * 24 * 60 * 60 * 1000)
       const { data: misReservasRecientes, error: errMisReservas } = await supabase
         .from('reservas_cancha')
         .select('id, cancha, fecha_hora, estado, duracion_min')
@@ -166,27 +198,41 @@ export default function ReservasPage() {
         return
       }
 
-      // 2) ¿Tiene alguna reserva "penalizante" reciente? — la usó (estado='usada'),
-      // o quedó activa sin cancelar y su hora ya pasó (no fue y no avisó).
-      const penalizantes = (misReservasRecientes || []).filter((r: any) => {
+      // 2) Penalidad por NO PRESENTARSE (quedó activa sin cancelar y ya pasó su hora) — 5 días
+      const noPresentados = (misReservasRecientes || []).filter((r: any) => {
         const yaPaso = new Date(r.fecha_hora).getTime() <= ahoraMs
-        return r.estado === 'usada' || (r.estado === 'activa' && yaPaso)
+        return r.estado === 'activa' && yaPaso
       })
-      if (penalizantes.length > 0) {
-        const ultimaMs = Math.max(...penalizantes.map((r: any) => new Date(r.fecha_hora).getTime()))
-        const disponibleDesde = ultimaMs + PENALIDAD_DIAS * 24 * 60 * 60 * 1000
+      if (noPresentados.length > 0) {
+        const ultimaMs = Math.max(...noPresentados.map((r: any) => new Date(r.fecha_hora).getTime()))
+        const disponibleDesde = ultimaMs + PENALIDAD_NO_PRESENTADO_DIAS * 24 * 60 * 60 * 1000
         if (ahoraMs < disponibleDesde) {
           const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-          setMsg(`❌ Por tu última reserva, puedes volver a reservar a partir del ${fmt(new Date(disponibleDesde))} (${PENALIDAD_DIAS} días después). Si reservas y no puedes ir, cancela antes de la hora para evitar esta espera.`)
+          setMsg(`❌ Por no presentarte a tu última reserva, puedes volver a reservar a partir del ${fmt(new Date(disponibleDesde))} (${PENALIDAD_NO_PRESENTADO_DIAS} días después).`)
           setReservando(false)
           return
         }
       }
 
-      const inicioHoy = new Date(); inicioHoy.setHours(0, 0, 0, 0)
-      const finHoy = new Date(); finHoy.setHours(23, 59, 59, 999)
-      const inicioDia = inicioHoy.toISOString()
-      const finDia = finHoy.toISOString()
+      // 3) Uso normal de la cancha — "día por medio": si jugaste un día, el
+      // siguiente día queda bloqueado, pero el de después ya está disponible.
+      const usadas = (misReservasRecientes || []).filter((r: any) => r.estado === 'usada')
+      if (usadas.length > 0) {
+        const fechaUsoMasReciente = new Date(Math.max(...usadas.map((r: any) => new Date(r.fecha_hora).getTime())))
+        const diaUso = fechaAlInicioDelDia(fechaUsoMasReciente)
+        const diaBloqueado = new Date(diaUso); diaBloqueado.setDate(diaBloqueado.getDate() + 1)
+        const diaSolicitado = fechaAlInicioDelDia(nuevaHora)
+        if (diaSolicitado.getTime() === diaBloqueado.getTime()) {
+          const disponibleDesde = new Date(diaBloqueado); disponibleDesde.setDate(disponibleDesde.getDate() + 1)
+          const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+          setMsg(`❌ Jugaste el ${fmt(diaUso)} — las reservas son día por medio, así que recién puedes volver a reservar a partir del ${fmt(disponibleDesde)}.`)
+          setReservando(false)
+          return
+        }
+      }
+
+      const inicioDia = fechaAlInicioDelDia(nuevaHora)
+      const finDia = new Date(inicioDia); finDia.setHours(23, 59, 59, 999)
 
       // No debe chocar con partidos de la escalera (bloquean 1h30) en esa cancha ese día
       const { data: retosDia, error: errRetos } = await supabase
@@ -194,8 +240,8 @@ export default function ReservasPage() {
         .select('id, fecha_propuesta')
         .eq('cancha', cancha)
         .in('estado', ['pendiente', 'aceptado'])
-        .gte('fecha_propuesta', inicioDia)
-        .lte('fecha_propuesta', finDia)
+        .gte('fecha_propuesta', inicioDia.toISOString())
+        .lte('fecha_propuesta', finDia.toISOString())
       if (errRetos) throw errRetos
 
       const conflictoReto = (retosDia || []).find((r: any) =>
@@ -216,8 +262,8 @@ export default function ReservasPage() {
         .select('id, fecha_hora, duracion_min')
         .eq('cancha', cancha)
         .eq('estado', 'activa')
-        .gte('fecha_hora', inicioDia)
-        .lte('fecha_hora', finDia)
+        .gte('fecha_hora', inicioDia.toISOString())
+        .lte('fecha_hora', finDia.toISOString())
       if (errReservas) throw errReservas
 
       const conflictoReserva = (reservasDia || []).find((r: any) =>
@@ -326,12 +372,15 @@ export default function ReservasPage() {
 
         {/* Formulario de reserva */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '28px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-          <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 10px 0' }}>
-            Las reservas son solo para hoy, con un máximo de 3 horas de anticipación. Cada reserva dura 1 hora.
+          <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 6px 0' }}>
+            Puedes reservar para <strong>hoy</strong> a partir de las <strong>10:00am</strong>. Solo en <strong>HGV 2</strong>, desde las <strong>4:00pm</strong> puedes reservar la mañana de <strong>mañana</strong> (6:00am–12:00pm). Cada reserva dura 1 hora.
           </p>
           <div style={{ background: 'rgba(230,126,34,0.1)', border: '1px solid rgba(230,126,34,0.3)', borderRadius: '4px', padding: '10px 14px', marginBottom: '18px' }}>
+            <p style={{ fontSize: '12px', color: '#7a4a0e', margin: '0 0 6px 0' }}>
+              ⚠️ Si reservas y no puedes ir, <strong>cancela antes de la hora</strong> — no tiene penalidad. Si no vas y no cancelas a tiempo, no podrás reservar hasta dentro de {PENALIDAD_NO_PRESENTADO_DIAS} días.
+            </p>
             <p style={{ fontSize: '12px', color: '#7a4a0e', margin: 0 }}>
-              ⚠️ Si reservas y no puedes ir, <strong>cancela antes de la hora</strong> — no tiene penalidad. Si usas la cancha, o si no vas y no cancelas a tiempo, no podrás volver a reservar hasta dentro de {PENALIDAD_DIAS} días.
+              🎾 Si usas la cancha, las reservas son <strong>día por medio</strong> — si jugaste hoy, el siguiente día no puedes reservar, pero el de después sí.
             </p>
           </div>
 
@@ -342,16 +391,22 @@ export default function ReservasPage() {
               <option value="HGV2">HGV 2</option>
             </select>
             <p style={{ fontSize: '11px', color: 'var(--color-line)', margin: '6px 0 0 0' }}>
-              {cancha === 'HGV1' && 'Lun-Jue: 8:00pm–12:00am · Vie: desde 2:00pm · Sáb-Dom: todo el día'}
+              {cancha === 'HGV1' && 'Lun-Jue: 8:00pm–12:00am · Vie: desde 6:00pm · Sáb-Dom: todo el día'}
               {cancha === 'HGV2' && 'Lun-Vie: 6:00am–2:00pm y 7:00pm–12:00am · Sáb-Dom: todo el día'}
             </p>
           </div>
 
           <div style={{ marginBottom: '18px' }}>
-            <label style={labelStyle}>🕐 Horario disponible (próximas 3 horas)</label>
+            <label style={labelStyle}>🕐 Horario disponible</label>
             {horariosDisponibles.length === 0 ? (
               <p style={{ fontSize: '13px', color: '#a83226', margin: 0 }}>
-                No hay horarios disponibles para esta cancha en este momento.
+                {(() => {
+                  const horaActualMin = new Date().getHours() * 60 + new Date().getMinutes()
+                  if (horaActualMin < APERTURA_MISMO_DIA_MIN) {
+                    return 'La reserva para hoy abre a las 10:00am.'
+                  }
+                  return 'No hay horarios disponibles para esta cancha en este momento.'
+                })()}
               </p>
             ) : (
               <select value={horaSeleccionada} onChange={(e) => setHoraSeleccionada(e.target.value)} style={inputStyle}>
@@ -388,7 +443,7 @@ export default function ReservasPage() {
         {/* Mis reservas */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', padding: '24px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '18px', margin: '0 0 14px 0' }}>
-            📋 Mis reservas de hoy
+            📋 Mis próximas reservas
           </h2>
           {loadingMisReservas ? (
             <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
@@ -401,6 +456,7 @@ export default function ReservasPage() {
                 const inicio = new Date(r.fecha_hora)
                 const fin = new Date(inicio.getTime() + duracion * 60000)
                 const yaEmpezo = ahora >= inicio.getTime()
+                const esHoy = fechaAlInicioDelDia(inicio).getTime() === fechaAlInicioDelDia(new Date()).getTime()
                 return (
                   <div key={r.id} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
@@ -410,6 +466,7 @@ export default function ReservasPage() {
                     <span>
                       <strong>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</strong>
                       {' — '}
+                      {esHoy ? 'Hoy' : 'Mañana'}{' '}
                       {inicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                       {' – '}
                       {fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
