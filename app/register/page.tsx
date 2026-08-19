@@ -125,6 +125,21 @@ export default function RegisterPage() {
 
       if (error) throw error
 
+      // Dejarlo logueado de una vez con el email/PIN que acaba de crear, y mandarlo
+      // directo a la escalera — ahí es donde tiene que anotarse a la temporada.
+      // Si por algo falla el login automático, no rompemos el flujo: mostramos
+      // el mensaje de éxito de siempre para que entre manualmente.
+      const resLogin = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email.trim().toLowerCase(), pin: formData.pin }),
+      })
+
+      if (resLogin.ok) {
+        window.location.href = '/ladder'
+        return
+      }
+
       setMessage('✅ ¡Registro exitoso! Ya puedes iniciar sesión con tu email y PIN')
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
       handleFotoCarnet(null)

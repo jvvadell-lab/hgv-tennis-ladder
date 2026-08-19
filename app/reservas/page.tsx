@@ -363,8 +363,27 @@ export default function ReservasPage() {
   if (!session || session.role !== 'jugador') {
     return (
       <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
-        <p style={{ color: 'var(--color-chalk)', fontSize: '18px', marginBottom: '16px' }}>🔒 Necesitas iniciar sesión como socio para reservar cancha.</p>
-        <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Iniciar sesión</a>
+        <p style={{ color: 'var(--color-chalk)', fontSize: '18px', marginBottom: '20px' }}>🔒 Necesitas ser socio registrado para reservar cancha.</p>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <a
+            href="/register?next=/reservas"
+            style={{
+              background: 'var(--color-ball)', color: 'var(--color-ink)', fontWeight: 700, textDecoration: 'none',
+              padding: '12px 24px', borderRadius: '4px', fontSize: '14px',
+            }}
+          >
+            Registrarme ahora
+          </a>
+          <a
+            href="/login"
+            style={{
+              color: 'var(--color-chalk)', fontWeight: 700, textDecoration: 'none',
+              border: '1px solid rgba(247,243,234,0.4)', padding: '12px 24px', borderRadius: '4px', fontSize: '14px',
+            }}
+          >
+            Ya tengo cuenta — Iniciar sesión
+          </a>
+        </div>
       </main>
     )
   }
