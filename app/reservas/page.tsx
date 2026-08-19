@@ -7,7 +7,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const DURACION_RESERVA_MIN = 60
+const DURACION_SINGLE_MIN = 60
+const DURACION_DOBLE_MIN = 90
 const DURACION_RETO_MIN = 90
 const PENALIDAD_NO_PRESENTADO_DIAS = 5 // si reservaste y no fuiste (ni cancelaste a tiempo)
 const PASO_MIN = 15 // granularidad de los horarios que se ofrecen (cada 15 min)
@@ -24,23 +25,25 @@ function seSolapan(inicio1Ms: number, duracion1Min: number, inicio2Ms: number, d
   return inicio1Ms < fin2 && inicio2Ms < fin1
 }
 
-// Devuelve si esa cancha, a esa hora exacta, está dentro de su horario de apertura normal.
-function horaValidaParaCancha(cancha: string, fecha: Date): boolean {
+// Devuelve si esa cancha, empezando a esa hora y con esa duración, cabe por
+// completo dentro de su horario de apertura normal (sin pasarse del cierre).
+function horaValidaParaCancha(cancha: string, fecha: Date, duracionMin: number): boolean {
   const dia = fecha.getDay() // 0 domingo ... 6 sábado
   const esFinde = dia === 0 || dia === 6
   if (esFinde) return true
 
   const esViernes = dia === 5
   const minutos = fecha.getHours() * 60 + fecha.getMinutes()
+  const minutosFin = minutos + duracionMin
 
   if (cancha === 'HGV1') {
     return esViernes
-      ? minutos >= 1080 && minutos < 1440  // Viernes: 6:00pm – 12:00am
-      : minutos >= 1200 && minutos < 1440  // Lun-Jue: 8:00pm – 12:00am
+      ? minutos >= 1080 && minutosFin <= 1440  // Viernes: 6:00pm – 12:00am
+      : minutos >= 1200 && minutosFin <= 1440  // Lun-Jue: 8:00pm – 12:00am
   }
   if (cancha === 'HGV2') {
-    const enManana = minutos >= 360 && minutos < 840   // 6:00am – 2:00pm
-    const enNoche = minutos >= 1140 && minutos < 1440  // 7:00pm – 12:00am
+    const enManana = minutos >= 360 && minutosFin <= 840   // 6:00am – 2:00pm
+    const enNoche = minutos >= 1140 && minutosFin <= 1440  // 7:00pm – 12:00am
     return enManana || enNoche
   }
   return true
@@ -57,6 +60,7 @@ export default function ReservasPage() {
   const [checking, setChecking] = useState(true)
 
   const [cancha, setCancha] = useState('HGV1')
+  const [tipoJuego, setTipoJuego] = useState<'single' | 'doble'>('single')
   const [horaSeleccionada, setHoraSeleccionada] = useState<string>('') // ISO completo (fecha + hora) de la opción elegida
   const [reservando, setReservando] = useState(false)
   const [msg, setMsg] = useState('')
@@ -87,7 +91,7 @@ export default function ReservasPage() {
     const inicioHoy = fechaAlInicioDelDia(new Date())
     supabase
       .from('reservas_cancha')
-      .select('id, cancha, fecha_hora, estado, duracion_min')
+      .select('id, cancha, fecha_hora, estado, duracion_min, tipo_juego')
       .eq('jugador_id', session.id)
       .eq('estado', 'activa')
       .gte('fecha_hora', inicioHoy.toISOString())
@@ -112,9 +116,10 @@ export default function ReservasPage() {
     const ahoraDate = new Date()
     const horaActualMin = ahoraDate.getHours() * 60 + ahoraDate.getMinutes()
     const opciones: { value: string; label: string }[] = []
+    const duracionMin = tipoJuego === 'doble' ? DURACION_DOBLE_MIN : DURACION_SINGLE_MIN
 
     const agregarSiValido = (fecha: Date, etiquetaDia: string) => {
-      if (!horaValidaParaCancha(cancha, fecha)) return
+      if (!horaValidaParaCancha(cancha, fecha, duracionMin)) return
       opciones.push({
         value: fecha.toISOString(),
         label: `${etiquetaDia} ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
@@ -152,7 +157,7 @@ export default function ReservasPage() {
 
     setHorariosDisponibles(opciones)
     setHoraSeleccionada((actual) => (opciones.some((o) => o.value === actual) ? actual : (opciones[0]?.value || '')))
-  }, [cancha, ahora])
+  }, [cancha, tipoJuego, ahora])
 
   const crearReserva = async () => {
     if (!session || session.role !== 'jugador') return
@@ -233,6 +238,7 @@ export default function ReservasPage() {
 
       const inicioDia = fechaAlInicioDelDia(nuevaHora)
       const finDia = new Date(inicioDia); finDia.setHours(23, 59, 59, 999)
+      const duracionMin = tipoJuego === 'doble' ? DURACION_DOBLE_MIN : DURACION_SINGLE_MIN
 
       // No debe chocar con partidos de la escalera (bloquean 1h30) en esa cancha ese día
       const { data: retosDia, error: errRetos } = await supabase
@@ -245,7 +251,7 @@ export default function ReservasPage() {
       if (errRetos) throw errRetos
 
       const conflictoReto = (retosDia || []).find((r: any) =>
-        seSolapan(nuevaHoraMs, DURACION_RESERVA_MIN, new Date(r.fecha_propuesta).getTime(), DURACION_RETO_MIN)
+        seSolapan(nuevaHoraMs, duracionMin, new Date(r.fecha_propuesta).getTime(), DURACION_RETO_MIN)
       )
       if (conflictoReto) {
         const inicioOcupado = new Date(conflictoReto.fecha_propuesta)
@@ -267,11 +273,11 @@ export default function ReservasPage() {
       if (errReservas) throw errReservas
 
       const conflictoReserva = (reservasDia || []).find((r: any) =>
-        seSolapan(nuevaHoraMs, DURACION_RESERVA_MIN, new Date(r.fecha_hora).getTime(), r.duracion_min || DURACION_RESERVA_MIN)
+        seSolapan(nuevaHoraMs, duracionMin, new Date(r.fecha_hora).getTime(), r.duracion_min || DURACION_SINGLE_MIN)
       )
       if (conflictoReserva) {
         const inicioOcupado = new Date(conflictoReserva.fecha_hora)
-        const finOcupado = new Date(inicioOcupado.getTime() + (conflictoReserva.duracion_min || DURACION_RESERVA_MIN) * 60000)
+        const finOcupado = new Date(inicioOcupado.getTime() + (conflictoReserva.duracion_min || DURACION_SINGLE_MIN) * 60000)
         const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
         setMsg(`❌ Esa cancha ya está reservada a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Elige otro horario.`)
         setReservando(false)
@@ -283,6 +289,8 @@ export default function ReservasPage() {
         cancha,
         fecha_hora: nuevaHora.toISOString(),
         estado: 'activa',
+        tipo_juego: tipoJuego,
+        duracion_min: duracionMin,
       }])
       if (error) throw error
 
@@ -373,7 +381,7 @@ export default function ReservasPage() {
         {/* Formulario de reserva */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '28px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
           <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 6px 0' }}>
-            Puedes reservar para <strong>hoy</strong> a partir de las <strong>10:00am</strong>. Solo en <strong>HGV 2</strong>, desde las <strong>4:00pm</strong> puedes reservar la mañana de <strong>mañana</strong> (6:00am–12:00pm). Cada reserva dura 1 hora.
+            Puedes reservar para <strong>hoy</strong> a partir de las <strong>10:00am</strong>. Solo en <strong>HGV 2</strong>, desde las <strong>4:00pm</strong> puedes reservar la mañana de <strong>mañana</strong> (6:00am–12:00pm). Cada reserva dura <strong>1 hora en Single</strong> o <strong>1h30 en Dobles</strong>.
           </p>
           <div style={{ background: 'rgba(230,126,34,0.1)', border: '1px solid rgba(230,126,34,0.3)', borderRadius: '4px', padding: '10px 14px', marginBottom: '18px' }}>
             <p style={{ fontSize: '12px', color: '#7a4a0e', margin: '0 0 6px 0' }}>
@@ -394,6 +402,27 @@ export default function ReservasPage() {
               {cancha === 'HGV1' && 'Lun-Jue: 8:00pm–12:00am · Vie: desde 6:00pm · Sáb-Dom: todo el día'}
               {cancha === 'HGV2' && 'Lun-Vie: 6:00am–2:00pm y 7:00pm–12:00am · Sáb-Dom: todo el día'}
             </p>
+          </div>
+
+          <div style={{ marginBottom: '14px' }}>
+            <label style={labelStyle}>🎾 Modalidad</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(['single', 'doble'] as const).map((tipo) => (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() => setTipoJuego(tipo)}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', fontWeight: 700,
+                    border: tipoJuego === tipo ? '2px solid var(--color-court)' : '1px solid rgba(15,27,38,0.2)',
+                    background: tipoJuego === tipo ? 'rgba(28,126,196,0.1)' : 'white',
+                    color: 'var(--color-ink)',
+                  }}
+                >
+                  {tipo === 'single' ? 'Single (1h)' : 'Dobles (1h 30min)'}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ marginBottom: '18px' }}>
@@ -470,6 +499,13 @@ export default function ReservasPage() {
                       {inicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                       {' – '}
                       {fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      <span style={{
+                        marginLeft: '8px', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '10px',
+                        background: r.tipo_juego === 'doble' ? '#fef3c7' : '#e0f2fe',
+                        color: r.tipo_juego === 'doble' ? '#92400e' : '#075985',
+                      }}>
+                        {r.tipo_juego === 'doble' ? 'Dobles' : 'Single'}
+                      </span>
                     </span>
                     <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {yaEmpezo ? (

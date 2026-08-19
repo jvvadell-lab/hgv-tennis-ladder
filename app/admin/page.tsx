@@ -416,7 +416,7 @@ export default function AdminPage() {
 
     const { data: casuales } = await supabase
       .from('reservas_cancha')
-      .select('id, cancha, fecha_hora, estado, duracion_min, jugadores:jugador_id(nombre)')
+      .select('id, cancha, fecha_hora, estado, duracion_min, tipo_juego, jugadores:jugador_id(nombre)')
       .eq('estado', 'activa')
       .gte('fecha_hora', inicio.toISOString())
       .lte('fecha_hora', fin.toISOString())
@@ -435,7 +435,7 @@ export default function AdminPage() {
     const fin = new Date(fHasta + 'T23:59:59.999')
     const { data } = await supabase
       .from('reservas_cancha')
-      .select('id, cancha, fecha_hora, estado, duracion_min, jugadores:jugador_id(nombre)')
+      .select('id, cancha, fecha_hora, estado, duracion_min, tipo_juego, jugadores:jugador_id(nombre)')
       .gte('fecha_hora', inicio.toISOString())
       .lte('fecha_hora', fin.toISOString())
       .order('fecha_hora', { ascending: false })
@@ -2406,11 +2406,13 @@ export default function AdminPage() {
                                     {finReserva.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                   <span style={{ display: 'flex', gap: '4px' }}>
-                                    {(res.duracion_min || 60) > 60 && (
-                                      <span style={{ background: '#d4edda', color: '#155724', padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: '700' }}>
-                                        +30 min
-                                      </span>
-                                    )}
+                                    <span style={{
+                                      background: res.tipo_juego === 'doble' ? '#fef3c7' : '#e0f2fe',
+                                      color: res.tipo_juego === 'doble' ? '#92400e' : '#075985',
+                                      padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: '700',
+                                    }}>
+                                      {res.tipo_juego === 'doble' ? 'Dobles' : 'Single'}
+                                    </span>
                                     <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
                                       📅 Reserva casual
                                     </span>
@@ -2479,6 +2481,7 @@ export default function AdminPage() {
                         <tr style={{ background: 'var(--color-court)', color: 'var(--color-chalk)' }}>
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Jugador</th>
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Cancha</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'left' }}>Modalidad</th>
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Fecha</th>
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Hora</th>
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Estado</th>
@@ -2499,6 +2502,7 @@ export default function AdminPage() {
                             <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
                               <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.jugadores?.nombre || '—'}</td>
                               <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px' }}>{r.tipo_juego === 'doble' ? 'Dobles' : 'Single'}</td>
                               <td style={{ padding: '10px 14px', fontSize: '13px', color: '#555' }}>
                                 {new Date(r.fecha_hora).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
                               </td>
