@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
 type Session = {
@@ -144,6 +144,17 @@ export default function LadderPage() {
   const [retoCanchaForanea, setRetoCanchaForanea] = useState('')
   const [retoComentarios, setRetoComentarios] = useState('')
   const [retoFormMsg, setRetoFormMsg] = useState('')
+  const retoFormRef = useRef<HTMLDivElement>(null)
+  const [horariosRetoDisponibles, setHorariosRetoDisponibles] = useState<{ value: string; label: string }[]>([])
+  const [cargandoHorariosReto, setCargandoHorariosReto] = useState(false)
+
+  // Al abrir el formulario de retar, bajamos la pantalla de una vez hasta ahí
+  // — así el jugador no tiene que buscarlo manualmente más abajo en la tabla.
+  useEffect(() => {
+    if (retandoA && retoFormRef.current) {
+      retoFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [retandoA])
 
   // 1. Cargar sesión
   useEffect(() => {
@@ -570,6 +581,92 @@ export default function LadderPage() {
 
     return { valido: true }
   }
+
+  const DURACION_RETO_MIN = 90
+
+  // A diferencia de validarHorarioCancha (que solo mira el instante de inicio),
+  // esto también revisa que el FINAL del partido (90 min después) siga dentro
+  // del horario de la cancha — así no se sugiere un horario que se pase del cierre.
+  function cabeElPartido(cancha: string, fechaStr: string, horaStr: string): boolean {
+    if (!validarHorarioCancha(cancha, fechaStr, horaStr).valido) return false
+    const [hh, mm] = horaStr.split(':').map(Number)
+    const finTotal = hh * 60 + mm + DURACION_RETO_MIN - 1
+    const finHH = String(Math.floor(finTotal / 60) % 24).padStart(2, '0')
+    const finMM = String(finTotal % 60).padStart(2, '0')
+    return validarHorarioCancha(cancha, fechaStr, `${finHH}:${finMM}`).valido
+  }
+
+  // Genera la lista de horarios REALMENTE disponibles para retar — filtrando por
+  // el horario de la cancha, los retos ya pendientes/aceptados, y las reservas
+  // casuales de ese día — así el jugador no tiene que ir adivinando a tumbos.
+  useEffect(() => {
+    if (!retandoA || !retoFecha || !temporadaId || retoCancha === 'FORANEA') {
+      setHorariosRetoDisponibles([])
+      return
+    }
+    let cancelado = false
+    setCargandoHorariosReto(true)
+
+    ;(async () => {
+      const inicioDia = new Date(`${retoFecha}T00:00:00`)
+      const finDia = new Date(`${retoFecha}T23:59:59`)
+
+      const [{ data: retosDia }, { data: reservasDia }] = await Promise.all([
+        supabase
+          .from('retos')
+          .select('fecha_propuesta')
+          .eq('temporada_id', temporadaId)
+          .eq('cancha', retoCancha)
+          .in('estado', ['pendiente', 'aceptado'])
+          .gte('fecha_propuesta', inicioDia.toISOString())
+          .lte('fecha_propuesta', finDia.toISOString()),
+        supabase
+          .from('reservas_cancha')
+          .select('fecha_hora, duracion_min')
+          .eq('cancha', retoCancha)
+          .eq('estado', 'activa')
+          .gte('fecha_hora', inicioDia.toISOString())
+          .lte('fecha_hora', finDia.toISOString()),
+      ])
+      if (cancelado) return
+
+      const ahoraMs = Date.now()
+      const opciones: { value: string; label: string }[] = []
+      const cursor = new Date(inicioDia)
+
+      while (cursor <= finDia) {
+        const horaStr = `${String(cursor.getHours()).padStart(2, '0')}:${String(cursor.getMinutes()).padStart(2, '0')}`
+        const cursorMs = cursor.getTime()
+
+        if (cursorMs > ahoraMs && cabeElPartido(retoCancha, retoFecha, horaStr)) {
+          const chocaReto = (retosDia || []).some((r: any) =>
+            Math.abs(new Date(r.fecha_propuesta).getTime() - cursorMs) < DURACION_RETO_MIN * 60000
+          )
+          const finNuevo = cursorMs + DURACION_RETO_MIN * 60000
+          const chocaReserva = (reservasDia || []).some((r: any) => {
+            const inicioRes = new Date(r.fecha_hora).getTime()
+            const finRes = inicioRes + (r.duracion_min || 60) * 60000
+            return cursorMs < finRes && inicioRes < finNuevo
+          })
+          if (!chocaReto && !chocaReserva) {
+            opciones.push({
+              value: horaStr,
+              label: cursor.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+            })
+          }
+        }
+        cursor.setMinutes(cursor.getMinutes() + 15)
+      }
+
+      if (!cancelado) {
+        setHorariosRetoDisponibles(opciones)
+        setCargandoHorariosReto(false)
+        setRetoHora((actual) => (opciones.some((o) => o.value === actual) ? actual : (opciones[0]?.value || '')))
+      }
+    })()
+
+    return () => { cancelado = true }
+  }, [retandoA, retoFecha, retoCancha, temporadaId])
 
   async function reagendarReto(reto: any) {
     if (!session || session.role !== 'jugador') return
@@ -1458,7 +1555,7 @@ export default function LadderPage() {
               )}
 
               {retandoA && (
-                <div style={{ marginTop: '16px', padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+                <div ref={retoFormRef} style={{ marginTop: '16px', padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
                   <h4 style={{ marginTop: 0, color: 'var(--color-ink)' }}>
                     Retar a {posiciones.find(p => p.jugador_id === retandoA)?.jugadores?.nombre}
                   </h4>
@@ -1481,39 +1578,53 @@ export default function LadderPage() {
                     </div>
                     <div style={{ flex: 1, minWidth: '160px' }}>
                       <label style={labelStyle}>🕐 Hora propuesta</label>
-                      {(() => {
-                        const { h12, min, ampm } = partesDesde24(retoHora)
-                        return (
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            <select
-                              value={h12}
-                              onChange={(e) => setRetoHora(combinarA24(e.target.value, min, ampm))}
-                              style={{ ...inputPequeno, flex: 1 }}
-                            >
-                              {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
-                                <option key={n} value={n}>{n}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={min}
-                              onChange={(e) => setRetoHora(combinarA24(h12 || '12', e.target.value, ampm))}
-                              style={{ ...inputPequeno, flex: 1 }}
-                            >
-                              {['00', '15', '30', '45'].map((m) => (
-                                <option key={m} value={m}>{m}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={ampm}
-                              onChange={(e) => setRetoHora(combinarA24(h12 || '12', min, e.target.value))}
-                              style={{ ...inputPequeno, flex: 1 }}
-                            >
-                              <option value="AM">AM</option>
-                              <option value="PM">PM</option>
-                            </select>
-                          </div>
-                        )
-                      })()}
+                      {retoCancha === 'FORANEA' ? (
+                        (() => {
+                          const { h12, min, ampm } = partesDesde24(retoHora)
+                          return (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <select
+                                value={h12}
+                                onChange={(e) => setRetoHora(combinarA24(e.target.value, min, ampm))}
+                                style={{ ...inputPequeno, flex: 1 }}
+                              >
+                                {[1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
+                                  <option key={n} value={n}>{n}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={min}
+                                onChange={(e) => setRetoHora(combinarA24(h12 || '12', e.target.value, ampm))}
+                                style={{ ...inputPequeno, flex: 1 }}
+                              >
+                                {['00', '15', '30', '45'].map((m) => (
+                                  <option key={m} value={m}>{m}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={ampm}
+                                onChange={(e) => setRetoHora(combinarA24(h12 || '12', min, e.target.value))}
+                                style={{ ...inputPequeno, flex: 1 }}
+                              >
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </div>
+                          )
+                        })()
+                      ) : cargandoHorariosReto ? (
+                        <p className="loading-row" style={{ fontSize: '12px', color: '#6b6b6b', margin: 0 }}><span className="spinner" /> Buscando horarios libres…</p>
+                      ) : horariosRetoDisponibles.length === 0 ? (
+                        <p style={{ fontSize: '12px', color: '#a83226', margin: 0 }}>
+                          No hay horarios libres para {retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ese día — prueba otra fecha o cancha.
+                        </p>
+                      ) : (
+                        <select value={retoHora} onChange={(e) => setRetoHora(e.target.value)} style={inputPequeno}>
+                          {horariosRetoDisponibles.map((h) => (
+                            <option key={h.value} value={h.value}>{h.label}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   </div>
 
