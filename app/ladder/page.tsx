@@ -540,7 +540,6 @@ export default function LadderPage() {
     const minutos = hh * 60 + mm
 
     if (cancha === 'HGV1') {
-      // Viernes: libre desde las 2:00pm hasta medianoche. Lunes-jueves: solo 8:00pm-12:00am.
       const disponible = esViernes
         ? minutos >= 1080 && minutos < 1440   // Viernes: 6:00pm – 12:00am
         : minutos >= 1200 && minutos < 1440  // 8:00pm – 12:00am
@@ -549,17 +548,23 @@ export default function LadderPage() {
         valido: false,
         mensaje: esViernes
           ? 'Los viernes, HGV 1 está disponible a partir de las 6:00pm.'
-          : 'HGV 1 solo está disponible de lunes a jueves de 8:00pm a 12:00am (viernes desde las 2:00pm, fines de semana todo el día).',
+          : 'HGV 1 solo está disponible de lunes a jueves de 8:00pm a 12:00am (viernes desde las 6:00pm, fines de semana todo el día).',
       }
     }
 
     if (cancha === 'HGV2') {
+      // Los viernes, HGV 2 mantiene su franja de mañana normal, pero la noche
+      // empieza una hora antes (6:00pm en vez de 7:00pm) — igual que HGV 1 ese día.
       const enManana = minutos >= 360 && minutos < 840   // 6:00am – 2:00pm
-      const enNoche = minutos >= 1140 && minutos < 1440  // 7:00pm – 12:00am
+      const enNoche = esViernes
+        ? minutos >= 1080 && minutos < 1440   // Viernes: 6:00pm – 12:00am
+        : minutos >= 1140 && minutos < 1440   // Lun-Jue: 7:00pm – 12:00am
       if (enManana || enNoche) return { valido: true }
       return {
         valido: false,
-        mensaje: 'HGV 2 solo está disponible de lunes a viernes de 6:00am a 2:00pm y de 7:00pm a 12:00am (fines de semana, todo el día).',
+        mensaje: esViernes
+          ? 'HGV 2 los viernes está disponible de 6:00am a 2:00pm, y de 6:00pm a 12:00am.'
+          : 'HGV 2 solo está disponible de lunes a jueves de 6:00am a 2:00pm y de 7:00pm a 12:00am (viernes: 6:00am–2:00pm y 6:00pm–12:00am, fines de semana todo el día).',
       }
     }
 
@@ -1522,7 +1527,7 @@ export default function LadderPage() {
                     </select>
                     <p style={{ fontSize: '11px', color: '#6b6b6b', margin: '4px 0 0 0' }}>
                       {retoCancha === 'HGV1' && 'Lun-Jue: 8:00pm–12:00am · Vie: desde 6:00pm · Sáb-Dom: todo el día'}
-                      {retoCancha === 'HGV2' && 'Lun-Vie: 6:00am–2:00pm y 7:00pm–12:00am · Sáb-Dom: todo el día'}
+                      {retoCancha === 'HGV2' && 'Lun-Jue: 6:00am–2:00pm y 7:00pm–12:00am · Vie: 6:00am–2:00pm y 6:00pm–12:00am · Sáb-Dom: todo el día'}
                       {retoCancha === 'FORANEA' && 'Sin restricción de horario del club (cancha externa)'}
                     </p>
                   </div>

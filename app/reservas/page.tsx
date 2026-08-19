@@ -42,8 +42,12 @@ function horaValidaParaCancha(cancha: string, fecha: Date, duracionMin: number):
       : minutos >= 1200 && minutosFin <= 1440  // Lun-Jue: 8:00pm – 12:00am
   }
   if (cancha === 'HGV2') {
+    // Los viernes, HGV 2 mantiene su franja de mañana normal, pero la noche
+    // empieza una hora antes (6:00pm en vez de 7:00pm) — igual que HGV 1 ese día.
     const enManana = minutos >= 360 && minutosFin <= 840   // 6:00am – 2:00pm
-    const enNoche = minutos >= 1140 && minutosFin <= 1440  // 7:00pm – 12:00am
+    const enNoche = esViernes
+      ? minutos >= 1080 && minutosFin <= 1440  // Viernes: 6:00pm – 12:00am
+      : minutos >= 1140 && minutosFin <= 1440  // Lun-Jue: 7:00pm – 12:00am
     return enManana || enNoche
   }
   return true
@@ -400,7 +404,7 @@ export default function ReservasPage() {
             </select>
             <p style={{ fontSize: '11px', color: 'var(--color-line)', margin: '6px 0 0 0' }}>
               {cancha === 'HGV1' && 'Lun-Jue: 8:00pm–12:00am · Vie: desde 6:00pm · Sáb-Dom: todo el día'}
-              {cancha === 'HGV2' && 'Lun-Vie: 6:00am–2:00pm y 7:00pm–12:00am · Sáb-Dom: todo el día'}
+              {cancha === 'HGV2' && 'Lun-Jue: 6:00am–2:00pm y 7:00pm–12:00am · Vie: 6:00am–2:00pm y 6:00pm–12:00am · Sáb-Dom: todo el día'}
             </p>
           </div>
 
