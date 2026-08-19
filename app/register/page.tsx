@@ -56,7 +56,7 @@ export default function RegisterPage() {
   const nextParam = searchParams.get('next') || ''
   // Solo aceptamos rutas internas relativas (empiezan con "/" pero no "//"),
   // para que nadie pueda armar un enlace que redirija a un sitio externo.
-  const destinoDespuesDeRegistrar = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/reservas'
+  const destinoDespuesDeRegistrar = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/ladder'
 
   const [formData, setFormData] = useState({
     name: '',
@@ -72,7 +72,6 @@ export default function RegisterPage() {
   const [fotoCarnetError, setFotoCarnetError] = useState('')
   const [archivoParaRecortar, setArchivoParaRecortar] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
-  const [registroCompletadoNombre, setRegistroCompletadoNombre] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -172,9 +171,8 @@ export default function RegisterPage() {
         }).catch(() => {})
       }
 
-      // Dejarlo logueado de una vez con el email/PIN que acaba de crear. Si vino
-      // con una intención clara (ej: entró desde el botón de Reservas), lo mandamos
-      // directo ahí — si no, le mostramos una pantalla para que elija su camino.
+      // Dejarlo logueado de una vez con el email/PIN que acaba de crear, y mandarlo
+      // directo al destino (Reservas por defecto, o donde haya indicado el "next").
       const resLogin = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -182,11 +180,7 @@ export default function RegisterPage() {
       })
 
       if (resLogin.ok) {
-        if (nextParam) {
-          window.location.href = destinoDespuesDeRegistrar
-          return
-        }
-        setRegistroCompletadoNombre(formData.name.trim())
+        window.location.href = destinoDespuesDeRegistrar
         return
       }
 
@@ -202,68 +196,6 @@ export default function RegisterPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  if (registroCompletadoNombre) {
-    return (
-      <div className="court-bg" style={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-      }}>
-        <div style={{
-          background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)',
-          padding: '40px', width: '100%', maxWidth: '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', textAlign: 'center',
-        }}>
-          <img
-            src="/logo-hgv.png"
-            alt="Escudo HGV Tennis Club"
-            style={{ width: '76px', height: '76px', objectFit: 'contain', margin: '0 auto 16px auto', display: 'block' }}
-          />
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '24px', margin: '0 0 8px 0' }}>
-            ¡Bienvenido, {registroCompletadoNombre.split(' ')[0]}!
-          </h1>
-          <p style={{ color: 'var(--color-line)', fontSize: '14px', margin: '0 0 28px 0' }}>
-            Tu cuenta ya está lista. ¿Qué quieres hacer primero?
-          </p>
-
-          <a
-            href="/reservas"
-            style={{
-              display: 'block', background: 'var(--color-ball)', color: 'var(--color-ink)', fontWeight: 700,
-              textDecoration: 'none', padding: '16px', borderRadius: '4px', fontSize: '15px', marginBottom: '12px',
-            }}
-          >
-            🎾 Reservar Cancha
-          </a>
-          <p style={{ color: 'var(--color-line)', fontSize: '12px', margin: '0 0 20px 0' }}>
-            Para jugar casual, fuera del torneo — así de simple, sin enredos.
-          </p>
-
-          <a
-            href="/ladder"
-            style={{
-              display: 'block', background: 'none', color: 'var(--color-ink)', fontWeight: 700,
-              textDecoration: 'none', padding: '16px', borderRadius: '4px', fontSize: '15px',
-              border: '1px solid var(--color-court)', marginBottom: '12px',
-            }}
-          >
-            🏆 Sistema de Torneo (Escalera de Retos)
-          </a>
-          <p style={{ color: 'var(--color-line)', fontSize: '12px', margin: '0 0 24px 0' }}>
-            Compite en el ranking del club y sube posiciones ganando partidos.
-          </p>
-
-          <a
-            href="/"
-            style={{
-              display: 'inline-block', color: 'var(--color-line)', fontSize: '13px', fontWeight: 600,
-              textDecoration: 'underline', textUnderlineOffset: '3px',
-            }}
-          >
-            ← Volver al inicio
-          </a>
-        </div>
-      </div>
-    )
   }
 
   return (
