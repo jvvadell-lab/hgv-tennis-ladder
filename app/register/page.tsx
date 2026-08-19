@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import CropperCarnet from './CropperCarnet'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,6 +52,12 @@ function formatTelefonoLocal(digits: string) {
 }
 
 export default function RegisterPage() {
+  const searchParams = useSearchParams()
+  const nextParam = searchParams.get('next') || ''
+  // Solo aceptamos rutas internas relativas (empiezan con "/" pero no "//"),
+  // para que nadie pueda armar un enlace que redirija a un sitio externo.
+  const destinoDespuesDeRegistrar = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/reservas'
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -62,7 +70,9 @@ export default function RegisterPage() {
   const [fotoCarnet, setFotoCarnet] = useState<File | null>(null)
   const [previewCarnet, setPreviewCarnet] = useState<string | null>(null)
   const [fotoCarnetError, setFotoCarnetError] = useState('')
+  const [archivoParaRecortar, setArchivoParaRecortar] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
+  const [registroCompletadoNombre, setRegistroCompletadoNombre] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -70,19 +80,37 @@ export default function RegisterPage() {
   const FORMATOS_CARNET_ACEPTADOS = ['image/jpeg', 'image/png', 'image/webp']
   const TAMANO_MAXIMO_CARNET_MB = 5
 
-  const handleFotoCarnet = (file: File | null) => {
+  // El archivo elegido (de cámara o galería) pasa primero por la herramienta
+  // de recorte — la foto final que se sube es la ya recortada al tamaño carné.
+  const handleSeleccionArchivo = (file: File | null) => {
     setFotoCarnetError('')
-    if (file && !FORMATOS_CARNET_ACEPTADOS.includes(file.type)) {
+    if (!file) return
+    if (!FORMATOS_CARNET_ACEPTADOS.includes(file.type)) {
       setFotoCarnetError('❌ Formato no soportado — usa JPG, PNG o WEBP.')
       return
     }
-    if (file && file.size > TAMANO_MAXIMO_CARNET_MB * 1024 * 1024) {
+    if (file.size > TAMANO_MAXIMO_CARNET_MB * 1024 * 1024) {
       setFotoCarnetError(`❌ La foto pesa demasiado — el máximo es ${TAMANO_MAXIMO_CARNET_MB}MB.`)
       return
     }
-    setFotoCarnet(file)
+    setArchivoParaRecortar(file)
+  }
+
+  const handleCropConfirmado = (archivoRecortado: File) => {
+    setFotoCarnet(archivoRecortado)
     if (previewCarnet) URL.revokeObjectURL(previewCarnet)
-    setPreviewCarnet(file ? URL.createObjectURL(file) : null)
+    setPreviewCarnet(URL.createObjectURL(archivoRecortado))
+    setArchivoParaRecortar(null)
+  }
+
+  const handleCropCancelado = () => {
+    setArchivoParaRecortar(null)
+  }
+
+  const quitarFotoCarnet = () => {
+    if (previewCarnet) URL.revokeObjectURL(previewCarnet)
+    setFotoCarnet(null)
+    setPreviewCarnet(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,10 +172,9 @@ export default function RegisterPage() {
         }).catch(() => {})
       }
 
-      // Dejarlo logueado de una vez con el email/PIN que acaba de crear, y mandarlo
-      // directo a la escalera — ahí es donde tiene que anotarse a la temporada.
-      // Si por algo falla el login automático, no rompemos el flujo: mostramos
-      // el mensaje de éxito de siempre para que entre manualmente.
+      // Dejarlo logueado de una vez con el email/PIN que acaba de crear. Si vino
+      // con una intención clara (ej: entró desde el botón de Reservas), lo mandamos
+      // directo ahí — si no, le mostramos una pantalla para que elija su camino.
       const resLogin = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,13 +182,17 @@ export default function RegisterPage() {
       })
 
       if (resLogin.ok) {
-        window.location.href = '/ladder'
+        if (nextParam) {
+          window.location.href = destinoDespuesDeRegistrar
+          return
+        }
+        setRegistroCompletadoNombre(formData.name.trim())
         return
       }
 
       setMessage('✅ ¡Registro exitoso! Ya puedes iniciar sesión con tu email y PIN')
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
-      handleFotoCarnet(null)
+      quitarFotoCarnet()
     } catch (err: any) {
       if (err.message?.includes('jugadores_email_key')) {
         setError('❌ Ya existe un jugador registrado con ese correo. Si es tuyo, usa "¿Olvidaste tu PIN?" en la página de inicio de sesión.')
@@ -171,6 +202,68 @@ export default function RegisterPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (registroCompletadoNombre) {
+    return (
+      <div className="court-bg" style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+      }}>
+        <div style={{
+          background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)',
+          padding: '40px', width: '100%', maxWidth: '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', textAlign: 'center',
+        }}>
+          <img
+            src="/logo-hgv.png"
+            alt="Escudo HGV Tennis Club"
+            style={{ width: '76px', height: '76px', objectFit: 'contain', margin: '0 auto 16px auto', display: 'block' }}
+          />
+          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '24px', margin: '0 0 8px 0' }}>
+            ¡Bienvenido, {registroCompletadoNombre.split(' ')[0]}!
+          </h1>
+          <p style={{ color: 'var(--color-line)', fontSize: '14px', margin: '0 0 28px 0' }}>
+            Tu cuenta ya está lista. ¿Qué quieres hacer primero?
+          </p>
+
+          <a
+            href="/reservas"
+            style={{
+              display: 'block', background: 'var(--color-ball)', color: 'var(--color-ink)', fontWeight: 700,
+              textDecoration: 'none', padding: '16px', borderRadius: '4px', fontSize: '15px', marginBottom: '12px',
+            }}
+          >
+            🎾 Reservar Cancha
+          </a>
+          <p style={{ color: 'var(--color-line)', fontSize: '12px', margin: '0 0 20px 0' }}>
+            Para jugar casual, fuera del torneo — así de simple, sin enredos.
+          </p>
+
+          <a
+            href="/ladder"
+            style={{
+              display: 'block', background: 'none', color: 'var(--color-ink)', fontWeight: 700,
+              textDecoration: 'none', padding: '16px', borderRadius: '4px', fontSize: '15px',
+              border: '1px solid var(--color-court)', marginBottom: '12px',
+            }}
+          >
+            🏆 Sistema de Torneo (Escalera de Retos)
+          </a>
+          <p style={{ color: 'var(--color-line)', fontSize: '12px', margin: '0 0 24px 0' }}>
+            Compite en el ranking del club y sube posiciones ganando partidos.
+          </p>
+
+          <a
+            href="/"
+            style={{
+              display: 'inline-block', color: 'var(--color-line)', fontSize: '13px', fontWeight: 600,
+              textDecoration: 'underline', textUnderlineOffset: '3px',
+            }}
+          >
+            ← Volver al inicio
+          </a>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -289,22 +382,35 @@ export default function RegisterPage() {
             <label style={labelStyle}>Foto de tu carné de socio (opcional)</label>
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(e) => handleFotoCarnet(e.target.files?.[0] || null)}
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                handleSeleccionArchivo(e.target.files?.[0] || null)
+                e.target.value = ''
+              }}
               style={{ ...inputStyle, padding: '8px', background: 'white' }}
             />
             <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
-              Súbela ahora y te ahorras mostrar el carné físico cuando vayas a jugar — el club ya la tiene registrada. Formatos JPG, PNG o WEBP, máximo {TAMANO_MAXIMO_CARNET_MB}MB.
+              Súbela ahora y te ahorras mostrar el carné físico cuando vayas a jugar — el club ya la tiene registrada. Después de elegirla podrás ajustarla al tamaño del carné. Formatos JPG, PNG o WEBP, máximo {TAMANO_MAXIMO_CARNET_MB}MB.
             </p>
             {fotoCarnetError && (
               <p style={{ fontSize: '12px', color: '#a83226', marginTop: '4px' }}>{fotoCarnetError}</p>
             )}
             {previewCarnet && (
-              <img
-                src={previewCarnet}
-                alt="Vista previa del carné"
-                style={{ marginTop: '10px', maxWidth: '160px', maxHeight: '110px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.15)' }}
-              />
+              <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <img
+                  src={previewCarnet}
+                  alt="Vista previa del carné"
+                  style={{ maxWidth: '160px', maxHeight: '110px', objectFit: 'cover', borderRadius: '4px', border: '1px solid rgba(15,27,38,0.15)' }}
+                />
+                <button
+                  type="button"
+                  onClick={quitarFotoCarnet}
+                  style={{ background: 'none', border: '1px solid #ccc', color: '#555', borderRadius: '4px', padding: '6px 10px', fontSize: '12px', cursor: 'pointer' }}
+                >
+                  Quitar
+                </button>
+              </div>
             )}
           </div>
 
@@ -410,6 +516,14 @@ export default function RegisterPage() {
           </a>
         </div>
       </div>
+
+      {archivoParaRecortar && (
+        <CropperCarnet
+          archivo={archivoParaRecortar}
+          onConfirmar={handleCropConfirmado}
+          onCancelar={handleCropCancelado}
+        />
+      )}
     </div>
   )
 }
