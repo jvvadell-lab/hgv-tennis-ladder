@@ -14,10 +14,10 @@ const PENALIDAD_NO_PRESENTADO_DIAS = 5 // si reservaste y no fuiste (ni cancelas
 const PASO_MIN = 15 // granularidad de los horarios que se ofrecen (cada 15 min)
 
 // Ventanas en las que se abre cada tipo de reserva (en minutos desde medianoche)
-const APERTURA_MISMO_DIA_MIN = 600  // 10:00am — desde aquí se puede reservar para HOY
-const APERTURA_MANANA_MIN = 960     // 4:00pm — desde aquí se puede reservar la mañana de MAÑANA (solo HGV2)
+const APERTURA_MISMO_DIA_MIN = 360  // 6:00am — desde aquí se puede reservar para HOY
+const APERTURA_MANANA_MIN = 1080    // 6:00pm — desde aquí se puede reservar la mañana de MAÑANA (solo HGV2)
 const MANANA_HGV2_INICIO_MIN = 360  // 6:00am
-const MANANA_HGV2_FIN_MIN = 720     // 12:00pm (mediodía)
+const MANANA_HGV2_FIN_MIN = 840     // 2:00pm
 
 function seSolapan(inicio1Ms: number, duracion1Min: number, inicio2Ms: number, duracion2Min: number) {
   const fin1 = inicio1Ms + duracion1Min * 60000
@@ -130,7 +130,7 @@ export default function ReservasPage() {
       })
     }
 
-    // Ventana de HOY — abierta desde las 10:00am
+    // Ventana de HOY — abierta desde las 6:00am
     if (horaActualMin >= APERTURA_MISMO_DIA_MIN) {
       const cursor = new Date(ahoraDate)
       const sobran = cursor.getMinutes() % PASO_MIN
@@ -143,7 +143,7 @@ export default function ReservasPage() {
       }
     }
 
-    // Ventana de MAÑANA en la mañana — solo HGV2, abierta desde las 4:00pm de hoy
+    // Ventana de MAÑANA en la mañana — solo HGV2, abierta desde las 6:00pm de hoy
     if (cancha === 'HGV2' && horaActualMin >= APERTURA_MANANA_MIN) {
       const inicioManana = new Date(ahoraDate)
       inicioManana.setDate(inicioManana.getDate() + 1)
@@ -384,17 +384,17 @@ export default function ReservasPage() {
 
         {/* Formulario de reserva */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '28px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-          <p style={{ fontSize: '13px', color: 'var(--color-line)', margin: '0 0 6px 0' }}>
-            Puedes reservar para <strong>hoy</strong> a partir de las <strong>10:00am</strong>. Solo en <strong>HGV 2</strong>, desde las <strong>4:00pm</strong> puedes reservar la mañana de <strong>mañana</strong> (6:00am–12:00pm). Cada reserva dura <strong>1 hora en Single</strong> o <strong>1h30 en Dobles</strong>.
-          </p>
-          <div style={{ background: 'rgba(230,126,34,0.1)', border: '1px solid rgba(230,126,34,0.3)', borderRadius: '4px', padding: '10px 14px', marginBottom: '18px' }}>
-            <p style={{ fontSize: '12px', color: '#7a4a0e', margin: '0 0 6px 0' }}>
-              ⚠️ Si reservas y no puedes ir, <strong>cancela antes de la hora</strong> — no tiene penalidad. Si no vas y no cancelas a tiempo, no podrás reservar hasta dentro de {PENALIDAD_NO_PRESENTADO_DIAS} días.
-            </p>
-            <p style={{ fontSize: '12px', color: '#7a4a0e', margin: 0 }}>
-              🎾 Si usas la cancha, las reservas son <strong>día por medio</strong> — si jugaste hoy, el siguiente día no puedes reservar, pero el de después sí.
-            </p>
-          </div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '17px', margin: '0 0 10px 0' }}>
+            🕐 Horarios que puedes reservar
+          </h2>
+          <ul style={{ margin: '0 0 16px 0', paddingLeft: '20px', fontSize: '13px', color: 'var(--color-line)', lineHeight: 1.7 }}>
+            <li><strong>Mismo día:</strong> desde las <strong>6:00am</strong> de ese día.</li>
+            <li><strong>Día siguiente</strong> (solo <strong>HGV 2</strong>, de 6:00am a 2:00pm): se habilita desde las <strong>6:00pm del día anterior</strong>.</li>
+            <li>Cada reserva dura <strong>1 hora en Single</strong> o <strong>1h30 en Dobles</strong>.</li>
+            <li>Si reservas y no puedes ir, <strong>cancela antes de la hora</strong> — no tiene ninguna penalidad.</li>
+            <li>Si no cancelas a tiempo y no te presentas, no podrás reservar hasta dentro de <strong>{PENALIDAD_NO_PRESENTADO_DIAS} días</strong>.</li>
+            <li>Si usas la cancha, las reservas son <strong>día por medio</strong> — jugaste hoy, el siguiente día no puedes reservar, pero el de después sí.</li>
+          </ul>
 
           <div style={{ marginBottom: '14px' }}>
             <label style={labelStyle}>🎾 Cancha</label>
@@ -436,7 +436,7 @@ export default function ReservasPage() {
                 {(() => {
                   const horaActualMin = new Date().getHours() * 60 + new Date().getMinutes()
                   if (horaActualMin < APERTURA_MISMO_DIA_MIN) {
-                    return 'La reserva para hoy abre a las 10:00am.'
+                    return 'La reserva para hoy abre a las 6:00am.'
                   }
                   return 'No hay horarios disponibles para esta cancha en este momento.'
                 })()}
