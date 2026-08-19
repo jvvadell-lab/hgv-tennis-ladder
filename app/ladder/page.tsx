@@ -679,7 +679,7 @@ export default function LadderPage() {
 
       const { data: partidosCancha, error: errCancha } = await supabase
         .from('retos')
-        .select('id, fecha_propuesta')
+        .select('id, fecha_propuesta, estado')
         .eq('temporada_id', temporadaId)
         .eq('cancha', retoCancha)
         .in('estado', ['pendiente', 'aceptado'])
@@ -702,7 +702,12 @@ export default function LadderPage() {
         const ocupadaDesde = new Date(horaConflicto.getTime() - DURACION_PARTIDO_MS)
         const ocupadaHasta = new Date(horaConflicto.getTime() + DURACION_PARTIDO_MS)
         const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
-        setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido). Elige un horario fuera de ese rango.`)
+        const nombreCancha = retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'
+        setRetoFormMsg(
+          conflicto.estado === 'pendiente'
+            ? `❌ ${nombreCancha} está reservada de las ${fmt(ocupadaDesde)} a las ${fmt(ocupadaHasta)} por OTRO reto que todavía está pendiente de respuesta (nadie lo ha aceptado ni rechazado). Elige un horario fuera de ese rango, o inténtalo de nuevo más tarde por si se libera.`
+            : `❌ ${nombreCancha} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido confirmado). Elige un horario fuera de ese rango.`
+        )
         return
       }
 
