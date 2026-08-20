@@ -119,6 +119,16 @@ export default function AdminPage() {
   const [reporteData, setReporteData] = useState<any[]>([])
   const [loadingReporteUso, setLoadingReporteUso] = useState(false)
 
+  // Reporte "Ocupación de cancha" (Reservas + Retos combinados) — Paso 2
+  const [temporadasParaOcupacion, setTemporadasParaOcupacion] = useState<any[]>([])
+  const [ocupacionModo, setOcupacionModo] = useState<'fechas' | 'temporada'>('fechas')
+  const [ocupacionDesde, setOcupacionDesde] = useState('')
+  const [ocupacionHasta, setOcupacionHasta] = useState('')
+  const [ocupacionTemporadaId, setOcupacionTemporadaId] = useState('')
+  const [ocupacionReservas, setOcupacionReservas] = useState<any[]>([])
+  const [ocupacionRetos, setOcupacionRetos] = useState<any[]>([])
+  const [loadingOcupacion, setLoadingOcupacion] = useState(false)
+
   const [dashStats, setDashStats] = useState({ jugadores: 0, desafiosActivos: 0, partidosJugados: 0, esteMes: 0 })
   const [anuncioTitulo, setAnuncioTitulo] = useState('')
   const [anuncioDescripcion, setAnuncioDescripcion] = useState('')
@@ -580,6 +590,18 @@ export default function AdminPage() {
       } else {
         fetchReporteUsoCancha()
       }
+
+      fetchTemporadasParaOcupacion()
+      if (!ocupacionDesde || !ocupacionHasta) {
+        const hoy = new Date()
+        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10)
+        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().slice(0, 10)
+        setOcupacionDesde(primerDiaMes)
+        setOcupacionHasta(ultimoDiaMes)
+        fetchOcupacionCancha(primerDiaMes, ultimoDiaMes)
+      } else {
+        fetchOcupacionCancha()
+      }
     }
     if (activeSection === 'permisos') {
       fetchPermisosMedicos()
@@ -650,6 +672,47 @@ export default function AdminPage() {
       .lte('fecha_hora', fin.toISOString())
     setReporteData(data || [])
     setLoadingReporteUso(false)
+  }
+
+  const fetchTemporadasParaOcupacion = async () => {
+    const { data } = await supabase
+      .from('temporadas')
+      .select('id, nombre, fecha_inicio, fecha_fin')
+      .order('fecha_inicio', { ascending: false })
+    setTemporadasParaOcupacion(data || [])
+  }
+
+  // Reporte "Ocupación de cancha" — combina reservas_cancha (casuales) con retos (partidos de
+  // escalera). Los retos no guardan duración real ni horario "jugado" por separado: usamos
+  // fecha_propuesta (que se sobreescribe en cada reagendamiento — refleja el horario VIGENTE al
+  // momento de generar el reporte, no un historial de reprogramaciones) y una duración fija de
+  // 90 min, la misma que ya usa la app para bloquear la cancha (ver DURACION_PARTIDO_MS en
+  // ladder/page.tsx, reagendar-reto y responder-reto).
+  const fetchOcupacionCancha = async (desde?: string, hasta?: string) => {
+    const fDesde = desde || ocupacionDesde
+    const fHasta = hasta || ocupacionHasta
+    if (!fDesde || !fHasta) return
+    setLoadingOcupacion(true)
+    const inicio = new Date(fDesde + 'T00:00:00')
+    const fin = new Date(fHasta + 'T23:59:59.999')
+
+    const { data: reservas } = await supabase
+      .from('reservas_cancha')
+      .select('id, cancha, fecha_hora, duracion_min, estado')
+      .neq('estado', 'cancelada')
+      .gte('fecha_hora', inicio.toISOString())
+      .lte('fecha_hora', fin.toISOString())
+    setOcupacionReservas(reservas || [])
+
+    const { data: retos } = await supabase
+      .from('retos')
+      .select('id, cancha, fecha_propuesta, estado')
+      .in('estado', ['aceptado', 'jugado', 'no_presentado'])
+      .gte('fecha_propuesta', inicio.toISOString())
+      .lte('fecha_propuesta', fin.toISOString())
+    setOcupacionRetos(retos || [])
+
+    setLoadingOcupacion(false)
   }
 
   const fetchPermisosMedicos = async () => {
@@ -1291,6 +1354,60 @@ export default function AdminPage() {
     const libro = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(libro, hoja, 'Uso de cancha')
     XLSX.writeFile(libro, `uso-cancha-hgv-${reporteDesde}-a-${reporteHasta}.xlsx`)
+  }
+
+  // --- Reporte "Ocupación de cancha" (reservas + retos combinados) ---
+
+  const DURACION_RETO_MIN = 90 // misma asunción que DURACION_PARTIDO_MS en ladder/page.tsx — los retos no guardan duración real
+
+  const ocupacionResumen = (() => {
+    const retosPropios = ocupacionRetos.filter((r: any) => r.cancha !== 'FORANEA')
+    const retosForaneos = ocupacionRetos.length - retosPropios.length
+
+    const minutosReservas = ocupacionReservas.reduce((sum: number, r: any) => sum + (r.duracion_min || 60), 0)
+    const minutosRetos = retosPropios.length * DURACION_RETO_MIN
+    const horasTotales = Math.round(((minutosReservas + minutosRetos) / 60) * 10) / 10
+
+    const porCancha: Record<string, number> = {}
+    ocupacionReservas.forEach((r: any) => { porCancha[r.cancha] = (porCancha[r.cancha] || 0) + (r.duracion_min || 60) })
+    retosPropios.forEach((r: any) => { porCancha[r.cancha] = (porCancha[r.cancha] || 0) + DURACION_RETO_MIN })
+    const canchaEntries = Object.entries(porCancha).sort((a, b) => b[1] - a[1])
+    const canchaTop = canchaEntries.length > 0 ? (canchaEntries[0][0] === 'HGV1' ? 'HGV 1' : 'HGV 2') : '—'
+
+    const porFranja: Record<string, number> = {}
+    ocupacionReservas.forEach((r: any) => { const f = franjaDe(r.fecha_hora); porFranja[f] = (porFranja[f] || 0) + 1 })
+    retosPropios.forEach((r: any) => { const f = franjaDe(r.fecha_propuesta); porFranja[f] = (porFranja[f] || 0) + 1 })
+    const franjaEntries = Object.entries(porFranja).sort((a, b) => b[1] - a[1])
+    const franjaTop = franjaEntries.length > 0 ? franjaEntries[0][0] : '—'
+
+    return {
+      totalReservas: ocupacionReservas.length,
+      totalRetos: ocupacionRetos.length,
+      retosPropios: retosPropios.length,
+      retosForaneos,
+      totalCombinado: ocupacionReservas.length + ocupacionRetos.length,
+      horasTotales,
+      canchaTop,
+      franjaTop,
+    }
+  })()
+
+  const exportarOcupacionCancha = () => {
+    const filas = [
+      { 'Métrica': 'Total combinado (reservas + retos)', 'Valor': ocupacionResumen.totalCombinado },
+      { 'Métrica': 'Reservas casuales', 'Valor': ocupacionResumen.totalReservas },
+      { 'Métrica': 'Partidos de escalera (cancha propia)', 'Valor': ocupacionResumen.retosPropios },
+      { 'Métrica': 'Partidos de escalera (cancha foránea)', 'Valor': ocupacionResumen.retosForaneos },
+      { 'Métrica': 'Horas totales ocupadas (cancha propia)', 'Valor': ocupacionResumen.horasTotales },
+      { 'Métrica': 'Franja horaria más usada', 'Valor': ocupacionResumen.franjaTop },
+      { 'Métrica': 'Cancha más usada', 'Valor': ocupacionResumen.canchaTop },
+      { 'Métrica': '', 'Valor': '' },
+      { 'Métrica': 'Nota', 'Valor': 'Los partidos de escalera usan una duración fija de 90 min (no hay duración real registrada). El horario de cada partido es el vigente al momento de exportar — si se reagendó, no queda historial de la fecha original.' },
+    ]
+    const hoja = XLSX.utils.json_to_sheet(filas)
+    const libro = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(libro, hoja, 'Ocupación de cancha')
+    XLSX.writeFile(libro, `ocupacion-cancha-hgv-${ocupacionDesde}-a-${ocupacionHasta}.xlsx`)
   }
 
   const fetchHistorial = async () => {
@@ -2995,6 +3112,138 @@ export default function AdminPage() {
                       </table>
                     </div>
                   </>
+                )}
+              </div>
+
+              {/* Reporte: Ocupación de cancha (reservas + retos combinados) */}
+              <div style={{ marginTop: '30px' }} className="no-imprimir">
+                <h3 style={{ color: 'var(--color-ink)' }}>
+                  🏟️ Ocupación de cancha (reservas + escalera)
+                </h3>
+                <p style={{ fontSize: '12px', color: '#6b6b6b', marginTop: '-8px', marginBottom: '14px' }}>
+                  Los partidos de escalera no guardan duración real ni horario "jugado" — se estiman con 90 min fijos
+                  (igual que el bloqueo de cancha del sistema) y con la fecha vigente del reto (si se reagendó, no queda
+                  historial de la fecha original).
+                </p>
+                <div style={{
+                  background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                  marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                  display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap'
+                }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Modo</label>
+                    <select
+                      value={ocupacionModo}
+                      onChange={(e) => setOcupacionModo(e.target.value as 'fechas' | 'temporada')}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                    >
+                      <option value="fechas">Rango de fechas</option>
+                      <option value="temporada">Por temporada</option>
+                    </select>
+                  </div>
+                  {ocupacionModo === 'temporada' ? (
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Temporada</label>
+                      <select
+                        value={ocupacionTemporadaId}
+                        onChange={(e) => {
+                          const id = e.target.value
+                          setOcupacionTemporadaId(id)
+                          const t = temporadasParaOcupacion.find((tp: any) => tp.id === id)
+                          if (t) {
+                            setOcupacionDesde(t.fecha_inicio)
+                            setOcupacionHasta(t.fecha_fin)
+                            fetchOcupacionCancha(t.fecha_inicio, t.fecha_fin)
+                          }
+                        }}
+                        style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', minWidth: '220px' }}
+                      >
+                        <option value="">Elige una temporada…</option>
+                        {temporadasParaOcupacion.map((t: any) => (
+                          <option key={t.id} value={t.id}>{t.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Desde</label>
+                        <input
+                          type="date"
+                          value={ocupacionDesde}
+                          onChange={(e) => setOcupacionDesde(e.target.value)}
+                          style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Hasta</label>
+                        <input
+                          type="date"
+                          value={ocupacionHasta}
+                          onChange={(e) => setOcupacionHasta(e.target.value)}
+                          style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  <button
+                    onClick={() => fetchOcupacionCancha()}
+                    style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                  >
+                    🔍 Buscar
+                  </button>
+                  {ocupacionResumen.totalCombinado > 0 && (
+                    <button
+                      onClick={exportarOcupacionCancha}
+                      style={{ background: '#28a745', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                    >
+                      📊 Exportar a Excel
+                    </button>
+                  )}
+                </div>
+
+                {loadingOcupacion ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando...</div>
+                ) : ocupacionResumen.totalCombinado === 0 ? (
+                  <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '30px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                    No hay reservas ni partidos en ese rango de fechas.
+                  </div>
+                ) : (
+                  <div style={{
+                    background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px',
+                  }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>Total combinado</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '22px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{ocupacionResumen.totalCombinado}</p>
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>Reservas casuales</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '22px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{ocupacionResumen.totalReservas}</p>
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>Partidos de escalera</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '22px', fontWeight: 'bold', color: 'var(--color-ink)' }}>
+                        {ocupacionResumen.totalRetos}
+                        {ocupacionResumen.retosForaneos > 0 && (
+                          <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6b6b6b' }}> ({ocupacionResumen.retosForaneos} foráneos)</span>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>Horas ocupadas (cancha propia)</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '22px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{ocupacionResumen.horasTotales}</p>
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>Franja más usada</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '22px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{ocupacionResumen.franjaTop}</p>
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>Cancha más usada</p>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '22px', fontWeight: 'bold', color: 'var(--color-ink)' }}>{ocupacionResumen.canchaTop}</p>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
