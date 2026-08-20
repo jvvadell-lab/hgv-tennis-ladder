@@ -55,22 +55,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Ya estás anotado en esta temporada' }, { status: 400 })
     }
 
-    const { count } = await db
-      .from('ladder_posiciones')
-      .select('id', { count: 'exact', head: true })
-      .eq('temporada_id', temporadaId)
-      .eq('categoria', session.categoria)
-      .eq('genero', session.genero)
-
-    const nuevaPosicion = (count || 0) + 1
-
+    // La posición real la asigna el sorteo (realizar-sorteo / sorteo-manual) — hasta entonces
+    // queda en null para no confundirla con un ranking válido en vistas que no chequeen
+    // temporadas.sorteo_realizado.
     const { error: errInsert } = await db.from('ladder_posiciones').insert([{
       temporada_id: temporadaId,
       jugador_id: session.id,
       categoria: session.categoria,
       genero: session.genero,
-      posicion: nuevaPosicion,
-      posicion_inicial: nuevaPosicion,
+      posicion: null,
+      posicion_inicial: null,
     }])
     if (errInsert) throw errInsert
 

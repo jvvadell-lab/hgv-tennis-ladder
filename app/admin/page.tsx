@@ -1201,6 +1201,7 @@ export default function AdminPage() {
         .order('categoria', { ascending: true })
         .order('genero', { ascending: true })
         .order('posicion', { ascending: true })
+        .order('created_at', { ascending: true })
 
       const agrupado: Record<string, any[]> = {}
       ;(posiciones || []).forEach((p: any) => {
@@ -1331,17 +1332,35 @@ export default function AdminPage() {
 
   const cerrarTemporada = async () => {
     if (!temporadaActiva) return
-    if (!confirm(`¿Cerrar "${temporadaActiva.nombre}"? El ranking quedará congelado como historial y ya no se podrán retar jugadores en esta temporada. Esta acción no se puede deshacer desde aquí.`)) return
+    if (!temporadaActiva.sorteo_realizado) {
+      if (!confirm(`⚠️ "${temporadaActiva.nombre}" todavía no tiene sorteo — si tiene jugadores anotados, van a quedar sin posición en el historial. ¿Seguro que quieres cerrarla así, sin sortear?`)) return
+    } else if (!confirm(`¿Cerrar "${temporadaActiva.nombre}"? El ranking quedará congelado como historial y ya no se podrán retar jugadores en esta temporada. Esta acción no se puede deshacer desde aquí.`)) {
+      return
+    }
 
     setCerrando(true)
     setSorteoMsg('')
     try {
-      const res = await fetch('/api/admin/cerrar-temporada', {
+      let res = await fetch('/api/admin/cerrar-temporada', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ temporadaId: temporadaActiva.id }),
       })
-      const data = await res.json()
+      let data = await res.json()
+
+      if (!res.ok && data.requiereConfirmacion) {
+        if (!confirm(`${data.error}\n\n¿Cerrar de todas formas?`)) {
+          setCerrando(false)
+          return
+        }
+        res = await fetch('/api/admin/cerrar-temporada', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ temporadaId: temporadaActiva.id, force: true }),
+        })
+        data = await res.json()
+      }
+
       if (!res.ok) throw new Error(data.error || 'Error al cerrar')
 
       setSorteoMsg('✅ Temporada cerrada. El ranking final quedó guardado en el historial.')
@@ -1406,6 +1425,7 @@ export default function AdminPage() {
         .order('categoria', { ascending: true })
         .order('genero', { ascending: true })
         .order('posicion', { ascending: true })
+        .order('created_at', { ascending: true })
 
       const agrupado: Record<string, any[]> = {}
       const idsAnotados = new Set<string>()

@@ -19,6 +19,14 @@ export async function POST(request: Request) {
 
     const db = supabaseServer()
 
+    const { data: temporada, error: errTemp } = await db
+      .from('temporadas')
+      .select('id, sorteo_realizado')
+      .eq('id', temporadaId)
+      .maybeSingle()
+    if (errTemp) throw errTemp
+    if (!temporada) return NextResponse.json({ error: 'Temporada no encontrada' }, { status: 404 })
+
     const { data: jugador, error: errJugador } = await db
       .from('jugadores')
       .select('id, nombre, categoria, genero, estado_verificacion')
@@ -53,22 +61,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `${jugador.nombre} todavía no tiene un pago validado en esta temporada — revísalo primero en la pestaña Pagos.` }, { status: 400 })
     }
 
-    const { count } = await db
-      .from('ladder_posiciones')
-      .select('id', { count: 'exact', head: true })
-      .eq('temporada_id', temporadaId)
-      .eq('categoria', jugador.categoria)
-      .eq('genero', jugador.genero)
-
-    const nuevaPosicion = (count || 0) + 1
+    // Si el sorteo de esta temporada ya se hizo, no habrá otro que le asigne posición
+    // después — entra al final de su categoría/género con una posición real ya.
+    // Si todavía no se ha hecho, queda en null: el sorteo se la asignará como a cualquier
+    // otro anotado (ver anotarme/route.ts).
+    let posicion: number | null = null
+    if (temporada.sorteo_realizado) {
+      const { count } = await db
+        .from('ladder_posiciones')
+        .select('id', { count: 'exact', head: true })
+        .eq('temporada_id', temporadaId)
+        .eq('categoria', jugador.categoria)
+        .eq('genero', jugador.genero)
+      posicion = (count || 0) + 1
+    }
 
     const { error: errInsert } = await db.from('ladder_posiciones').insert([{
       temporada_id: temporadaId,
       jugador_id: jugador.id,
       categoria: jugador.categoria,
       genero: jugador.genero,
-      posicion: nuevaPosicion,
-      posicion_inicial: nuevaPosicion,
+      posicion,
+      posicion_inicial: posicion,
     }])
     if (errInsert) throw errInsert
 

@@ -198,6 +198,7 @@ export default function LadderPage() {
       .eq('categoria', categoria)
       .eq('genero', genero)
       .order('posicion', { ascending: true })
+      .order('created_at', { ascending: true })
 
     setPosiciones((pos as any) || [])
 
@@ -409,6 +410,7 @@ export default function LadderPage() {
         .order('categoria', { ascending: true })
         .order('genero', { ascending: true })
         .order('posicion', { ascending: true })
+        .order('created_at', { ascending: true })
 
       const agrupado: Record<string, any[]> = {}
       ;(posiciones || []).forEach((p: any) => {
