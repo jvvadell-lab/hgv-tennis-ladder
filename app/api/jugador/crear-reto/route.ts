@@ -117,6 +117,16 @@ export async function POST(request: Request) {
     }]).select('id').single()
     if (errInsert) throw errInsert
 
+    // No dejamos que un fallo al crear la notificación in-app tumbe la creación
+    // del reto, que ya quedó guardada — el correo tampoco depende de esto.
+    const { error: errNotif } = await db.from('notificaciones').insert([{
+      jugador_id: retadoId,
+      tipo: 'reto_recibido',
+      reto_id: nuevoReto.id,
+      mensaje: `${session.nombre} te ha retado a un partido`,
+    }])
+    if (errNotif) console.error('[crear-reto] Error al crear notificación:', errNotif)
+
     return NextResponse.json({ ok: true, id: nuevoReto.id })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al lanzar el reto' }, { status: 500 })

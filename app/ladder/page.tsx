@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -1258,6 +1259,7 @@ export default function LadderPage() {
           {session?.role === 'jugador' && (
             <p style={{ color: '#cce5ff', marginTop: '14px' }}>
               Conectado como <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)' }}>{session.nombre}</strong>
+              {' '}<CampanaNotificaciones jugadorId={session.id} />
               {' — '}
               <a href="/perfil" style={{ color: 'var(--color-ball)', textDecoration: 'underline', fontSize: 'inherit' }}>
                 Mi Perfil
