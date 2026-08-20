@@ -24,6 +24,8 @@ export default function AdminPage() {
   const [checkingSession, setCheckingSession] = useState(true)
   const [activeSection, setActiveSection] = useState('dashboard')
   const [players, setPlayers] = useState<any[]>([])
+  const [inscritosTempActivaIds, setInscritosTempActivaIds] = useState<Set<string>>(new Set())
+  const [nombreTempActivaParaBadge, setNombreTempActivaParaBadge] = useState<string | null>(null)
 
   const [jugadorModal, setJugadorModal] = useState<any>(null)
   const [trayectoriaModal, setTrayectoriaModal] = useState<any>(null)
@@ -1692,7 +1694,31 @@ export default function AdminPage() {
       .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide')
       .order('created_at', { ascending: false })
     if (!error) setPlayers(data || [])
+    await fetchInscritosTempActiva()
     setLoading(false)
+  }
+
+  // Solo para el badge "Escalafón" de la pestaña Jugadores — no confundir con
+  // fetchTemporadaYLadder, que trae el detalle completo (posiciones, stats) para la pestaña Escalafón.
+  const fetchInscritosTempActiva = async () => {
+    const { data: temporada } = await supabase
+      .from('temporadas')
+      .select('id, nombre')
+      .eq('estado', 'activa')
+      .maybeSingle()
+
+    if (!temporada) {
+      setNombreTempActivaParaBadge(null)
+      setInscritosTempActivaIds(new Set())
+      return
+    }
+    setNombreTempActivaParaBadge(temporada.nombre)
+
+    const { data: inscritos } = await supabase
+      .from('ladder_posiciones')
+      .select('jugador_id')
+      .eq('temporada_id', temporada.id)
+    setInscritosTempActivaIds(new Set((inscritos || []).map((i: any) => i.jugador_id)))
   }
 
   const [verificando, setVerificando] = useState<string | null>(null)
@@ -2097,6 +2123,7 @@ export default function AdminPage() {
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>🎫 Acción</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>👥 Género</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>🏆 Categoría</th>
+                        <th style={{ padding: '14px 16px', textAlign: 'center' }}>🎾 Escalafón</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>🪪 Membresía</th>
                         <th style={{ padding: '14px 16px', textAlign: 'center' }}>🖼️ Carné</th>
                         <th style={{ padding: '14px 16px', textAlign: 'left' }}>📅 Registro</th>
@@ -2106,7 +2133,7 @@ export default function AdminPage() {
                     <tbody>
                       {filteredPlayers.length === 0 ? (
                         <tr>
-                          <td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
+                          <td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
                             😔 No hay jugadores registrados aún
                           </td>
                         </tr>
@@ -2161,6 +2188,25 @@ export default function AdminPage() {
                               }}>
                                 {categoriaLabel(player.categoria)}
                               </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              {!nombreTempActivaParaBadge ? (
+                                <span style={{ color: '#9ca3af', fontSize: '12px' }} title="No hay temporada activa">—</span>
+                              ) : inscritosTempActivaIds.has(player.id) ? (
+                                <span
+                                  title={`Inscrito en "${nombreTempActivaParaBadge}"`}
+                                  style={{ background: '#d1fae5', color: '#065f46', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}
+                                >
+                                  🎾 Inscrito
+                                </span>
+                              ) : (
+                                <span
+                                  title={`No está anotado en "${nombreTempActivaParaBadge}" — es un usuario del sistema (ej. para Reservas) que no participa en el escalafón de esta temporada`}
+                                  style={{ background: '#f3f4f6', color: '#6b7280', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}
+                                >
+                                  No inscrito
+                                </span>
+                              )}
                             </td>
                             <td style={{ padding: '12px 16px' }}>
                               {player.estado_verificacion === 'verificado' ? (
