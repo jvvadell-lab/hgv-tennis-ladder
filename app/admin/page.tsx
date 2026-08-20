@@ -61,6 +61,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [filterCategoria, setFilterCategoria] = useState('')
   const [filterGenero, setFilterGenero] = useState('')
+  const [filterInscripcion, setFilterInscripcion] = useState<'todos' | 'inscritos' | 'no_inscritos'>('todos')
 
   const [temporadaActiva, setTemporadaActiva] = useState<any>(null)
   const [ladderPreview, setLadderPreview] = useState<Record<string, any[]>>({})
@@ -1801,7 +1802,12 @@ export default function AdminPage() {
   const filteredPlayers = players.filter(p => {
     const matchCat = filterCategoria ? p.categoria === filterCategoria : true
     const matchGen = filterGenero ? p.genero === filterGenero : true
-    return matchCat && matchGen
+    const inscrito = inscritosTempActivaIds.has(p.id)
+    const matchInscripcion =
+      filterInscripcion === 'inscritos' ? inscrito :
+      filterInscripcion === 'no_inscritos' ? !inscrito :
+      true
+    return matchCat && matchGen && matchInscripcion
   })
 
   const esAdminLimitado = session?.role === 'admin' && session?.nivel === 'pagos'
@@ -2091,6 +2097,16 @@ export default function AdminPage() {
                   {CATEGORIAS.map(c => (
                     <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
+                </select>
+
+                <select
+                  value={filterInscripcion}
+                  onChange={(e) => setFilterInscripcion(e.target.value as 'todos' | 'inscritos' | 'no_inscritos')}
+                  style={{ padding: '8px 12px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px' }}
+                >
+                  <option value="todos">🎾 Todos</option>
+                  <option value="inscritos">🎾 Inscritos</option>
+                  <option value="no_inscritos">No inscritos</option>
                 </select>
 
                 <button
