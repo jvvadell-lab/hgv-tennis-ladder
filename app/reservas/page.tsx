@@ -188,129 +188,16 @@ export default function ReservasPage() {
 
     setReservando(true)
     try {
-      const nuevaHora = new Date(horaSeleccionada)
-      const nuevaHoraMs = nuevaHora.getTime()
-      const ahoraMs = Date.now()
-
-      if (nuevaHoraMs < ahoraMs) {
-        setMsg('❌ Ese horario ya pasó. Elige otro.')
-        setReservando(false)
-        return
-      }
-
-      // Traemos las reservas recientes del jugador (últimos días + próximas), para
-      // revisar tanto si tiene una sin resolver, como si le toca esperar alguna penalidad.
-      const desdeVentana = new Date(ahoraMs - (PENALIDAD_NO_PRESENTADO_DIAS + 1) * 24 * 60 * 60 * 1000)
-      const { data: misReservasRecientes, error: errMisReservas } = await supabase
-        .from('reservas_cancha')
-        .select('id, cancha, fecha_hora, estado, duracion_min')
-        .eq('jugador_id', session.id)
-        .in('estado', ['activa', 'usada'])
-        .gte('fecha_hora', desdeVentana.toISOString())
-      if (errMisReservas) throw errMisReservas
-
-      // 1) ¿Tiene una reserva sin resolver todavía (activa y su hora no ha pasado)?
-      const conReservaActiva = (misReservasRecientes || []).find((r: any) => {
-        if (r.estado !== 'activa') return false
-        return new Date(r.fecha_hora).getTime() > ahoraMs
+      // Todas las validaciones (choques con retos/otras reservas, penalidades,
+      // horario de apertura) se revalidan en el servidor — el cliente ya no
+      // hace más que pedirlas, para que no se puedan saltar desde afuera.
+      const res = await fetch('/api/jugador/crear-reserva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancha, tipoJuego, fechaHora: horaSeleccionada }),
       })
-      if (conReservaActiva) {
-        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Ya tienes una reserva activa (${conReservaActiva.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} a las ${fmt(new Date(conReservaActiva.fecha_hora))}) — no puedes tener más de una a la vez.`)
-        setReservando(false)
-        return
-      }
-
-      // 2) Penalidad por NO PRESENTARSE (quedó activa sin cancelar y ya pasó su hora) — 5 días
-      const noPresentados = (misReservasRecientes || []).filter((r: any) => {
-        const yaPaso = new Date(r.fecha_hora).getTime() <= ahoraMs
-        return r.estado === 'activa' && yaPaso
-      })
-      if (noPresentados.length > 0) {
-        const ultimaMs = Math.max(...noPresentados.map((r: any) => new Date(r.fecha_hora).getTime()))
-        const disponibleDesde = ultimaMs + PENALIDAD_NO_PRESENTADO_DIAS * 24 * 60 * 60 * 1000
-        if (ahoraMs < disponibleDesde) {
-          const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-          setMsg(`❌ Por no presentarte a tu última reserva, puedes volver a reservar a partir del ${fmt(new Date(disponibleDesde))} (${PENALIDAD_NO_PRESENTADO_DIAS} días después).`)
-          setReservando(false)
-          return
-        }
-      }
-
-      // 3) Uso normal de la cancha — "día por medio": si jugaste un día, el
-      // siguiente día queda bloqueado, pero el de después ya está disponible.
-      const usadas = (misReservasRecientes || []).filter((r: any) => r.estado === 'usada')
-      if (usadas.length > 0) {
-        const fechaUsoMasReciente = new Date(Math.max(...usadas.map((r: any) => new Date(r.fecha_hora).getTime())))
-        const diaUso = fechaAlInicioDelDia(fechaUsoMasReciente)
-        const diaBloqueado = new Date(diaUso); diaBloqueado.setDate(diaBloqueado.getDate() + 1)
-        const diaSolicitado = fechaAlInicioDelDia(nuevaHora)
-        if (diaSolicitado.getTime() === diaBloqueado.getTime()) {
-          const disponibleDesde = new Date(diaBloqueado); disponibleDesde.setDate(disponibleDesde.getDate() + 1)
-          const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-          setMsg(`❌ Jugaste el ${fmt(diaUso)} — las reservas son día por medio, así que recién puedes volver a reservar a partir del ${fmt(disponibleDesde)}.`)
-          setReservando(false)
-          return
-        }
-      }
-
-      const inicioDia = fechaAlInicioDelDia(nuevaHora)
-      const finDia = new Date(inicioDia); finDia.setHours(23, 59, 59, 999)
-      const duracionMin = duracionParaTipoJuego(tipoJuego)
-
-      // No debe chocar con partidos de la escalera (bloquean 1h30) en esa cancha ese día
-      const { data: retosDia, error: errRetos } = await supabase
-        .from('retos')
-        .select('id, fecha_propuesta')
-        .eq('cancha', cancha)
-        .in('estado', ['pendiente', 'aceptado'])
-        .gte('fecha_propuesta', inicioDia.toISOString())
-        .lte('fecha_propuesta', finDia.toISOString())
-      if (errRetos) throw errRetos
-
-      const conflictoReto = (retosDia || []).find((r: any) =>
-        seSolapan(nuevaHoraMs, duracionMin, new Date(r.fecha_propuesta).getTime(), DURACION_RETO_MIN)
-      )
-      if (conflictoReto) {
-        const inicioOcupado = new Date(conflictoReto.fecha_propuesta)
-        const finOcupado = new Date(inicioOcupado.getTime() + DURACION_RETO_MIN * 60000)
-        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Esa cancha tiene un partido de la escalera a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Elige otro horario.`)
-        setReservando(false)
-        return
-      }
-
-      // No debe chocar con otras reservas casuales en esa cancha ese día
-      const { data: reservasDia, error: errReservas } = await supabase
-        .from('reservas_cancha')
-        .select('id, fecha_hora, duracion_min')
-        .eq('cancha', cancha)
-        .eq('estado', 'activa')
-        .gte('fecha_hora', inicioDia.toISOString())
-        .lte('fecha_hora', finDia.toISOString())
-      if (errReservas) throw errReservas
-
-      const conflictoReserva = (reservasDia || []).find((r: any) =>
-        seSolapan(nuevaHoraMs, duracionMin, new Date(r.fecha_hora).getTime(), r.duracion_min || DURACION_SINGLE_MIN)
-      )
-      if (conflictoReserva) {
-        const inicioOcupado = new Date(conflictoReserva.fecha_hora)
-        const finOcupado = new Date(inicioOcupado.getTime() + (conflictoReserva.duracion_min || DURACION_SINGLE_MIN) * 60000)
-        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        setMsg(`❌ Esa cancha ya está reservada a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Elige otro horario.`)
-        setReservando(false)
-        return
-      }
-
-      const { error } = await supabase.from('reservas_cancha').insert([{
-        jugador_id: session.id,
-        cancha,
-        fecha_hora: nuevaHora.toISOString(),
-        estado: 'activa',
-        tipo_juego: tipoJuego,
-        duracion_min: duracionMin,
-      }])
-      if (error) throw error
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al reservar')
 
       setMsg('✅ ¡Cancha reservada! No olvides confirmar que llegaste, o cancelarla a tiempo si no vas a poder ir.')
       cargarMisReservas()
