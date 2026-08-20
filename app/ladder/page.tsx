@@ -898,19 +898,22 @@ export default function LadderPage() {
 
     const fechaPropuesta = new Date(`${retoFecha}T${retoHora}`).toISOString()
 
-    const { data: nuevoReto, error } = await supabase.from('retos').insert([{
-      temporada_id: temporadaId,
-      retador_id: session.id,
-      retado_id: retandoA,
-      cancha: retoCancha,
-      nombre_cancha_foranea: retoCancha === 'FORANEA' ? retoCanchaForanea : null,
-      fecha_propuesta: fechaPropuesta,
-      comentarios: retoComentarios || null,
-      estado: 'pendiente',
-    }]).select('id').single()
+    const res = await fetch('/api/jugador/crear-reto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        temporadaId,
+        retadoId: retandoA,
+        cancha: retoCancha,
+        nombreCanchaForanea: retoCancha === 'FORANEA' ? retoCanchaForanea : null,
+        fechaPropuesta,
+        comentarios: retoComentarios || null,
+      }),
+    })
+    const data = await res.json()
 
-    if (error) {
-      setRetoFormMsg('❌ Error al lanzar el reto: ' + error.message)
+    if (!res.ok) {
+      setRetoFormMsg('❌ Error al lanzar el reto: ' + (data.error || 'intenta de nuevo'))
     } else {
       setActionMsg('✅ ¡Reto enviado!')
       setRetandoA(null)
@@ -922,11 +925,11 @@ export default function LadderPage() {
       cargarDatos()
 
       // Enviar el correo al rival en segundo plano — si falla, no afecta el reto ya creado
-      if (nuevoReto?.id) {
+      if (data.id) {
         fetch('/api/notificar/nuevo-reto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ retoId: nuevoReto.id }),
+          body: JSON.stringify({ retoId: data.id }),
         }).catch(() => {})
       }
     }
