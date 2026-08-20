@@ -112,6 +112,13 @@ export default function AdminPage() {
   const [historialReservasHasta, setHistorialReservasHasta] = useState('')
   const [filterEstado, setFilterEstado] = useState('')
 
+  // Reporte "Uso de cancha" (Reservas > esporádicos vs. inscritos) — Tarea 2
+  const [reporteDesde, setReporteDesde] = useState('')
+  const [reporteHasta, setReporteHasta] = useState('')
+  const [reporteFiltroTipo, setReporteFiltroTipo] = useState<'todos' | 'esporadicos' | 'inscritos'>('todos')
+  const [reporteData, setReporteData] = useState<any[]>([])
+  const [loadingReporteUso, setLoadingReporteUso] = useState(false)
+
   const [dashStats, setDashStats] = useState({ jugadores: 0, desafiosActivos: 0, partidosJugados: 0, esteMes: 0 })
   const [anuncioTitulo, setAnuncioTitulo] = useState('')
   const [anuncioDescripcion, setAnuncioDescripcion] = useState('')
@@ -561,6 +568,18 @@ export default function AdminPage() {
       } else {
         fetchHistorialReservas()
       }
+
+      fetchInscritosTempActiva()
+      if (!reporteDesde || !reporteHasta) {
+        const hoy = new Date()
+        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10)
+        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().slice(0, 10)
+        setReporteDesde(primerDiaMes)
+        setReporteHasta(ultimoDiaMes)
+        fetchReporteUsoCancha(primerDiaMes, ultimoDiaMes)
+      } else {
+        fetchReporteUsoCancha()
+      }
     }
     if (activeSection === 'permisos') {
       fetchPermisosMedicos()
@@ -613,6 +632,24 @@ export default function AdminPage() {
       .order('fecha_hora', { ascending: false })
     setHistorialReservas(data || [])
     setLoadingHistorialReservas(false)
+  }
+
+  // Reporte "Uso de cancha" — solo reservas_cancha (casuales), para medir esporádicos vs. inscritos.
+  const fetchReporteUsoCancha = async (desde?: string, hasta?: string) => {
+    const fDesde = desde || reporteDesde
+    const fHasta = hasta || reporteHasta
+    if (!fDesde || !fHasta) return
+    setLoadingReporteUso(true)
+    const inicio = new Date(fDesde + 'T00:00:00')
+    const fin = new Date(fHasta + 'T23:59:59.999')
+    const { data } = await supabase
+      .from('reservas_cancha')
+      .select('id, jugador_id, cancha, fecha_hora, duracion_min, estado, jugadores:jugador_id(nombre)')
+      .neq('estado', 'cancelada')
+      .gte('fecha_hora', inicio.toISOString())
+      .lte('fecha_hora', fin.toISOString())
+    setReporteData(data || [])
+    setLoadingReporteUso(false)
   }
 
   const fetchPermisosMedicos = async () => {
@@ -863,6 +900,16 @@ export default function AdminPage() {
     }
     return map[estado] || { bg: '#eee', color: '#333' }
   }
+
+  // Franja horaria en hora de Venezuela, usada por los reportes de uso/ocupación de cancha.
+  const franjaDe = (fechaISO: string): 'Mañana' | 'Tarde' | 'Noche' => {
+    const partes = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Caracas' }).formatToParts(new Date(fechaISO))
+    const hora = parseInt(partes.find(p => p.type === 'hour')?.value || '0', 10) % 24
+    if (hora >= 6 && hora < 12) return 'Mañana'
+    if (hora >= 12 && hora < 18) return 'Tarde'
+    return 'Noche'
+  }
+
   const [sorteoMsg, setSorteoMsg] = useState('')
   const [cerrando, setCerrando] = useState(false)
   const [eliminandoTemp, setEliminandoTemp] = useState<string | null>(null)
@@ -1178,6 +1225,72 @@ export default function AdminPage() {
 
   const imprimirPagos = () => {
     window.print()
+  }
+
+  // --- Reporte "Uso de cancha" (esporádicos vs. inscritos) ---
+
+  const reporteFiltrado = reporteData.filter((r: any) => {
+    if (reporteFiltroTipo === 'todos') return true
+    const inscrito = inscritosTempActivaIds.has(r.jugador_id)
+    return reporteFiltroTipo === 'inscritos' ? inscrito : !inscrito
+  })
+
+  const reportePorJugador = (() => {
+    const mapa: Record<string, { nombre: string; cantidad: number; minutos: number; canchas: Record<string, number>; franjas: Record<string, number> }> = {}
+    reporteFiltrado.forEach((r: any) => {
+      const key = r.jugador_id
+      if (!mapa[key]) mapa[key] = { nombre: r.jugadores?.nombre || '—', cantidad: 0, minutos: 0, canchas: {}, franjas: {} }
+      mapa[key].cantidad += 1
+      mapa[key].minutos += r.duracion_min || 60
+      mapa[key].canchas[r.cancha] = (mapa[key].canchas[r.cancha] || 0) + 1
+      const franja = franjaDe(r.fecha_hora)
+      mapa[key].franjas[franja] = (mapa[key].franjas[franja] || 0) + 1
+    })
+    return Object.entries(mapa).map(([jugadorId, v]) => {
+      const maxCancha = Math.max(...Object.values(v.canchas))
+      const canchaTop = Object.entries(v.canchas).filter(([, c]) => c === maxCancha).map(([c]) => c === 'HGV1' ? 'HGV 1' : 'HGV 2').join(' / ')
+      const maxFranja = Math.max(...Object.values(v.franjas))
+      const franjaTop = Object.entries(v.franjas).filter(([, c]) => c === maxFranja).map(([f]) => f).join(' / ')
+      return {
+        jugadorId,
+        nombre: v.nombre,
+        cantidad: v.cantidad,
+        horas: Math.round((v.minutos / 60) * 10) / 10,
+        canchaTop,
+        franjaTop,
+        inscrito: inscritosTempActivaIds.has(jugadorId),
+      }
+    }).sort((a, b) => b.cantidad - a.cantidad)
+  })()
+
+  const totalReporteUso = reporteFiltrado.length
+  const totalEsporadicosReporte = reporteFiltrado.filter((r: any) => !inscritosTempActivaIds.has(r.jugador_id)).length
+  const pctEsporadicosReporte = totalReporteUso > 0 ? Math.round((totalEsporadicosReporte / totalReporteUso) * 100) : 0
+  const canchaTopReporteUso = (() => {
+    const porCancha: Record<string, number> = {}
+    reporteFiltrado.forEach((r: any) => { porCancha[r.cancha] = (porCancha[r.cancha] || 0) + (r.duracion_min || 60) })
+    const entries = Object.entries(porCancha).sort((a, b) => b[1] - a[1])
+    return entries.length > 0 ? (entries[0][0] === 'HGV1' ? 'HGV 1' : 'HGV 2') : '—'
+  })()
+
+  const exportarReporteUsoCancha = () => {
+    const filas = reportePorJugador.map((j) => ({
+      'Jugador': j.nombre,
+      'Tipo': j.inscrito ? 'Inscrito' : 'Esporádico',
+      'Cantidad de reservas': j.cantidad,
+      'Horas totales': j.horas,
+      'Cancha(s) más usada(s)': j.canchaTop,
+      'Franja más frecuente': j.franjaTop,
+    }))
+    filas.push({ 'Jugador': '', 'Tipo': '', 'Cantidad de reservas': '' as any, 'Horas totales': '' as any, 'Cancha(s) más usada(s)': '', 'Franja más frecuente': '' })
+    filas.push({ 'Jugador': 'TOTAL reservas en el período', 'Tipo': '', 'Cantidad de reservas': totalReporteUso, 'Horas totales': '' as any, 'Cancha(s) más usada(s)': '', 'Franja más frecuente': '' })
+    filas.push({ 'Jugador': '% esporádicos', 'Tipo': '', 'Cantidad de reservas': `${pctEsporadicosReporte}%` as any, 'Horas totales': '' as any, 'Cancha(s) más usada(s)': '', 'Franja más frecuente': '' })
+    filas.push({ 'Jugador': 'Cancha con más demanda', 'Tipo': '', 'Cantidad de reservas': '' as any, 'Horas totales': '' as any, 'Cancha(s) más usada(s)': canchaTopReporteUso, 'Franja más frecuente': '' })
+
+    const hoja = XLSX.utils.json_to_sheet(filas)
+    const libro = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(libro, hoja, 'Uso de cancha')
+    XLSX.writeFile(libro, `uso-cancha-hgv-${reporteDesde}-a-${reporteHasta}.xlsx`)
   }
 
   const fetchHistorial = async () => {
@@ -2774,6 +2887,114 @@ export default function AdminPage() {
                       </tbody>
                     </table>
                   </div>
+                )}
+              </div>
+
+              {/* Reporte: Uso de cancha (esporádicos vs. inscritos) */}
+              <div style={{ marginTop: '30px' }} className="no-imprimir">
+                <h3 style={{ color: 'var(--color-ink)' }}>📊 Uso de cancha — esporádicos vs. inscritos</h3>
+                <div style={{
+                  background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
+                  marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                  display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap'
+                }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Desde</label>
+                    <input
+                      type="date"
+                      value={reporteDesde}
+                      onChange={(e) => setReporteDesde(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Hasta</label>
+                    <input
+                      type="date"
+                      value={reporteHasta}
+                      onChange={(e) => setReporteHasta(e.target.value)}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>Tipo de usuario</label>
+                    <select
+                      value={reporteFiltroTipo}
+                      onChange={(e) => setReporteFiltroTipo(e.target.value as 'todos' | 'esporadicos' | 'inscritos')}
+                      style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
+                    >
+                      <option value="todos">Todos</option>
+                      <option value="esporadicos">Solo esporádicos</option>
+                      <option value="inscritos">Solo inscritos</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => fetchReporteUsoCancha()}
+                    style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                  >
+                    🔍 Buscar
+                  </button>
+                  {reportePorJugador.length > 0 && (
+                    <button
+                      onClick={exportarReporteUsoCancha}
+                      style={{ background: '#28a745', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+                    >
+                      📊 Exportar a Excel
+                    </button>
+                  )}
+                </div>
+
+                {loadingReporteUso ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando...</div>
+                ) : reportePorJugador.length === 0 ? (
+                  <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '30px', textAlign: 'center', color: '#6b6b6b', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                    No hay reservas en ese rango de fechas.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{
+                      background: 'var(--color-chalk)', borderRadius: '12px', padding: '16px 20px',
+                      marginBottom: '14px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                      display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: '#333'
+                    }}>
+                      <span>Total reservas: <strong>{totalReporteUso}</strong></span>
+                      <span>Esporádicos: <strong>{pctEsporadicosReporte}%</strong> ({totalEsporadicosReporte} de {totalReporteUso})</span>
+                      <span>Cancha con más demanda: <strong>{canchaTopReporteUso}</strong></span>
+                    </div>
+                    <div className="table-scroll" style={{ background: 'var(--color-chalk)', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--color-court)', color: 'var(--color-chalk)' }}>
+                            <th style={{ padding: '10px 14px', textAlign: 'left' }}>Jugador</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'left' }}>Tipo</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Reservas</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Horas</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'left' }}>Cancha(s) top</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'left' }}>Franja top</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportePorJugador.map((j, i) => (
+                            <tr key={j.jugadorId} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
+                              <td style={{ padding: '10px 14px', fontSize: '13px' }}>{j.nombre}</td>
+                              <td style={{ padding: '10px 14px' }}>
+                                <span style={{
+                                  fontSize: '11px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px',
+                                  background: j.inscrito ? '#d1fae5' : '#f3f4f6', color: j.inscrito ? '#065f46' : '#6b7280',
+                                }}>
+                                  {j.inscrito ? '🎾 Inscrito' : 'Esporádico'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'center' }}>{j.cantidad}</td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'center' }}>{j.horas}</td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px' }}>{j.canchaTop}</td>
+                              <td style={{ padding: '10px 14px', fontSize: '13px' }}>{j.franjaTop}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
