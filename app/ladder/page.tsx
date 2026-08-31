@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
-import { evaluarSet, calcularResultadoPartido, type CampoSet } from '@/lib/resultados'
+import { evaluarSet, construirSets, generarMarcadores, calcularGanador, type CampoSet } from '@/lib/resultados'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -137,6 +137,9 @@ export default function LadderPage() {
   const [set2TbRetado, setSet2TbRetado] = useState('')
   const [tbRetador, setTbRetador] = useState('')
   const [tbRetado, setTbRetado] = useState('')
+  const [retiro, setRetiro] = useState(false)
+  const [jugadorRetiradoId, setJugadorRetiradoId] = useState('')
+  const [notaRetiro, setNotaRetiro] = useState('')
   const [modoNoPresentado, setModoNoPresentado] = useState<string | null>(null)
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [subiendoFoto, setSubiendoFoto] = useState(false)
@@ -981,14 +984,15 @@ export default function LadderPage() {
   }
 
   async function registrarResultado(reto: Reto) {
-    const { set1, set2, st } = campoSetsFormulario()
-    const resultado = calcularResultadoPartido(set1, set2, st)
-    if (!resultado.valido) {
-      setActionMsg('❌ Completa los 2 sets (y los tie-breaks que hagan falta) con marcadores válidos')
+    const resultado = construirSets({ ...campoSetsFormulario(), retiro })
+    if ('error' in resultado) {
+      setActionMsg('❌ ' + resultado.error)
       return
     }
-
-    const ganadorId = resultado.ganadorEsRetador ? reto.retador_id : reto.retado_id
+    if (retiro && !jugadorRetiradoId) {
+      setActionMsg('❌ Indica quién se retiró')
+      return
+    }
 
     let fotoUrl: string | null = null
     if (fotoFile) {
@@ -1007,17 +1011,23 @@ export default function LadderPage() {
       fotoUrl = urlData.publicUrl
     }
 
-    const { error: errResultado } = await supabase.from('resultados').insert([{
-      reto_id: reto.id,
-      ganador_id: ganadorId,
-      marcador_retador: resultado.marcadorRetador,
-      marcador_retado: resultado.marcadorRetado,
-      foto_url: fotoUrl,
-      validado: false,
-    }])
-
-    if (errResultado) {
-      setActionMsg('❌ Error al guardar resultado: ' + errResultado.message)
+    // Todas las validaciones (ganador, choque de sets, formato de marcador)
+    // se revalidan en el servidor — el cliente solo arma el JSON de sets.
+    const res = await fetch('/api/jugador/registrar-resultado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        retoId: reto.id,
+        sets: resultado.sets,
+        tipoResultado: retiro ? 'retiro' : 'normal',
+        jugadorRetiradoId: retiro ? jugadorRetiradoId : null,
+        nota: retiro ? notaRetiro : null,
+        fotoUrl,
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setActionMsg('❌ Error al guardar resultado: ' + (data.error || 'intenta de nuevo'))
       return
     }
 
@@ -1033,6 +1043,9 @@ export default function LadderPage() {
     setSet2TbRetado('')
     setTbRetador('')
     setTbRetado('')
+    setRetiro(false)
+    setJugadorRetiradoId('')
+    setNotaRetiro('')
     setFotoFile(null)
     cargarDatos()
   }
@@ -1936,7 +1949,7 @@ export default function LadderPage() {
                         if (resultadoRetoId === r.id) return null
 
                         return (
-                          <button onClick={() => { setResultadoRetoId(r.id); setModoNoPresentado(null) }} style={btnPequeno('var(--color-ink)')}>
+                          <button onClick={() => { setResultadoRetoId(r.id); setModoNoPresentado(null); setRetiro(false); setJugadorRetiradoId(''); setNotaRetiro('') }} style={btnPequeno('var(--color-ink)')}>
                             Registrar resultado
                           </button>
                         )
@@ -2026,6 +2039,58 @@ export default function LadderPage() {
                                     <input type="number" min="0" placeholder={r.retador?.nombre} value={tbRetador} onChange={(e) => setTbRetador(e.target.value)} style={inputPequeno} />
                                     <input type="number" min="0" placeholder={r.retado?.nombre} value={tbRetado} onChange={(e) => setTbRetado(e.target.value)} style={inputPequeno} />
                                   </div>
+                                )
+                              })()}
+
+                              <div style={{ marginBottom: '10px' }}>
+                                <label style={{ fontSize: '12px', color: '#c0392b', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                  <input type="checkbox" checked={retiro} onChange={(e) => setRetiro(e.target.checked)} />
+                                  ¿Hubo retiro por lesión u otro motivo?
+                                </label>
+                              </div>
+
+                              {retiro && (
+                                <div style={{ marginBottom: '10px', padding: '10px', background: '#fdecea', borderRadius: '6px' }}>
+                                  <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>¿Quién se retiró?</label>
+                                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                    <button type="button" onClick={() => setJugadorRetiradoId(r.retador_id)} style={btnPequeno(jugadorRetiradoId === r.retador_id ? '#c0392b' : '#f5c6cb')}>
+                                      {r.retador?.nombre}
+                                    </button>
+                                    <button type="button" onClick={() => setJugadorRetiradoId(r.retado_id)} style={btnPequeno(jugadorRetiradoId === r.retado_id ? '#c0392b' : '#f5c6cb')}>
+                                      {r.retado?.nombre}
+                                    </button>
+                                  </div>
+                                  <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>Nota (opcional)</label>
+                                  <textarea
+                                    value={notaRetiro}
+                                    onChange={(e) => setNotaRetiro(e.target.value)}
+                                    placeholder="Ej. Lesión en el tobillo"
+                                    rows={2}
+                                    style={{ ...inputPequeno, width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                                  />
+                                </div>
+                              )}
+
+                              {(() => {
+                                const resultado = construirSets({
+                                  set1: { golesRetador: set1Retador, golesRetado: set1Retado, tbRetador: set1TbRetador, tbRetado: set1TbRetado },
+                                  set2: { golesRetador: set2Retador, golesRetado: set2Retado, tbRetador: set2TbRetador, tbRetado: set2TbRetado },
+                                  st: { golesRetador: tbRetador, golesRetado: tbRetado },
+                                  retiro,
+                                })
+                                if ('error' in resultado) return null
+                                const { marcadorRetador } = generarMarcadores(resultado.sets, retiro ? 'retiro' : 'normal')
+                                const ganador = retiro
+                                  ? (jugadorRetiradoId ? (jugadorRetiradoId === r.retador_id ? r.retado?.nombre : r.retador?.nombre) : null)
+                                  : (() => {
+                                      const id = calcularGanador(resultado.sets, r.retador_id, r.retado_id)
+                                      return id === r.retador_id ? r.retador?.nombre : id === r.retado_id ? r.retado?.nombre : null
+                                    })()
+                                return (
+                                  <p style={{ fontSize: '12px', color: '#5c5c5c', margin: '0 0 10px 0' }}>
+                                    Marcador: <strong>{marcadorRetador}</strong>
+                                    {ganador && <> — Gana: <strong>{ganador}</strong></>}
+                                  </p>
                                 )
                               })()}
 

@@ -3,7 +3,7 @@ import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 import { comprimirImagen } from '@/lib/comprimirImagen'
-import { evaluarSet, calcularResultadoPartido } from '@/lib/resultados'
+import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -161,6 +161,9 @@ export default function AdminPage() {
   const [tbRetadorD, setTbRetadorD] = useState('')
   const [tbRetadoD, setTbRetadoD] = useState('')
   const [noPresentadoDirectoId, setNoPresentadoDirectoId] = useState('')
+  const [retiroDirecto, setRetiroDirecto] = useState(false)
+  const [jugadorRetiradoDirectoId, setJugadorRetiradoDirectoId] = useState('')
+  const [notaRetiroDirecto, setNotaRetiroDirecto] = useState('')
   const [fotoDirectoFile, setFotoDirectoFile] = useState<File | null>(null)
   const [guardandoDirecto, setGuardandoDirecto] = useState(false)
   const [subiendoFotoResultadoId, setSubiendoFotoResultadoId] = useState<string | null>(null)
@@ -201,20 +204,15 @@ export default function AdminPage() {
     setRetosSinResultado((todosLosRetos || []).filter((r: any) => !idsConResultado.has(r.id)))
   }
 
-  function calcularResultadoDirecto() {
-    return calcularResultadoPartido(
-      { golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD },
-      { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
-      { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
-    )
-  }
-
   const limpiarFormularioDirecto = () => {
     setRetoDirectoId('')
     setSet1RetadorD(''); setSet1RetadoD(''); setSet2RetadorD(''); setSet2RetadoD('')
     setSet1TbRetadorD(''); setSet1TbRetadoD(''); setSet2TbRetadorD(''); setSet2TbRetadoD('')
     setTbRetadorD(''); setTbRetadoD('')
     setNoPresentadoDirectoId('')
+    setRetiroDirecto(false)
+    setJugadorRetiradoDirectoId('')
+    setNotaRetiroDirecto('')
     setFotoDirectoFile(null)
   }
 
@@ -225,31 +223,70 @@ export default function AdminPage() {
       return
     }
 
+    // El caso de "no presentado" todavía inserta directo (esto se mueve al
+    // service role en el siguiente commit, junto con el cierre del RLS).
+    if (noPresentadoDirectoId) {
+      setGuardandoDirecto(true)
+      setResultadosMsg('')
+      try {
+        const ganadorId = noPresentadoDirectoId === reto.retador_id ? reto.retado_id : reto.retador_id
+        let fotoUrl: string | null = null
+        if (fotoDirectoFile) {
+          const fotoComprimida = await comprimirImagen(fotoDirectoFile, 1600)
+          const ext = fotoComprimida.name.split('.').pop()
+          const path = `${reto.id}-${Date.now()}.${ext}`
+          const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoComprimida)
+          if (errSubida) throw errSubida
+          const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
+          fotoUrl = urlData.publicUrl
+        }
+
+        if (reto.estado !== 'aceptado') {
+          const { error: errReto } = await supabase.from('retos').update({ estado: 'aceptado' }).eq('id', reto.id)
+          if (errReto) throw errReto
+        }
+
+        const { error: errResultado } = await supabase.from('resultados').insert([{
+          reto_id: reto.id,
+          ganador_id: ganadorId,
+          marcador_retador: noPresentadoDirectoId === reto.retador_id ? 'No presentado' : 'W.O.',
+          marcador_retado: noPresentadoDirectoId === reto.retado_id ? 'No presentado' : 'W.O.',
+          foto_url: fotoUrl,
+          no_presentado: true,
+          validado: false,
+        }])
+        if (errResultado) throw errResultado
+
+        setResultadosMsg('✅ Resultado cargado — queda en "Pendientes de validar" para aprobarlo abajo.')
+        limpiarFormularioDirecto()
+        fetchRetosSinResultado()
+        fetchResultados()
+      } catch (err: any) {
+        setResultadosMsg('❌ ' + err.message)
+      } finally {
+        setGuardandoDirecto(false)
+      }
+      return
+    }
+
+    const resultado = construirSets({
+      set1: { golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD },
+      set2: { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
+      st: { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
+      retiro: retiroDirecto,
+    })
+    if ('error' in resultado) {
+      setResultadosMsg('❌ ' + resultado.error + ', o marca "No se presentó".')
+      return
+    }
+    if (retiroDirecto && !jugadorRetiradoDirectoId) {
+      setResultadosMsg('❌ Indica quién se retiró')
+      return
+    }
+
     setGuardandoDirecto(true)
     setResultadosMsg('')
     try {
-      let ganadorId: string
-      let marcadorRetador = ''
-      let marcadorRetado = ''
-      let noPresentado = false
-
-      if (noPresentadoDirectoId) {
-        noPresentado = true
-        ganadorId = noPresentadoDirectoId === reto.retador_id ? reto.retado_id : reto.retador_id
-        marcadorRetador = noPresentadoDirectoId === reto.retador_id ? 'No presentado' : 'W.O.'
-        marcadorRetado = noPresentadoDirectoId === reto.retado_id ? 'No presentado' : 'W.O.'
-      } else {
-        const resultado = calcularResultadoDirecto()
-        if (!resultado.valido) {
-          setResultadosMsg('❌ Completa los 2 sets (y los tie-breaks que hagan falta) con marcadores válidos, o marca "No se presentó".')
-          setGuardandoDirecto(false)
-          return
-        }
-        ganadorId = resultado.ganadorEsRetador ? reto.retador_id : reto.retado_id
-        marcadorRetador = resultado.marcadorRetador
-        marcadorRetado = resultado.marcadorRetado
-      }
-
       let fotoUrl: string | null = null
       if (fotoDirectoFile) {
         const fotoComprimida = await comprimirImagen(fotoDirectoFile, 1600)
@@ -261,23 +298,20 @@ export default function AdminPage() {
         fotoUrl = urlData.publicUrl
       }
 
-      // Si el reto no estaba aceptado (ej: quedó rechazado pero sí se jugó), lo
-      // dejamos como aceptado para que el resto del flujo (aprobar, ranking) funcione normal.
-      if (reto.estado !== 'aceptado') {
-        const { error: errReto } = await supabase.from('retos').update({ estado: 'aceptado' }).eq('id', reto.id)
-        if (errReto) throw errReto
-      }
-
-      const { error: errResultado } = await supabase.from('resultados').insert([{
-        reto_id: reto.id,
-        ganador_id: ganadorId,
-        marcador_retador: marcadorRetador,
-        marcador_retado: marcadorRetado,
-        foto_url: fotoUrl,
-        no_presentado: noPresentado,
-        validado: false,
-      }])
-      if (errResultado) throw errResultado
+      const res = await fetch('/api/admin/registrar-resultado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          retoId: reto.id,
+          sets: resultado.sets,
+          tipoResultado: retiroDirecto ? 'retiro' : 'normal',
+          jugadorRetiradoId: retiroDirecto ? jugadorRetiradoDirectoId : null,
+          nota: retiroDirecto ? notaRetiroDirecto : null,
+          fotoUrl,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar')
 
       setResultadosMsg('✅ Resultado cargado — queda en "Pendientes de validar" para aprobarlo abajo.')
       limpiarFormularioDirecto()
@@ -296,7 +330,9 @@ export default function AdminPage() {
       .from('resultados')
       .select(`
         id, marcador_retador, marcador_retado, posiciones_intercambiadas, observaciones, created_at, validado, ganador_id, no_presentado, foto_url,
+        tipo_resultado, jugador_retirado_id, nota,
         ganador:ganador_id(nombre),
+        jugador_retirado:jugador_retirado_id(nombre),
         retos:reto_id(
           id, temporada_id, retador_id, retado_id, cancha, nombre_cancha_foranea, fecha_propuesta,
           retador:retador_id(nombre, categoria, genero),
@@ -3419,7 +3455,7 @@ export default function AdminPage() {
                       <p style={{ margin: '0 0 10px 0' }}>
                         <button
                           type="button"
-                          onClick={() => setNoPresentadoDirectoId(noPresentadoDirectoId ? '' : reto.retador_id)}
+                          onClick={() => { setNoPresentadoDirectoId(noPresentadoDirectoId ? '' : reto.retador_id); setRetiroDirecto(false); setJugadorRetiradoDirectoId(''); setNotaRetiroDirecto('') }}
                           style={{ background: 'none', border: 'none', color: '#c0392b', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0 }}
                         >
                           {noPresentadoDirectoId ? '← Volver a cargar marcador' : '❌ Uno de los dos no se presentó'}
@@ -3502,6 +3538,74 @@ export default function AdminPage() {
                             )
                           })()}
 
+                          <div style={{ marginBottom: '10px' }}>
+                            <label style={{ fontSize: '12px', color: '#c0392b', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={retiroDirecto} onChange={(e) => setRetiroDirecto(e.target.checked)} />
+                              ¿Hubo retiro por lesión u otro motivo?
+                            </label>
+                          </div>
+
+                          {retiroDirecto && (
+                            <div style={{ marginBottom: '10px', padding: '10px', background: '#fdecea', borderRadius: '6px', maxWidth: '420px' }}>
+                              <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>¿Quién se retiró?</label>
+                              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setJugadorRetiradoDirectoId(reto.retador_id)}
+                                  style={{
+                                    background: jugadorRetiradoDirectoId === reto.retador_id ? '#c0392b' : '#f5c6cb',
+                                    color: jugadorRetiradoDirectoId === reto.retador_id ? 'white' : '#c0392b',
+                                    border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold',
+                                  }}
+                                >
+                                  {reto.retador?.nombre}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setJugadorRetiradoDirectoId(reto.retado_id)}
+                                  style={{
+                                    background: jugadorRetiradoDirectoId === reto.retado_id ? '#c0392b' : '#f5c6cb',
+                                    color: jugadorRetiradoDirectoId === reto.retado_id ? 'white' : '#c0392b',
+                                    border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold',
+                                  }}
+                                >
+                                  {reto.retado?.nombre}
+                                </button>
+                              </div>
+                              <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>Nota (opcional)</label>
+                              <textarea
+                                value={notaRetiroDirecto}
+                                onChange={(e) => setNotaRetiroDirecto(e.target.value)}
+                                placeholder="Ej. Lesión en el tobillo"
+                                rows={2}
+                                style={{ width: '100%', boxSizing: 'border-box', padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px', resize: 'vertical' }}
+                              />
+                            </div>
+                          )}
+
+                          {(() => {
+                            const resultado = construirSets({
+                              set1: { golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD },
+                              set2: { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
+                              st: { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
+                              retiro: retiroDirecto,
+                            })
+                            if ('error' in resultado) return null
+                            const { marcadorRetador } = generarMarcadores(resultado.sets, retiroDirecto ? 'retiro' : 'normal')
+                            const ganador = retiroDirecto
+                              ? (jugadorRetiradoDirectoId ? (jugadorRetiradoDirectoId === reto.retador_id ? reto.retado?.nombre : reto.retador?.nombre) : null)
+                              : (() => {
+                                  const id = calcularGanador(resultado.sets, reto.retador_id, reto.retado_id)
+                                  return id === reto.retador_id ? reto.retador?.nombre : id === reto.retado_id ? reto.retado?.nombre : null
+                                })()
+                            return (
+                              <p style={{ fontSize: '12px', color: '#6b6b6b', margin: '0 0 10px 0' }}>
+                                Marcador: <strong>{marcadorRetador}</strong>
+                                {ganador && <> — Gana: <strong>{ganador}</strong></>}
+                              </p>
+                            )
+                          })()}
+
                           <div style={{ marginBottom: '12px' }}>
                             <label style={{ fontSize: '12px', color: '#6b6b6b', display: 'block', marginBottom: '4px' }}>📸 Foto del partido (opcional)</label>
                             <input type="file" accept="image/*" onChange={(e) => setFotoDirectoFile(e.target.files?.[0] || null)} style={{ fontSize: '13px' }} />
@@ -3557,10 +3661,21 @@ export default function AdminPage() {
                                   NO PRESENTADO
                                 </span>
                               )}
+                              {r.tipo_resultado === 'retiro' && (
+                                <span style={{ marginLeft: '8px', fontSize: '11px', background: '#fdecea', color: '#c0392b', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                                  RETIRO
+                                </span>
+                              )}
                             </p>
                             <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#555' }}>
                               Marcador: {r.marcador_retador} — {r.marcador_retado} · Ganador: <strong>{r.ganador?.nombre}</strong>
                             </p>
+                            {r.tipo_resultado === 'retiro' && (
+                              <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#c0392b' }}>
+                                Se retiró: <strong>{r.jugador_retirado?.nombre}</strong>
+                                {r.nota && <> · Nota: {r.nota}</>}
+                              </p>
+                            )}
                             <p style={{ margin: 0, fontSize: '12px', color: '#6b6b6b' }}>
                               {CATEGORIAS.find(c => c.value === r.retos?.retador?.categoria)?.label} — {GENEROS.find(g => g.value === r.retos?.retador?.genero)?.label}
                               {' · '}Enviado {new Date(r.created_at).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}
