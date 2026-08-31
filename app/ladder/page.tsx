@@ -1011,8 +1011,6 @@ export default function LadderPage() {
       fotoUrl = urlData.publicUrl
     }
 
-    // Todas las validaciones (ganador, choque de sets, formato de marcador)
-    // se revalidan en el servidor — el cliente solo arma el JSON de sets.
     const res = await fetch('/api/jugador/registrar-resultado', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1051,19 +1049,14 @@ export default function LadderPage() {
   }
 
   async function registrarNoPresentado(reto: Reto, ausenteId: string) {
-    const ganadorId = ausenteId === reto.retador_id ? reto.retado_id : reto.retador_id
-
-    const { error } = await supabase.from('resultados').insert([{
-      reto_id: reto.id,
-      ganador_id: ganadorId,
-      marcador_retador: ausenteId === reto.retador_id ? 'No presentado' : 'W.O.',
-      marcador_retado: ausenteId === reto.retado_id ? 'No presentado' : 'W.O.',
-      no_presentado: true,
-      validado: false,
-    }])
-
-    if (error) {
-      setActionMsg('❌ Error al registrar: ' + error.message)
+    const res = await fetch('/api/jugador/registrar-resultado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ retoId: reto.id, noPresentadoId: ausenteId }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setActionMsg('❌ Error al registrar: ' + (data.error || 'intenta de nuevo'))
       return
     }
 

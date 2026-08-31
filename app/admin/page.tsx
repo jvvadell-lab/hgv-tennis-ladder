@@ -223,65 +223,23 @@ export default function AdminPage() {
       return
     }
 
-    // El caso de "no presentado" todavía inserta directo (esto se mueve al
-    // service role en el siguiente commit, junto con el cierre del RLS).
-    if (noPresentadoDirectoId) {
-      setGuardandoDirecto(true)
-      setResultadosMsg('')
-      try {
-        const ganadorId = noPresentadoDirectoId === reto.retador_id ? reto.retado_id : reto.retador_id
-        let fotoUrl: string | null = null
-        if (fotoDirectoFile) {
-          const fotoComprimida = await comprimirImagen(fotoDirectoFile, 1600)
-          const ext = fotoComprimida.name.split('.').pop()
-          const path = `${reto.id}-${Date.now()}.${ext}`
-          const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoComprimida)
-          if (errSubida) throw errSubida
-          const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
-          fotoUrl = urlData.publicUrl
-        }
-
-        if (reto.estado !== 'aceptado') {
-          const { error: errReto } = await supabase.from('retos').update({ estado: 'aceptado' }).eq('id', reto.id)
-          if (errReto) throw errReto
-        }
-
-        const { error: errResultado } = await supabase.from('resultados').insert([{
-          reto_id: reto.id,
-          ganador_id: ganadorId,
-          marcador_retador: noPresentadoDirectoId === reto.retador_id ? 'No presentado' : 'W.O.',
-          marcador_retado: noPresentadoDirectoId === reto.retado_id ? 'No presentado' : 'W.O.',
-          foto_url: fotoUrl,
-          no_presentado: true,
-          validado: false,
-        }])
-        if (errResultado) throw errResultado
-
-        setResultadosMsg('✅ Resultado cargado — queda en "Pendientes de validar" para aprobarlo abajo.')
-        limpiarFormularioDirecto()
-        fetchRetosSinResultado()
-        fetchResultados()
-      } catch (err: any) {
-        setResultadosMsg('❌ ' + err.message)
-      } finally {
-        setGuardandoDirecto(false)
+    let sets: any[] | null = null
+    if (!noPresentadoDirectoId) {
+      const resultado = construirSets({
+        set1: { golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD },
+        set2: { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
+        st: { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
+        retiro: retiroDirecto,
+      })
+      if ('error' in resultado) {
+        setResultadosMsg('❌ ' + resultado.error + ', o marca "No se presentó".')
+        return
       }
-      return
-    }
-
-    const resultado = construirSets({
-      set1: { golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD },
-      set2: { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
-      st: { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
-      retiro: retiroDirecto,
-    })
-    if ('error' in resultado) {
-      setResultadosMsg('❌ ' + resultado.error + ', o marca "No se presentó".')
-      return
-    }
-    if (retiroDirecto && !jugadorRetiradoDirectoId) {
-      setResultadosMsg('❌ Indica quién se retiró')
-      return
+      if (retiroDirecto && !jugadorRetiradoDirectoId) {
+        setResultadosMsg('❌ Indica quién se retiró')
+        return
+      }
+      sets = resultado.sets
     }
 
     setGuardandoDirecto(true)
@@ -303,7 +261,8 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           retoId: reto.id,
-          sets: resultado.sets,
+          noPresentadoId: noPresentadoDirectoId || null,
+          sets,
           tipoResultado: retiroDirecto ? 'retiro' : 'normal',
           jugadorRetiradoId: retiroDirecto ? jugadorRetiradoDirectoId : null,
           nota: retiroDirecto ? notaRetiroDirecto : null,

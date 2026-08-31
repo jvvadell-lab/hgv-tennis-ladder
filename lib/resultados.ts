@@ -9,6 +9,9 @@
 // Modelo de partido de este club: hasta 2 sets normales + un Super Tiebreak
 // como desempate si quedan 1-1 en sets (nunca un 3er set completo). Un set
 // que llega a 6-6 se define con su propio tie-break (formato "7-6(7-4)").
+// Un tie-break de set se juega a 7 puntos y el Super Tiebreak a 10 — ambos
+// exigen ganar por al menos 2 (7-5 válido, 7-6 no; si se empata en el
+// mínimo-1 sigue a mínimo+1, mínimo+2... con margen 2, ej. 8-6, 9-7).
 //
 // "j1"/"j2" en el JSON de `sets` corresponde siempre a retador/retado, en
 // ese orden — no hay concepto de "jugador1/jugador2" en el dominio.
@@ -32,29 +35,55 @@ export type CampoSet = {
   tbRetado?: string
 }
 
+// Un tie-break (de set, a 7, o el Super Tiebreak, a 10) se gana llegando al
+// mínimo con al menos 2 puntos de ventaja. Si se llega al mínimo sin esa
+// ventaja, sigue punto a punto — a partir de ahí el margen final siempre es
+// exactamente 2 (7-5 válido; 7-6 no; empatado en 6-6 sigue a 8-6, 9-7...).
+function margenTiebreakValido(minimo: number, ganador: number, perdedor: number): boolean {
+  if (ganador < minimo) return false
+  if (ganador === minimo) return perdedor <= minimo - 2
+  return perdedor === ganador - 2
+}
+
 // Evalúa un set a partir de los inputs de texto del formulario: si llega a
-// 6-6 hace falta su propio tie-break (a números distintos) para estar
+// 6-6 hace falta su propio tie-break (a 7, con margen de 2) para estar
 // completo; cualquier otro marcador con números distintos ya está completo.
-export function evaluarSet(c: CampoSet): { completo: boolean; ganadorEsRetador: boolean | null } {
+// Con esSuperTiebreak=true, evalúa en cambio el Super Tiebreak (a 10, mismo
+// margen) — se usa así para el campo `st` de construirSets.
+export function evaluarSet(c: CampoSet, esSuperTiebreak = false): { completo: boolean; ganadorEsRetador: boolean | null } {
   const gr = parseInt(c.golesRetador, 10)
   const gd = parseInt(c.golesRetado, 10)
   if (isNaN(gr) || isNaN(gd)) return { completo: false, ganadorEsRetador: null }
+
+  if (esSuperTiebreak) {
+    if (gr === gd) return { completo: false, ganadorEsRetador: null }
+    if (!margenTiebreakValido(10, Math.max(gr, gd), Math.min(gr, gd))) return { completo: false, ganadorEsRetador: null }
+    return { completo: true, ganadorEsRetador: gr > gd }
+  }
+
   if (gr === 6 && gd === 6) {
     const tbr = parseInt(c.tbRetador || '', 10)
     const tbd = parseInt(c.tbRetado || '', 10)
     if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) return { completo: false, ganadorEsRetador: null }
+    if (!margenTiebreakValido(7, Math.max(tbr, tbd), Math.min(tbr, tbd))) return { completo: false, ganadorEsRetador: null }
     return { completo: true, ganadorEsRetador: tbr > tbd }
   }
+
   if (gr === gd) return { completo: false, ganadorEsRetador: null }
   return { completo: true, ganadorEsRetador: gr > gd }
 }
 
 // Convierte un campo de set en la fila que se guarda en `sets` (JSONB).
 // Devuelve null si el set no tiene ningún número cargado (para omitirlo).
-// Ojo: si el set se decidió por tie-break, games_j1/games_j2 guardan el
-// marcador del SET ("7-6"/"6-7"), no los games crudos ("6-6") — igual que
-// se muestra siempre en el marcador — y tiebreak_retador/tiebreak_retado
-// llevan el detalle del tie-break aparte.
+//
+// Si el set se decidió por tie-break con margen válido, games_j1/games_j2
+// guardan el marcador del SET ("7-6"/"6-7"), no los games crudos — igual
+// que se muestra siempre en el marcador — y tiebreak_retador/tiebreak_retado
+// llevan el detalle del tie-break aparte. Si en cambio se cargó un
+// tie-break que NO llegó a un final válido (retiro a mitad del propio
+// tie-break), el set se guarda honesto como 6-6 sin decidir —
+// tiebreak_retador/tiebreak_retado quedan igual, para que el marcador
+// pueda mostrar algo como "6-6(3-2) RET" en vez de un "7-6" contradictorio.
 export function filaDesdeCampoSet(numero: number, c: CampoSet, esSuperTiebreak = false): SetJugado | null {
   const gr = parseInt(c.golesRetador, 10)
   const gd = parseInt(c.golesRetado, 10)
@@ -63,7 +92,11 @@ export function filaDesdeCampoSet(numero: number, c: CampoSet, esSuperTiebreak =
   if (!esSuperTiebreak && gr === 6 && gd === 6) {
     const tbr = parseInt(c.tbRetador || '', 10)
     const tbd = parseInt(c.tbRetado || '', 10)
-    if (!isNaN(tbr) && !isNaN(tbd) && tbr !== tbd) {
+    if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) {
+      // Nada cargado, o empatados — set incompleto tal cual, sin tie-break que mostrar.
+      return { numero, games_j1: 6, games_j2: 6, completo: false }
+    }
+    if (margenTiebreakValido(7, Math.max(tbr, tbd), Math.min(tbr, tbd))) {
       const retadorGanaTb = tbr > tbd
       return {
         numero,
@@ -74,15 +107,17 @@ export function filaDesdeCampoSet(numero: number, c: CampoSet, esSuperTiebreak =
         tiebreak_retado: tbd,
       }
     }
-    // 6-6 sin tie-break (todavía) resuelto — set incompleto tal cual.
-    return { numero, games_j1: 6, games_j2: 6, completo: false }
+    // Tie-break cargado pero sin margen válido todavía — retiro a mitad de
+    // ESE tie-break. El set se queda 6-6 (no decidido); se guarda el
+    // tie-break parcial solo para mostrarlo, no como resultado.
+    return { numero, games_j1: 6, games_j2: 6, completo: false, tiebreak_retador: tbr, tiebreak_retado: tbd }
   }
 
   const fila: SetJugado = {
     numero,
     games_j1: isNaN(gr) ? 0 : gr,
     games_j2: isNaN(gd) ? 0 : gd,
-    completo: evaluarSet(c).completo,
+    completo: evaluarSet(c, esSuperTiebreak).completo,
   }
   if (esSuperTiebreak) fila.es_super_tiebreak = true
   return fila
@@ -91,17 +126,24 @@ export function filaDesdeCampoSet(numero: number, c: CampoSet, esSuperTiebreak =
 // Determina si un set (ya en formato `sets`) realmente se terminó de jugar
 // — a diferencia de evaluarSet (que solo exige números distintos, para no
 // tocar la validación del flujo normal ya existente), esta es la regla real
-// de tenis que se usa SOLO para decidir el `completo` de un retiro: exige
-// un marcador de set legítimo (6-x≤4, 7-5, o 7-6/6-7 con tie-break ya
-// resuelto), no cualquier par de números distintos.
+// de tenis que se usa para decidir el `completo` de un retiro (y, en
+// validarSets, para exigir un marcador de set real): un set con games 6-x≤4
+// o 7-5, un set 7-6/6-7 cuyo tie-break tiene margen válido, o un Super
+// Tiebreak con margen válido a 10.
 function setRealmenteTerminado(fila: SetJugado): boolean {
-  if (fila.es_super_tiebreak) return fila.games_j1 !== fila.games_j2
+  if (fila.es_super_tiebreak) {
+    if (fila.games_j1 === fila.games_j2) return false
+    return margenTiebreakValido(10, Math.max(fila.games_j1, fila.games_j2), Math.min(fila.games_j1, fila.games_j2))
+  }
   const a = fila.games_j1
   const b = fila.games_j2
   if (a === 6 && b === 6) return false
   if ((a === 6 && b <= 4) || (b === 6 && a <= 4)) return true
   if ((a === 7 && b === 5) || (b === 7 && a === 5)) return true
-  if ((a === 7 && b === 6) || (b === 7 && a === 6)) return true // solo llega así si hubo tie-break válido
+  if ((a === 7 && b === 6) || (b === 7 && a === 6)) {
+    if (fila.tiebreak_retador == null || fila.tiebreak_retado == null) return false
+    return margenTiebreakValido(7, Math.max(fila.tiebreak_retador, fila.tiebreak_retado), Math.min(fila.tiebreak_retador, fila.tiebreak_retado))
+  }
   return false
 }
 
@@ -130,7 +172,7 @@ export function construirSets(args: {
     const setsRetador = (e1.ganadorEsRetador ? 1 : 0) + (e2.ganadorEsRetador ? 1 : 0)
     if (setsRetador !== 1) return { sets: [fila1, fila2] }
 
-    const eSt = evaluarSet(args.st)
+    const eSt = evaluarSet(args.st, true)
     if (!eSt.completo) return { error: 'El partido quedó 1 set a 1 — completa el Super Tiebreak para desempatar' }
     const filaSt = filaDesdeCampoSet(3, args.st, true)!
     return { sets: [fila1, fila2, filaSt] }
@@ -163,6 +205,11 @@ export function invertirMarcadorSet(texto: string): string {
 
 function textoRetadorDesdeFila(fila: SetJugado): string {
   if (fila.tiebreak_retador != null && fila.tiebreak_retado != null) {
+    if (fila.games_j1 === fila.games_j2) {
+      // Tie-break interrumpido por retiro, sin definirse — no hay "ganador
+      // del set" que priorizar, se muestra desde la perspectiva del retador.
+      return `${fila.games_j1}-${fila.games_j2}(${fila.tiebreak_retador}-${fila.tiebreak_retado})`
+    }
     return fila.games_j1 > fila.games_j2
       ? `${fila.games_j1}-${fila.games_j2}(${fila.tiebreak_retador}-${fila.tiebreak_retado})`
       : `${fila.games_j1}-${fila.games_j2}(${fila.tiebreak_retado}-${fila.tiebreak_retador})`
@@ -214,6 +261,8 @@ export function calcularGanador(sets: SetJugado[], retadorId: string, retadoId: 
 // el servidor no puede confiar en que el array haya salido de ese builder.
 export function validarSets(sets: unknown, tipoResultado: TipoResultado): string | null {
   if (!Array.isArray(sets) || sets.length === 0) return 'Falta el marcador (sets)'
+  if (tipoResultado === 'normal' && sets.length < 2) return 'Un resultado normal necesita al menos 2 sets'
+
   for (let i = 0; i < sets.length; i++) {
     const s: any = sets[i]
     if (typeof s !== 'object' || s === null) return 'Set inválido'
@@ -228,13 +277,38 @@ export function validarSets(sets: unknown, tipoResultado: TipoResultado): string
     if (!s.completo && i !== sets.length - 1) return 'Solo el último set puede estar incompleto'
     if (tipoResultado === 'normal' && !s.completo) return 'Un resultado normal no puede tener sets incompletos'
     if (s.es_super_tiebreak && i !== sets.length - 1) return 'El Super Tiebreak solo puede ser el último elemento'
+
     if (s.tiebreak_retador != null || s.tiebreak_retado != null) {
       if (s.es_super_tiebreak) return 'El Super Tiebreak no lleva tiebreak_retador/tiebreak_retado'
-      const esSieteSeis = (s.games_j1 === 7 && s.games_j2 === 6) || (s.games_j1 === 6 && s.games_j2 === 7)
-      if (!esSieteSeis) return 'tiebreak_retador/tiebreak_retado solo aplican a un set 7-6 o 6-7'
       if (typeof s.tiebreak_retador !== 'number' || typeof s.tiebreak_retado !== 'number') {
         return 'tiebreak_retador y tiebreak_retado deben venir juntos'
       }
+      const formaValida =
+        (s.games_j1 === 7 && s.games_j2 === 6) || (s.games_j1 === 6 && s.games_j2 === 7) ||
+        (s.games_j1 === 6 && s.games_j2 === 6)
+      if (!formaValida) {
+        return 'tiebreak_retador/tiebreak_retado solo aplican a un set 7-6, 6-7, o 6-6 (tie-break sin terminar)'
+      }
+      // El margen de 2 puntos solo es exigible cuando el set quedó DECIDIDO
+      // por el tie-break (7-6/6-7) — un 6-6 con tie-break interrumpido
+      // (retiro a mitad de ESE tie-break) puede tener cualquier marcador
+      // parcial, es justo lo que congela el retiro.
+      if (s.games_j1 !== s.games_j2) {
+        const ganadorTb = Math.max(s.tiebreak_retador, s.tiebreak_retado)
+        const perdedorTb = Math.min(s.tiebreak_retador, s.tiebreak_retado)
+        if (!margenTiebreakValido(7, ganadorTb, perdedorTb)) {
+          return 'El tie-break del set debe ganarse por al menos 2 puntos, llegando mínimo a 7'
+        }
+      }
+    }
+
+    // "Marcador de set real": exigible solo cuando el set se declara
+    // completo — el último set de un retiro puede quedar con cualquier
+    // marcador parcial (incluido un tie-break interrumpido).
+    if (s.completo && !setRealmenteTerminado(s as SetJugado)) {
+      return s.es_super_tiebreak
+        ? 'El Super Tiebreak debe ganarse por al menos 2 puntos, llegando mínimo a 10'
+        : 'Ese no es un marcador de set válido'
     }
   }
   return null
