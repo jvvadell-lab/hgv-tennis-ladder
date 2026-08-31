@@ -137,7 +137,24 @@ export async function POST(request: Request) {
     }])
     if (errNotif) console.error('[crear-reto] Error al crear notificación:', errNotif)
 
-    return NextResponse.json({ ok: true, id: nuevoReto.id })
+    // Nombre y teléfono del retado, solo para el botón "Avisar por WhatsApp" que ve
+    // el retador que acaba de crear el reto — no se expone en ningún otro endpoint.
+    const { data: retadoInfo, error: errRetadoInfo } = await db
+      .from('jugadores')
+      .select('nombre, telefono')
+      .eq('id', retadoId)
+      .maybeSingle()
+    if (errRetadoInfo) console.error('[crear-reto] Error al obtener datos del retado:', errRetadoInfo)
+
+    return NextResponse.json({
+      ok: true,
+      id: nuevoReto.id,
+      reto: { id: nuevoReto.id, fecha_propuesta: fechaPropuesta },
+      retado: {
+        nombre: retadoInfo?.nombre ?? null,
+        telefono: retadoInfo?.telefono || null,
+      },
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al lanzar el reto' }, { status: 500 })
   }

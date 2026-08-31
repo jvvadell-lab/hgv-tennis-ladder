@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -147,6 +148,7 @@ export default function LadderPage() {
   const [retoComentarios, setRetoComentarios] = useState('')
   const [retoFormMsg, setRetoFormMsg] = useState('')
   const [enviandoReto, setEnviandoReto] = useState(false)
+  const [retoCreado, setRetoCreado] = useState<{ retadoNombre: string; retadoTelefono: string | null; fechaPropuesta: string } | null>(null)
   const retoFormRef = useRef<HTMLDivElement>(null)
   const [horariosRetoDisponibles, setHorariosRetoDisponibles] = useState<{ value: string; label: string }[]>([])
   const [cargandoHorariosReto, setCargandoHorariosReto] = useState(false)
@@ -734,6 +736,7 @@ export default function LadderPage() {
     setEnviandoReto(true)
     setActionMsg('')
     setRetoFormMsg('')
+    setRetoCreado(null)
     try {
       if (!temporadaSorteada) {
         setRetoFormMsg('❌ El sorteo de esta temporada todavía no se ha realizado.')
@@ -921,6 +924,13 @@ export default function LadderPage() {
         setRetoFormMsg('❌ Error al lanzar el reto: ' + (data.error || 'intenta de nuevo'))
       } else {
         setActionMsg('✅ ¡Reto enviado!')
+        if (data.retado) {
+          setRetoCreado({
+            retadoNombre: data.retado.nombre,
+            retadoTelefono: data.retado.telefono,
+            fechaPropuesta: data.reto?.fecha_propuesta ?? fechaPropuesta,
+          })
+        }
         setRetandoA(null)
         setRetoFecha('')
         setRetoHora('12:00')
@@ -1310,6 +1320,28 @@ export default function LadderPage() {
             {actionMsg && (
               <div style={{ background: 'rgba(255,255,255,0.15)', color: 'var(--color-chalk)', padding: '10px', borderRadius: '8px', textAlign: 'center', marginBottom: '16px' }}>
                 {actionMsg}
+              </div>
+            )}
+
+            {retoCreado && (
+              <div style={{ background: 'rgba(255,255,255,0.15)', padding: '10px', borderRadius: '8px', textAlign: 'center', marginBottom: '16px' }}>
+                {retoCreado.retadoTelefono ? (
+                  <a
+                    href={buildRetoWhatsAppLink(retoCreado.retadoTelefono, retoCreado.retadoNombre, retoCreado.fechaPropuesta)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block', background: '#25D366', color: '#fff', fontWeight: 'bold',
+                      padding: '10px 16px', borderRadius: '6px', textDecoration: 'none',
+                    }}
+                  >
+                    📲 Avisar por WhatsApp
+                  </a>
+                ) : (
+                  <span style={{ color: 'var(--color-chalk)' }}>
+                    Este jugador no tiene teléfono registrado — avísale por otro medio.
+                  </span>
+                )}
               </div>
             )}
 
