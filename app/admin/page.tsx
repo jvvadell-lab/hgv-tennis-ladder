@@ -2,6 +2,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
+import { comprimirImagen } from '@/lib/comprimirImagen'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -303,9 +304,10 @@ export default function AdminPage() {
 
       let fotoUrl: string | null = null
       if (fotoDirectoFile) {
-        const ext = fotoDirectoFile.name.split('.').pop()
+        const fotoComprimida = await comprimirImagen(fotoDirectoFile, 1600)
+        const ext = fotoComprimida.name.split('.').pop()
         const path = `${reto.id}-${Date.now()}.${ext}`
-        const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoDirectoFile)
+        const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoComprimida)
         if (errSubida) throw errSubida
         const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
         fotoUrl = urlData.publicUrl
@@ -423,9 +425,10 @@ export default function AdminPage() {
   const subirFotoResultadoAdmin = async (resultadoId: string, file: File) => {
     setSubiendoFotoResultadoId(resultadoId)
     try {
-      const ext = file.name.split('.').pop()
+      const fotoComprimida = await comprimirImagen(file, 1600)
+      const ext = fotoComprimida.name.split('.').pop()
       const path = `${resultadoId}-${Date.now()}.${ext}`
-      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, file)
+      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoComprimida)
       if (errSubida) throw errSubida
       const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
 
@@ -819,11 +822,12 @@ export default function AdminPage() {
     try {
       let informeUrl: string | null = null
       if (informeDirectoArchivo) {
-        const extension = informeDirectoArchivo.name.split('.').pop() || 'jpg'
+        const informeComprimido = await comprimirImagen(informeDirectoArchivo, 1600)
+        const extension = informeComprimido.name.split('.').pop() || 'jpg'
         const nombreArchivo = `informes-medicos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
         const { error: errorSubida } = await supabase.storage
           .from('fotos-partidos')
-          .upload(nombreArchivo, informeDirectoArchivo)
+          .upload(nombreArchivo, informeComprimido)
         if (errorSubida) throw new Error('No se pudo subir el informe: ' + errorSubida.message)
 
         const { data: publicUrlData } = supabase.storage

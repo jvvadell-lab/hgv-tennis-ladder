@@ -111,7 +111,7 @@ export default function CropperCarnet({
       if (!blob) return
       const archivoRecortado = new File([blob], 'carnet.jpg', { type: 'image/jpeg' })
       onConfirmar(archivoRecortado)
-    }, 'image/jpeg', 0.9)
+    }, 'image/jpeg', 0.78)
   }
 
   return (

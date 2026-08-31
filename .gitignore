@@ -42,3 +42,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# respaldos locales de scripts de un solo uso (fotos de jugadores, no van a git)
+/backups/

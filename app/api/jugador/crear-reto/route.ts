@@ -115,7 +115,17 @@ export async function POST(request: Request) {
       comentarios: comentarios || null,
       estado: 'pendiente',
     }]).select('id').single()
-    if (errInsert) throw errInsert
+    if (errInsert) {
+      // El trigger sync_jugadores_ocupados en la BD es la última línea de defensa contra
+      // la condición de carrera: si dos requests casi simultáneos llegan hasta aquí, solo
+      // uno logra insertar en jugadores_ocupados y el otro recibe este error atómicamente.
+      if (errInsert.message?.includes('RETO_JUGADOR_OCUPADO')) {
+        return NextResponse.json({
+          error: 'Ya tienes un reto pendiente o un partido en curso — no puedes lanzar otro.',
+        }, { status: 400 })
+      }
+      throw errInsert
+    }
 
     // No dejamos que un fallo al crear la notificación in-app tumbe la creación
     // del reto, que ya quedó guardada — el correo tampoco depende de esto.

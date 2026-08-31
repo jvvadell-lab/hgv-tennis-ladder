@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
+import { comprimirImagen } from '@/lib/comprimirImagen'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -145,6 +146,7 @@ export default function LadderPage() {
   const [retoCanchaForanea, setRetoCanchaForanea] = useState('')
   const [retoComentarios, setRetoComentarios] = useState('')
   const [retoFormMsg, setRetoFormMsg] = useState('')
+  const [enviandoReto, setEnviandoReto] = useState(false)
   const retoFormRef = useRef<HTMLDivElement>(null)
   const [horariosRetoDisponibles, setHorariosRetoDisponibles] = useState<{ value: string; label: string }[]>([])
   const [cargandoHorariosReto, setCargandoHorariosReto] = useState(false)
@@ -728,211 +730,216 @@ export default function LadderPage() {
 
   async function lanzarReto() {
     if (!session || session.role !== 'jugador' || !temporadaId || !retandoA) return
+    if (enviandoReto) return // evita que un doble-click/doble-tap dispare dos envíos en paralelo
+    setEnviandoReto(true)
     setActionMsg('')
     setRetoFormMsg('')
-
-    if (!temporadaSorteada) {
-      setRetoFormMsg('❌ El sorteo de esta temporada todavía no se ha realizado.')
-      return
-    }
-
-    if (!retoFecha || !retoHora) {
-      setRetoFormMsg(
-        !retoFecha
-          ? '❌ Falta elegir la fecha — toca la casilla del calendario 📅'
-          : '❌ Falta elegir la hora del partido'
-      )
-      return
-    }
-
-    if ((temporadaInicio && retoFecha < temporadaInicio) || (temporadaFin && retoFecha > temporadaFin)) {
-      setRetoFormMsg(`❌ La fecha debe estar dentro de la temporada (${temporadaInicio} a ${temporadaFin}).`)
-      return
-    }
-
-    const maxFechaReto = new Date()
-    maxFechaReto.setDate(maxFechaReto.getDate() + 6)
-    if (retoFecha > maxFechaReto.toISOString().slice(0, 10)) {
-      setRetoFormMsg('❌ No puedes proponer una fecha a más de 6 días — dejarías al otro jugador esperando demasiado tiempo. Elige una fecha más cercana.')
-      return
-    }
-
-    if (retoCancha === 'FORANEA' && !retoCanchaForanea.trim()) {
-      setRetoFormMsg('❌ Escribe el nombre de la cancha foránea')
-      return
-    }
-
-    const horario = validarHorarioCancha(retoCancha, retoFecha, retoHora)
-    if (!horario.valido) {
-      setRetoFormMsg('❌ ' + horario.mensaje)
-      return
-    }
-
-    // Cada partido bloquea la cancha (solo HGV1/HGV2, la foránea no la gestiona el club)
-    // por 1 hora y 30 minutos — así que rechazamos otro reto en la misma cancha
-    // si su horario cae dentro de esa ventana de algún partido ya pendiente/aceptado.
-    if (retoCancha !== 'FORANEA') {
-      const fechaPropuestaCheck = new Date(`${retoFecha}T${retoHora}`)
-      const inicioDia = new Date(`${retoFecha}T00:00:00`)
-      const finDia = new Date(`${retoFecha}T23:59:59`)
-      const DURACION_PARTIDO_MS = 90 * 60 * 1000
-
-      const { data: partidosCancha, error: errCancha } = await supabase
-        .from('retos')
-        .select('id, fecha_propuesta, estado')
-        .eq('temporada_id', temporadaId)
-        .eq('cancha', retoCancha)
-        .in('estado', ['pendiente', 'aceptado'])
-        .gte('fecha_propuesta', inicioDia.toISOString())
-        .lte('fecha_propuesta', finDia.toISOString())
-
-      if (errCancha) {
-        setRetoFormMsg('❌ Error al verificar disponibilidad de la cancha: ' + errCancha.message)
+    try {
+      if (!temporadaSorteada) {
+        setRetoFormMsg('❌ El sorteo de esta temporada todavía no se ha realizado.')
         return
       }
 
-      const nuevaHoraMs = fechaPropuestaCheck.getTime()
-      const conflicto = (partidosCancha || []).find((r: any) => {
-        const otraHoraMs = new Date(r.fecha_propuesta).getTime()
-        return Math.abs(otraHoraMs - nuevaHoraMs) < DURACION_PARTIDO_MS
-      })
-
-      if (conflicto) {
-        const horaConflicto = new Date(conflicto.fecha_propuesta)
-        const ocupadaDesde = new Date(horaConflicto.getTime() - DURACION_PARTIDO_MS)
-        const ocupadaHasta = new Date(horaConflicto.getTime() + DURACION_PARTIDO_MS)
-        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
-        const nombreCancha = retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'
+      if (!retoFecha || !retoHora) {
         setRetoFormMsg(
-          conflicto.estado === 'pendiente'
-            ? `❌ ${nombreCancha} está reservada de las ${fmt(ocupadaDesde)} a las ${fmt(ocupadaHasta)} por OTRO reto que todavía está pendiente de respuesta (nadie lo ha aceptado ni rechazado). Elige un horario fuera de ese rango, o inténtalo de nuevo más tarde por si se libera.`
-            : `❌ ${nombreCancha} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido confirmado). Elige un horario fuera de ese rango.`
+          !retoFecha
+            ? '❌ Falta elegir la fecha — toca la casilla del calendario 📅'
+            : '❌ Falta elegir la hora del partido'
         )
         return
       }
 
-      // También revisamos que no choque con una reserva casual de cancha (bloquean 1h,
-      // o 1h30 si el jugador se agregó la media hora extra de cortesía)
-      const { data: reservasCancha, error: errReservas } = await supabase
-        .from('reservas_cancha')
-        .select('id, fecha_hora, duracion_min')
-        .eq('cancha', retoCancha)
-        .eq('estado', 'activa')
-        .gte('fecha_hora', inicioDia.toISOString())
-        .lte('fecha_hora', finDia.toISOString())
-
-      if (errReservas) {
-        setRetoFormMsg('❌ Error al verificar reservas casuales de la cancha: ' + errReservas.message)
+      if ((temporadaInicio && retoFecha < temporadaInicio) || (temporadaFin && retoFecha > temporadaFin)) {
+        setRetoFormMsg(`❌ La fecha debe estar dentro de la temporada (${temporadaInicio} a ${temporadaFin}).`)
         return
       }
 
-      const finNuevoReto = nuevaHoraMs + DURACION_PARTIDO_MS
-      const conflictoReserva = (reservasCancha || []).find((r: any) => {
-        const inicioReserva = new Date(r.fecha_hora).getTime()
-        const finReserva = inicioReserva + (r.duracion_min || 60) * 60 * 1000
-        return nuevaHoraMs < finReserva && inicioReserva < finNuevoReto
+      const maxFechaReto = new Date()
+      maxFechaReto.setDate(maxFechaReto.getDate() + 6)
+      if (retoFecha > maxFechaReto.toISOString().slice(0, 10)) {
+        setRetoFormMsg('❌ No puedes proponer una fecha a más de 6 días — dejarías al otro jugador esperando demasiado tiempo. Elige una fecha más cercana.')
+        return
+      }
+
+      if (retoCancha === 'FORANEA' && !retoCanchaForanea.trim()) {
+        setRetoFormMsg('❌ Escribe el nombre de la cancha foránea')
+        return
+      }
+
+      const horario = validarHorarioCancha(retoCancha, retoFecha, retoHora)
+      if (!horario.valido) {
+        setRetoFormMsg('❌ ' + horario.mensaje)
+        return
+      }
+
+      // Cada partido bloquea la cancha (solo HGV1/HGV2, la foránea no la gestiona el club)
+      // por 1 hora y 30 minutos — así que rechazamos otro reto en la misma cancha
+      // si su horario cae dentro de esa ventana de algún partido ya pendiente/aceptado.
+      if (retoCancha !== 'FORANEA') {
+        const fechaPropuestaCheck = new Date(`${retoFecha}T${retoHora}`)
+        const inicioDia = new Date(`${retoFecha}T00:00:00`)
+        const finDia = new Date(`${retoFecha}T23:59:59`)
+        const DURACION_PARTIDO_MS = 90 * 60 * 1000
+
+        const { data: partidosCancha, error: errCancha } = await supabase
+          .from('retos')
+          .select('id, fecha_propuesta, estado')
+          .eq('temporada_id', temporadaId)
+          .eq('cancha', retoCancha)
+          .in('estado', ['pendiente', 'aceptado'])
+          .gte('fecha_propuesta', inicioDia.toISOString())
+          .lte('fecha_propuesta', finDia.toISOString())
+
+        if (errCancha) {
+          setRetoFormMsg('❌ Error al verificar disponibilidad de la cancha: ' + errCancha.message)
+          return
+        }
+
+        const nuevaHoraMs = fechaPropuestaCheck.getTime()
+        const conflicto = (partidosCancha || []).find((r: any) => {
+          const otraHoraMs = new Date(r.fecha_propuesta).getTime()
+          return Math.abs(otraHoraMs - nuevaHoraMs) < DURACION_PARTIDO_MS
+        })
+
+        if (conflicto) {
+          const horaConflicto = new Date(conflicto.fecha_propuesta)
+          const ocupadaDesde = new Date(horaConflicto.getTime() - DURACION_PARTIDO_MS)
+          const ocupadaHasta = new Date(horaConflicto.getTime() + DURACION_PARTIDO_MS)
+          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
+          const nombreCancha = retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'
+          setRetoFormMsg(
+            conflicto.estado === 'pendiente'
+              ? `❌ ${nombreCancha} está reservada de las ${fmt(ocupadaDesde)} a las ${fmt(ocupadaHasta)} por OTRO reto que todavía está pendiente de respuesta (nadie lo ha aceptado ni rechazado). Elige un horario fuera de ese rango, o inténtalo de nuevo más tarde por si se libera.`
+              : `❌ ${nombreCancha} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido confirmado). Elige un horario fuera de ese rango.`
+          )
+          return
+        }
+
+        // También revisamos que no choque con una reserva casual de cancha (bloquean 1h,
+        // o 1h30 si el jugador se agregó la media hora extra de cortesía)
+        const { data: reservasCancha, error: errReservas } = await supabase
+          .from('reservas_cancha')
+          .select('id, fecha_hora, duracion_min')
+          .eq('cancha', retoCancha)
+          .eq('estado', 'activa')
+          .gte('fecha_hora', inicioDia.toISOString())
+          .lte('fecha_hora', finDia.toISOString())
+
+        if (errReservas) {
+          setRetoFormMsg('❌ Error al verificar reservas casuales de la cancha: ' + errReservas.message)
+          return
+        }
+
+        const finNuevoReto = nuevaHoraMs + DURACION_PARTIDO_MS
+        const conflictoReserva = (reservasCancha || []).find((r: any) => {
+          const inicioReserva = new Date(r.fecha_hora).getTime()
+          const finReserva = inicioReserva + (r.duracion_min || 60) * 60 * 1000
+          return nuevaHoraMs < finReserva && inicioReserva < finNuevoReto
+        })
+
+        if (conflictoReserva) {
+          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
+          setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual a las ${fmt(new Date(conflictoReserva.fecha_hora))}. Elige otro horario.`)
+          return
+        }
+      }
+
+      // Verificación en vivo contra la base de datos (no contra datos ya cargados en el navegador),
+      // para evitar que dos clics rápidos generen retos duplicados, y para confirmar que ni yo
+      // ni el rival tengamos ya un reto pendiente/aceptado con cualquier otra persona.
+      const { data: existentes, error: errCheck } = await supabase
+        .from('retos')
+        .select('id, estado, retador_id, retado_id')
+        .eq('temporada_id', temporadaId)
+        .in('estado', ['pendiente', 'aceptado'])
+        .or(`retador_id.eq.${session.id},retado_id.eq.${session.id},retador_id.eq.${retandoA},retado_id.eq.${retandoA}`)
+
+      if (errCheck) {
+        setRetoFormMsg('❌ Error al verificar: ' + errCheck.message)
+        return
+      }
+      if (existentes && existentes.length > 0) {
+        const involucraAlRival = existentes.some((r: any) => r.retador_id === retandoA || r.retado_id === retandoA)
+        setActionMsg(
+          involucraAlRival
+            ? '❌ Ese jugador ya tiene un reto pendiente o en curso con otra persona.'
+            : '❌ Ya tienes un reto pendiente o un partido en curso — no puedes lanzar otro.'
+        )
+        setRetandoA(null)
+        cargarDatos()
+        return
+      }
+
+      // Verificación de enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo
+      const cincoDiasAtras = new Date()
+      cincoDiasAtras.setDate(cincoDiasAtras.getDate() - 5)
+
+      const { data: retosPrevios } = await supabase
+        .from('retos')
+        .select('id, retador_id, retado_id')
+        .eq('temporada_id', temporadaId)
+        .or(`and(retador_id.eq.${session.id},retado_id.eq.${retandoA}),and(retador_id.eq.${retandoA},retado_id.eq.${session.id})`)
+
+      const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
+      if (idsRetosPrevios.length > 0) {
+        const { data: resultadoReciente } = await supabase
+          .from('resultados')
+          .select('ganador_id, validado_at')
+          .in('reto_id', idsRetosPrevios)
+          .eq('validado', true)
+          .eq('ganador_id', retandoA)
+          .gte('validado_at', cincoDiasAtras.toISOString())
+          .order('validado_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (resultadoReciente) {
+          const libera = new Date(resultadoReciente.validado_at)
+          libera.setDate(libera.getDate() + 5)
+          setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${libera.toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}.`)
+          return
+        }
+      }
+
+      const fechaPropuesta = new Date(`${retoFecha}T${retoHora}`).toISOString()
+
+      const res = await fetch('/api/jugador/crear-reto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temporadaId,
+          retadoId: retandoA,
+          cancha: retoCancha,
+          nombreCanchaForanea: retoCancha === 'FORANEA' ? retoCanchaForanea : null,
+          fechaPropuesta,
+          comentarios: retoComentarios || null,
+        }),
       })
+      const data = await res.json()
 
-      if (conflictoReserva) {
-        const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
-        setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual a las ${fmt(new Date(conflictoReserva.fecha_hora))}. Elige otro horario.`)
-        return
+      if (!res.ok) {
+        setRetoFormMsg('❌ Error al lanzar el reto: ' + (data.error || 'intenta de nuevo'))
+      } else {
+        setActionMsg('✅ ¡Reto enviado!')
+        setRetandoA(null)
+        setRetoFecha('')
+        setRetoHora('12:00')
+        setRetoCancha('HGV1')
+        setRetoCanchaForanea('')
+        setRetoComentarios('')
+        cargarDatos()
+
+        // Enviar el correo al rival en segundo plano — si falla, no afecta el reto ya creado
+        if (data.id) {
+          fetch('/api/notificar/nuevo-reto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ retoId: data.id }),
+          }).catch(() => {})
+        }
       }
-    }
-
-    // Verificación en vivo contra la base de datos (no contra datos ya cargados en el navegador),
-    // para evitar que dos clics rápidos generen retos duplicados, y para confirmar que ni yo
-    // ni el rival tengamos ya un reto pendiente/aceptado con cualquier otra persona.
-    const { data: existentes, error: errCheck } = await supabase
-      .from('retos')
-      .select('id, estado, retador_id, retado_id')
-      .eq('temporada_id', temporadaId)
-      .in('estado', ['pendiente', 'aceptado'])
-      .or(`retador_id.eq.${session.id},retado_id.eq.${session.id},retador_id.eq.${retandoA},retado_id.eq.${retandoA}`)
-
-    if (errCheck) {
-      setRetoFormMsg('❌ Error al verificar: ' + errCheck.message)
-      return
-    }
-    if (existentes && existentes.length > 0) {
-      const involucraAlRival = existentes.some((r: any) => r.retador_id === retandoA || r.retado_id === retandoA)
-      setActionMsg(
-        involucraAlRival
-          ? '❌ Ese jugador ya tiene un reto pendiente o en curso con otra persona.'
-          : '❌ Ya tienes un reto pendiente o un partido en curso — no puedes lanzar otro.'
-      )
-      setRetandoA(null)
-      cargarDatos()
-      return
-    }
-
-    // Verificación de enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo
-    const cincoDiasAtras = new Date()
-    cincoDiasAtras.setDate(cincoDiasAtras.getDate() - 5)
-
-    const { data: retosPrevios } = await supabase
-      .from('retos')
-      .select('id, retador_id, retado_id')
-      .eq('temporada_id', temporadaId)
-      .or(`and(retador_id.eq.${session.id},retado_id.eq.${retandoA}),and(retador_id.eq.${retandoA},retado_id.eq.${session.id})`)
-
-    const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
-    if (idsRetosPrevios.length > 0) {
-      const { data: resultadoReciente } = await supabase
-        .from('resultados')
-        .select('ganador_id, validado_at')
-        .in('reto_id', idsRetosPrevios)
-        .eq('validado', true)
-        .eq('ganador_id', retandoA)
-        .gte('validado_at', cincoDiasAtras.toISOString())
-        .order('validado_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (resultadoReciente) {
-        const libera = new Date(resultadoReciente.validado_at)
-        libera.setDate(libera.getDate() + 5)
-        setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${libera.toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}.`)
-        return
-      }
-    }
-
-    const fechaPropuesta = new Date(`${retoFecha}T${retoHora}`).toISOString()
-
-    const res = await fetch('/api/jugador/crear-reto', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        temporadaId,
-        retadoId: retandoA,
-        cancha: retoCancha,
-        nombreCanchaForanea: retoCancha === 'FORANEA' ? retoCanchaForanea : null,
-        fechaPropuesta,
-        comentarios: retoComentarios || null,
-      }),
-    })
-    const data = await res.json()
-
-    if (!res.ok) {
-      setRetoFormMsg('❌ Error al lanzar el reto: ' + (data.error || 'intenta de nuevo'))
-    } else {
-      setActionMsg('✅ ¡Reto enviado!')
-      setRetandoA(null)
-      setRetoFecha('')
-      setRetoHora('12:00')
-      setRetoCancha('HGV1')
-      setRetoCanchaForanea('')
-      setRetoComentarios('')
-      cargarDatos()
-
-      // Enviar el correo al rival en segundo plano — si falla, no afecta el reto ya creado
-      if (data.id) {
-        fetch('/api/notificar/nuevo-reto', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ retoId: data.id }),
-        }).catch(() => {})
-      }
+    } finally {
+      setEnviandoReto(false)
     }
   }
 
@@ -1034,9 +1041,10 @@ export default function LadderPage() {
     let fotoUrl: string | null = null
     if (fotoFile) {
       setSubiendoFoto(true)
-      const ext = fotoFile.name.split('.').pop()
+      const fotoComprimida = await comprimirImagen(fotoFile, 1600)
+      const ext = fotoComprimida.name.split('.').pop()
       const path = `${reto.id}-${Date.now()}.${ext}`
-      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoFile)
+      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoComprimida)
       setSubiendoFoto(false)
 
       if (errSubida) {
@@ -1103,9 +1111,10 @@ export default function LadderPage() {
   async function subirFotoResultadoPosterior(resultadoId: string, file: File) {
     setSubiendoFotoResultadoId(resultadoId)
     try {
-      const ext = file.name.split('.').pop()
+      const fotoComprimida = await comprimirImagen(file, 1600)
+      const ext = fotoComprimida.name.split('.').pop()
       const path = `${resultadoId}-${Date.now()}.${ext}`
-      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, file)
+      const { error: errSubida } = await supabase.storage.from('fotos-partidos').upload(path, fotoComprimida)
       if (errSubida) throw errSubida
       const { data: urlData } = supabase.storage.from('fotos-partidos').getPublicUrl(path)
 
@@ -1680,8 +1689,10 @@ export default function LadderPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={lanzarReto} style={btnPequeno('var(--color-ball)')}>Enviar reto</button>
-                    <button onClick={() => { setRetandoA(null); setRetoFormMsg('') }} style={btnPequeno('#6b6b6b')}>Cancelar</button>
+                    <button onClick={lanzarReto} disabled={enviandoReto} style={btnPequeno(enviandoReto ? '#ccc' : 'var(--color-ball)')}>
+                      {enviandoReto ? 'Enviando…' : 'Enviar reto'}
+                    </button>
+                    <button onClick={() => { setRetandoA(null); setRetoFormMsg('') }} disabled={enviandoReto} style={btnPequeno('#6b6b6b')}>Cancelar</button>
                   </div>
                   {retoFormMsg && (
                     <div style={{

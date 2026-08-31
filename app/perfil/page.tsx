@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { comprimirImagen } from '@/lib/comprimirImagen'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -193,11 +194,12 @@ export default function PerfilPage() {
     try {
       let informeUrl: string | null = null
       if (informeArchivo) {
-        const extension = informeArchivo.name.split('.').pop() || 'jpg'
+        const informeComprimido = await comprimirImagen(informeArchivo, 1600)
+        const extension = informeComprimido.name.split('.').pop() || 'jpg'
         const nombreArchivo = `informes-medicos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
         const { error: errorSubida } = await supabase.storage
           .from('fotos-partidos')
-          .upload(nombreArchivo, informeArchivo)
+          .upload(nombreArchivo, informeComprimido)
         if (errorSubida) throw new Error('No se pudo subir el informe: ' + errorSubida.message)
 
         const { data: publicUrlData } = supabase.storage
@@ -299,11 +301,12 @@ export default function PerfilPage() {
       // bucket que usa el registro ("fotos-partidos/carnets/") y mandamos la URL.
       let fotoCarnetUrl: string | null = null
       if (fotoCarnetArchivo) {
-        const extension = fotoCarnetArchivo.name.split('.').pop() || 'jpg'
+        const fotoComprimida = await comprimirImagen(fotoCarnetArchivo, 1000)
+        const extension = fotoComprimida.name.split('.').pop() || 'jpg'
         const nombreArchivo = `carnets/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
         const { error: errorSubida } = await supabase.storage
           .from('fotos-partidos')
-          .upload(nombreArchivo, fotoCarnetArchivo)
+          .upload(nombreArchivo, fotoComprimida)
         if (errorSubida) throw new Error('No se pudo subir la foto del carné: ' + errorSubida.message)
 
         const { data: publicUrlData } = supabase.storage
