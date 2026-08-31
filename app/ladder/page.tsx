@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
+import { evaluarSet, calcularResultadoPartido, type CampoSet } from '@/lib/resultados'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -971,76 +972,17 @@ export default function LadderPage() {
     }
   }
 
-  // Evalúa un set individual: si quedó 6-6, hace falta su propio tie-break (distinto
-  // del Super Tiebreak que decide el PARTIDO cuando queda 1 set a 1). Devuelve si el
-  // set ya está completo/válido, quién lo ganó, y el texto para el marcador guardado.
-  function evaluarSet(
-    golesRetador: string, golesRetado: string, tbRetadorStr: string, tbRetadoStr: string
-  ): { completo: boolean; ganadorEsRetador: boolean | null; textoRetador: string } {
-    const gr = parseInt(golesRetador, 10)
-    const gd = parseInt(golesRetado, 10)
-    if (isNaN(gr) || isNaN(gd)) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
-
-    const es66 = gr === 6 && gd === 6
-    if (es66) {
-      const tbr = parseInt(tbRetadorStr, 10)
-      const tbd = parseInt(tbRetadoStr, 10)
-      if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) {
-        return { completo: false, ganadorEsRetador: null, textoRetador: '' }
-      }
-      const ganadorEsRetador = tbr > tbd
-      const textoRetador = ganadorEsRetador ? `7-6(${tbr}-${tbd})` : `6-7(${tbd}-${tbr})`
-      return { completo: true, ganadorEsRetador, textoRetador }
-    }
-
-    if (gr === gd) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
-    return { completo: true, ganadorEsRetador: gr > gd, textoRetador: `${gr}-${gd}` }
-  }
-
-  // Da vuelta un texto de marcador de set ("7-6(7-4)" -> "6-7(4-7)", "6-3" -> "3-6")
-  // para mostrárselo al retado desde su propia perspectiva.
-  function invertirMarcadorSet(texto: string): string {
-    const match = texto.match(/^(\d+)-(\d+)(\((\d+)-(\d+)\))?$/)
-    if (!match) return texto
-    const [, a, b, , tba, tbb] = match
-    return tba ? `${b}-${a}(${tbb}-${tba})` : `${b}-${a}`
-  }
-
-  // Calcula sets ganados por cada lado (con soporte de tie-break de set a 6-6),
-  // si hace falta Super Tiebreak (partido 1-1 en sets), y quién ganó el partido.
-  function calcularResultadoPartido() {
-    const set1 = evaluarSet(set1Retador, set1Retado, set1TbRetador, set1TbRetado)
-    const set2 = evaluarSet(set2Retador, set2Retado, set2TbRetador, set2TbRetado)
-
-    if (!set1.completo || !set2.completo) return { valido: false as const }
-
-    const setsRetador = (set1.ganadorEsRetador ? 1 : 0) + (set2.ganadorEsRetador ? 1 : 0)
-    const setsRetado = 2 - setsRetador
-    const necesitaSuperTiebreak = setsRetador === 1 && setsRetado === 1
-
-    if (!necesitaSuperTiebreak) {
-      return {
-        valido: true as const,
-        ganadorEsRetador: setsRetador === 2,
-        marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}`,
-        marcadorRetado: `${invertirMarcadorSet(set1.textoRetador)}, ${invertirMarcadorSet(set2.textoRetador)}`,
-      }
-    }
-
-    const tbr = parseInt(tbRetador, 10)
-    const tbd = parseInt(tbRetado, 10)
-    if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) return { valido: false as const, necesitaTiebreak: true }
-
+  function campoSetsFormulario(): { set1: CampoSet; set2: CampoSet; st: CampoSet } {
     return {
-      valido: true as const,
-      ganadorEsRetador: tbr > tbd,
-      marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}, ST ${tbr}-${tbd}`,
-      marcadorRetado: `${invertirMarcadorSet(set1.textoRetador)}, ${invertirMarcadorSet(set2.textoRetador)}, ST ${tbd}-${tbr}`,
+      set1: { golesRetador: set1Retador, golesRetado: set1Retado, tbRetador: set1TbRetador, tbRetado: set1TbRetado },
+      set2: { golesRetador: set2Retador, golesRetado: set2Retado, tbRetador: set2TbRetador, tbRetado: set2TbRetado },
+      st: { golesRetador: tbRetador, golesRetado: tbRetado },
     }
   }
 
   async function registrarResultado(reto: Reto) {
-    const resultado = calcularResultadoPartido()
+    const { set1, set2, st } = campoSetsFormulario()
+    const resultado = calcularResultadoPartido(set1, set2, st)
     if (!resultado.valido) {
       setActionMsg('❌ Completa los 2 sets (y los tie-breaks que hagan falta) con marcadores válidos')
       return
@@ -2072,8 +2014,8 @@ export default function LadderPage() {
                               )}
 
                               {(() => {
-                                const set1 = evaluarSet(set1Retador, set1Retado, set1TbRetador, set1TbRetado)
-                                const set2 = evaluarSet(set2Retador, set2Retado, set2TbRetador, set2TbRetado)
+                                const set1 = evaluarSet({ golesRetador: set1Retador, golesRetado: set1Retado, tbRetador: set1TbRetador, tbRetado: set1TbRetado })
+                                const set2 = evaluarSet({ golesRetador: set2Retador, golesRetado: set2Retado, tbRetador: set2TbRetador, tbRetado: set2TbRetado })
                                 const setsRetador = (set1.completo && set1.ganadorEsRetador ? 1 : 0) + (set2.completo && set2.ganadorEsRetador ? 1 : 0)
                                 const setsRetado = (set1.completo && set1.ganadorEsRetador === false ? 1 : 0) + (set2.completo && set2.ganadorEsRetador === false ? 1 : 0)
                                 const necesitaSuperTiebreak = set1.completo && set2.completo && setsRetador === 1 && setsRetado === 1

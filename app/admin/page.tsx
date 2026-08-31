@@ -3,6 +3,7 @@ import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import { evaluarSet, calcularResultadoPartido } from '@/lib/resultados'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -200,65 +201,12 @@ export default function AdminPage() {
     setRetosSinResultado((todosLosRetos || []).filter((r: any) => !idsConResultado.has(r.id)))
   }
 
-  // Misma lógica que usa el jugador para cargar su resultado — un set en 6-6
-  // pide su propio tie-break, y si el partido queda 1-1 en sets, se pide el
-  // Super Tiebreak para desempatar. La repetimos aquí para el ingreso directo del admin.
-  function evaluarSetDirecto(
-    golesRetador: string, golesRetado: string, tbRetadorStr: string, tbRetadoStr: string
-  ): { completo: boolean; ganadorEsRetador: boolean | null; textoRetador: string } {
-    const gr = parseInt(golesRetador, 10)
-    const gd = parseInt(golesRetado, 10)
-    if (isNaN(gr) || isNaN(gd)) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
-
-    const es66 = gr === 6 && gd === 6
-    if (es66) {
-      const tbr = parseInt(tbRetadorStr, 10)
-      const tbd = parseInt(tbRetadoStr, 10)
-      if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) {
-        return { completo: false, ganadorEsRetador: null, textoRetador: '' }
-      }
-      const ganadorEsRetador = tbr > tbd
-      return { completo: true, ganadorEsRetador, textoRetador: ganadorEsRetador ? `7-6(${tbr}-${tbd})` : `6-7(${tbd}-${tbr})` }
-    }
-
-    if (gr === gd) return { completo: false, ganadorEsRetador: null, textoRetador: '' }
-    return { completo: true, ganadorEsRetador: gr > gd, textoRetador: `${gr}-${gd}` }
-  }
-
-  function invertirMarcadorSetDirecto(texto: string): string {
-    const match = texto.match(/^(\d+)-(\d+)(\((\d+)-(\d+)\))?$/)
-    if (!match) return texto
-    const [, a, b, , tba, tbb] = match
-    return tba ? `${b}-${a}(${tbb}-${tba})` : `${b}-${a}`
-  }
-
   function calcularResultadoDirecto() {
-    const set1 = evaluarSetDirecto(set1RetadorD, set1RetadoD, set1TbRetadorD, set1TbRetadoD)
-    const set2 = evaluarSetDirecto(set2RetadorD, set2RetadoD, set2TbRetadorD, set2TbRetadoD)
-    if (!set1.completo || !set2.completo) return { valido: false as const }
-
-    const setsRetador = (set1.ganadorEsRetador ? 1 : 0) + (set2.ganadorEsRetador ? 1 : 0)
-    const necesitaSuperTiebreak = setsRetador === 1
-
-    if (!necesitaSuperTiebreak) {
-      return {
-        valido: true as const,
-        ganadorEsRetador: setsRetador === 2,
-        marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}`,
-        marcadorRetado: `${invertirMarcadorSetDirecto(set1.textoRetador)}, ${invertirMarcadorSetDirecto(set2.textoRetador)}`,
-      }
-    }
-
-    const tbr = parseInt(tbRetadorD, 10)
-    const tbd = parseInt(tbRetadoD, 10)
-    if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) return { valido: false as const }
-
-    return {
-      valido: true as const,
-      ganadorEsRetador: tbr > tbd,
-      marcadorRetador: `${set1.textoRetador}, ${set2.textoRetador}, ST ${tbr}-${tbd}`,
-      marcadorRetado: `${invertirMarcadorSetDirecto(set1.textoRetador)}, ${invertirMarcadorSetDirecto(set2.textoRetador)}, ST ${tbd}-${tbr}`,
-    }
+    return calcularResultadoPartido(
+      { golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD },
+      { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
+      { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
+    )
   }
 
   const limpiarFormularioDirecto = () => {
@@ -3541,8 +3489,8 @@ export default function AdminPage() {
                           )}
 
                           {(() => {
-                            const set1 = evaluarSetDirecto(set1RetadorD, set1RetadoD, set1TbRetadorD, set1TbRetadoD)
-                            const set2 = evaluarSetDirecto(set2RetadorD, set2RetadoD, set2TbRetadorD, set2TbRetadoD)
+                            const set1 = evaluarSet({ golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD })
+                            const set2 = evaluarSet({ golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD })
                             const setsRetador = (set1.completo && set1.ganadorEsRetador ? 1 : 0) + (set2.completo && set2.ganadorEsRetador ? 1 : 0)
                             if (!(set1.completo && set2.completo && setsRetador === 1)) return null
                             return (
