@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { supabaseServer } from '@/lib/supabaseServer'
-
-// Cuánto dura la sesión (30 días)
-const SESSION_MAX_AGE = 60 * 60 * 24 * 30
+import { crearSession } from '@/lib/session'
 
 export async function POST(request: Request) {
   try {
@@ -26,15 +23,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (admin && admin.pin === pin) {
-      const session = JSON.stringify({ role: 'admin', id: admin.id, nombre: admin.nombre, nivel: admin.nivel || 'completo' })
-      const store = await cookies()
-      store.set('hgv_session', session, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: SESSION_MAX_AGE,
-        path: '/',
-      })
+      await crearSession({ role: 'admin', id: admin.id, nombre: admin.nombre, nivel: admin.nivel || 'completo' })
       return NextResponse.json({ role: 'admin', nombre: admin.nombre, nivel: admin.nivel || 'completo' })
     }
 
@@ -53,20 +42,12 @@ export async function POST(request: Request) {
         )
       }
 
-      const session = JSON.stringify({
+      await crearSession({
         role: 'jugador',
         id: jugador.id,
         nombre: jugador.nombre,
         categoria: jugador.categoria,
         genero: jugador.genero,
-      })
-      const store = await cookies()
-      store.set('hgv_session', session, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: SESSION_MAX_AGE,
-        path: '/',
       })
       return NextResponse.json({
         role: 'jugador',
