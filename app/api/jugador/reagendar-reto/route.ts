@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { hoyEnCaracas, fechaISOEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
-
-// Venezuela es UTC-4 fijo (sin horario de verano) — usamos esto en vez de
-// new Date().toISOString() directo para que "hoy" no se adelante un día
-// pasadas las 8:00pm hora local (cuando en UTC ya es el día siguiente).
-function fechaVenezuela(ms: number = Date.now()): string {
-  return new Date(ms - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-}
 
 export async function POST(request: Request) {
   try {
@@ -26,7 +20,7 @@ export async function POST(request: Request) {
     const db = supabaseServer()
 
     const { data: fm } = await db.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle()
-    const hoy = fechaVenezuela()
+    const hoy = hoyEnCaracas()
     if (!fm?.activo || fm?.fecha !== hoy) {
       return NextResponse.json({ error: 'El reagendamiento por fuerza mayor no está activo en este momento.' }, { status: 400 })
     }
@@ -44,7 +38,7 @@ export async function POST(request: Request) {
     if (!['pendiente', 'aceptado'].includes(reto.estado)) {
       return NextResponse.json({ error: 'Este reto ya no se puede reagendar' }, { status: 400 })
     }
-    if (fechaVenezuela(new Date(reto.fecha_propuesta).getTime()) !== hoy) {
+    if (fechaISOEnCaracas(reto.fecha_propuesta) !== hoy) {
       return NextResponse.json({ error: 'Este partido no está programado para hoy.' }, { status: 400 })
     }
 
@@ -58,8 +52,8 @@ export async function POST(request: Request) {
     }
 
     if (cancha !== 'FORANEA') {
-      const inicioDia = new Date(nuevaHoraMs); inicioDia.setHours(0, 0, 0, 0)
-      const finDia = new Date(nuevaHoraMs); finDia.setHours(23, 59, 59, 999)
+      const inicioDia = inicioDelDiaEnCaracas(new Date(nuevaHoraMs))
+      const finDia = finDelDiaEnCaracas(new Date(nuevaHoraMs))
 
       const { data: partidosCancha } = await db
         .from('retos')

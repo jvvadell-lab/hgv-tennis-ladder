@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { hoyEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -15,10 +16,7 @@ export async function POST(request: Request) {
     const { activar } = await request.json()
     const db = supabaseServer()
 
-    // Venezuela es UTC-4 todo el año (sin horario de verano) — calculamos la fecha
-    // así en vez de con new Date().toISOString() para que no se adelante un día
-    // apenas pasan las 8:00pm hora local (cuando en UTC ya es el día siguiente).
-    const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const hoy = hoyEnCaracas()
     const { error } = await db
       .from('fuerza_mayor')
       .update({ activo: !!activar, fecha: activar ? hoy : null, updated_at: new Date().toISOString() })

@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
-
-// Venezuela es UTC-4 fijo (sin horario de verano).
-function fechaVenezuela(ms: number = Date.now()): string {
-  return new Date(ms - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-}
+import { hoyEnCaracas, fechaISOEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, formatearFechaHora, formatearHora } from '@/lib/tiempo'
 
 function diasEntre(fechaA: string, fechaB: string): number {
   const a = new Date(fechaA + 'T00:00:00Z').getTime()
@@ -121,7 +117,7 @@ export async function GET(request: Request) {
   }
 
   const db = supabaseServer()
-  const hoy = fechaVenezuela()
+  const hoy = hoyEnCaracas()
   const resumen = { recordatorio1: 0, recordatorio2: 0, autoAceptados: 0, avisoDelDia: 0, descensosPermisoMedico: 0, errores: [] as string[] }
 
   try {
@@ -132,12 +128,10 @@ export async function GET(request: Request) {
       .eq('estado', 'pendiente')
 
     for (const r of pendientes || []) {
-      const dias = diasEntre(fechaVenezuela(new Date(r.created_at).getTime()), hoy)
+      const dias = diasEntre(fechaISOEnCaracas(r.created_at), hoy)
       const retador: any = r.retador
       const retado: any = r.retado
-      const fechaFmt = r.fecha_propuesta
-        ? new Date(r.fecha_propuesta).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
-        : 'Por definir'
+      const fechaFmt = r.fecha_propuesta ? formatearFechaHora(r.fecha_propuesta) : 'Por definir'
       const canchaFmt = nombreCancha(r.cancha, r.nombre_cancha_foranea)
 
       try {
@@ -190,8 +184,8 @@ export async function GET(request: Request) {
     }
 
     // 2) Retos aceptados con partido programado para HOY — aviso de la mañana
-    const inicioHoy = new Date(hoy + 'T04:00:00Z') // medianoche Venezuela = 04:00 UTC
-    const finHoy = new Date(inicioHoy.getTime() + 24 * 60 * 60 * 1000)
+    const inicioHoy = instanteEnCaracas(hoy)
+    const finHoy = sumarDiasEnCaracas(inicioHoy, 1)
 
     const { data: partidosHoy } = await db
       .from('retos')
@@ -204,7 +198,7 @@ export async function GET(request: Request) {
     for (const r of partidosHoy || []) {
       const retador: any = r.retador
       const retado: any = r.retado
-      const horaFmt = new Date(r.fecha_propuesta).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
+      const horaFmt = formatearHora(r.fecha_propuesta)
       const canchaFmt = nombreCancha(r.cancha, r.nombre_cancha_foranea)
 
       try {

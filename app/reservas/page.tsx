@@ -6,6 +6,7 @@ import {
   PASO_MIN, APERTURA_MISMO_DIA_MIN, APERTURA_MANANA_MIN, MANANA_HGV2_INICIO_MIN, MANANA_HGV2_FIN_MIN,
   seSolapan, horaValidaParaCancha, fechaAlInicioDelDia, duracionParaTipoJuego,
 } from '@/lib/reservas'
+import { minutosDesdeMedianocheEnCaracas, sumarDiasEnCaracas, formatearHora } from '@/lib/tiempo'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,11 +80,11 @@ export default function ReservasPage() {
 
     async function calcular() {
       const ahoraDate = new Date()
-      const horaActualMin = ahoraDate.getHours() * 60 + ahoraDate.getMinutes()
+      const horaActualMin = minutosDesdeMedianocheEnCaracas(ahoraDate)
       const duracionMin = duracionParaTipoJuego(tipoJuego)
 
       const inicioHoy = fechaAlInicioDelDia(ahoraDate)
-      const finManana = new Date(inicioHoy); finManana.setDate(finManana.getDate() + 2) // fin del día de mañana
+      const finManana = sumarDiasEnCaracas(inicioHoy, 2) // fin del día de mañana
 
       // Ocupación real: reservas activas + retos pendientes/aceptados de AMBAS
       // canchas, hoy y mañana — una sola consulta por tabla, filtramos por
@@ -130,36 +131,23 @@ export default function ReservasPage() {
           if (!libre(fecha)) return
           resultado[c].push({
             value: fecha.toISOString(),
-            label: `${etiquetaDia} ${fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
+            label: `${etiquetaDia} ${formatearHora(fecha)}`,
           })
         }
 
         // Ventana de HOY — abierta desde las 6:00am
         if (horaActualMin >= APERTURA_MISMO_DIA_MIN) {
-          const cursor = new Date(ahoraDate)
-          const sobran = cursor.getMinutes() % PASO_MIN
-          if (sobran !== 0) cursor.setMinutes(cursor.getMinutes() + (PASO_MIN - sobran))
-          cursor.setSeconds(0, 0)
-          const finHoy = new Date(ahoraDate); finHoy.setHours(23, 59, 59, 999)
-          while (cursor <= finHoy) {
-            agregarSiValido(new Date(cursor), 'Hoy')
-            cursor.setMinutes(cursor.getMinutes() + PASO_MIN)
+          const minutosDesde = Math.ceil(horaActualMin / PASO_MIN) * PASO_MIN
+          for (let m = minutosDesde; m < 24 * 60; m += PASO_MIN) {
+            agregarSiValido(new Date(inicioHoy.getTime() + m * 60000), 'Hoy')
           }
         }
 
         // Ventana de MAÑANA en la mañana — solo HGV2, abierta desde las 6:00pm de hoy
         if (c === 'HGV2' && horaActualMin >= APERTURA_MANANA_MIN) {
-          const inicioManana = new Date(ahoraDate)
-          inicioManana.setDate(inicioManana.getDate() + 1)
-          inicioManana.setHours(Math.floor(MANANA_HGV2_INICIO_MIN / 60), MANANA_HGV2_INICIO_MIN % 60, 0, 0)
-          const finMananaVentana = new Date(ahoraDate)
-          finMananaVentana.setDate(finMananaVentana.getDate() + 1)
-          finMananaVentana.setHours(Math.floor(MANANA_HGV2_FIN_MIN / 60), MANANA_HGV2_FIN_MIN % 60, 0, 0)
-
-          const cursor2 = new Date(inicioManana)
-          while (cursor2 <= finMananaVentana) {
-            agregarSiValido(new Date(cursor2), 'Mañana')
-            cursor2.setMinutes(cursor2.getMinutes() + PASO_MIN)
+          const inicioManana = sumarDiasEnCaracas(inicioHoy, 1)
+          for (let m = MANANA_HGV2_INICIO_MIN; m <= MANANA_HGV2_FIN_MIN; m += PASO_MIN) {
+            agregarSiValido(new Date(inicioManana.getTime() + m * 60000), 'Mañana')
           }
         }
       }
@@ -378,7 +366,7 @@ export default function ReservasPage() {
                       {libres.length === 0 ? (
                         <p style={{ fontSize: '12px', color: '#a83226', margin: 0 }}>
                           {(() => {
-                            const horaActualMin = new Date().getHours() * 60 + new Date().getMinutes()
+                            const horaActualMin = minutosDesdeMedianocheEnCaracas(new Date())
                             if (horaActualMin < APERTURA_MISMO_DIA_MIN) return 'La reserva para hoy abre a las 6:00am.'
                             return 'Sin horarios libres por ahora.'
                           })()}
@@ -462,9 +450,9 @@ export default function ReservasPage() {
                       <strong>{r.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}</strong>
                       {' — '}
                       {esHoy ? 'Hoy' : 'Mañana'}{' '}
-                      {inicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      {formatearHora(inicio)}
                       {' – '}
-                      {fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      {formatearHora(fin)}
                       <span style={{
                         marginLeft: '8px', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '10px',
                         background: r.tipo_juego === 'doble' ? '#fef3c7' : '#e0f2fe',

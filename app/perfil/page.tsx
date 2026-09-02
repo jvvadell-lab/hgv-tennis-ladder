@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import { hoyEnCaracas, instanteEnCaracas, formatearFechaCorta } from '@/lib/tiempo'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -55,7 +56,7 @@ export default function PerfilPage() {
   const [mostrarFormPago, setMostrarFormPago] = useState(false)
   const [reporteTipo, setReporteTipo] = useState('pago_movil')
   const [reporteMonto, setReporteMonto] = useState('')
-  const [reporteFecha, setReporteFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [reporteFecha, setReporteFecha] = useState(hoyEnCaracas())
   const [reporteReferencia, setReporteReferencia] = useState('')
   const [reportandoPago, setReportandoPago] = useState(false)
   const [reportePagoMsg, setReportePagoMsg] = useState('')
@@ -560,7 +561,7 @@ export default function PerfilPage() {
                     <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '12px' }}>
                       vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
                       <br />
-                      <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES') : ''}</span>
+                      <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? formatearFechaCorta(p.fecha, { mes: 'corto' }) : ''}</span>
                     </div>
                   ))}
                 </div>
@@ -610,7 +611,7 @@ export default function PerfilPage() {
                     💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
                       {tasaBcv.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </strong> según BCV
-                    <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {new Date(tasaBcv.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}</span>
+                    <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {formatearFechaCorta(instanteEnCaracas(tasaBcv.fecha))}</span>
                   </p>
                   <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#999' }}>
                     Fuente: <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>bcv.org.ve</a>
@@ -747,7 +748,7 @@ export default function PerfilPage() {
             ) : standbyActual ? (
               <div style={{ background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '4px', padding: '12px 14px' }}>
                 <p style={{ margin: 0, fontSize: '13px', color: '#7a4a0e' }}>
-                  🧳 Ya usaste tu standby de esta temporada: <strong>{standbyActual.dias} días</strong>, del {new Date(standbyActual.fecha_inicio + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} al {new Date(standbyActual.fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}.
+                  🧳 Ya usaste tu standby de esta temporada: <strong>{standbyActual.dias} días</strong>, del {formatearFechaCorta(instanteEnCaracas(standbyActual.fecha_inicio), { mes: 'corto' })} al {formatearFechaCorta(instanteEnCaracas(standbyActual.fecha_fin), { mes: 'corto' })}.
                 </p>
                 <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#7a4a0e' }}>
                   Es una única vez por temporada — ya no puedes activarlo de nuevo hasta la próxima.
@@ -811,10 +812,10 @@ export default function PerfilPage() {
                   ⏳ Tu solicitud de permiso médico está pendiente de revisión por el admin.
                 </p>
               </div>
-            ) : permisoMedico?.estado === 'aprobado' && permisoMedico.fecha_fin && new Date().toISOString().slice(0, 10) <= permisoMedico.fecha_fin ? (
+            ) : permisoMedico?.estado === 'aprobado' && permisoMedico.fecha_fin && hoyEnCaracas() <= permisoMedico.fecha_fin ? (
               <div style={{ background: '#d1ecf1', border: '1px solid #1c7ec4', borderRadius: '4px', padding: '12px 14px' }}>
                 <p style={{ margin: 0, fontSize: '13px', color: '#0c5460' }}>
-                  🩹 Tienes permiso médico activo: <strong>{permisoMedico.dias} días</strong>, hasta el {new Date(permisoMedico.fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}. Tu posición queda congelada mientras dure — no puedes retar ni ser retado.
+                  🩹 Tienes permiso médico activo: <strong>{permisoMedico.dias} días</strong>, hasta el {formatearFechaCorta(instanteEnCaracas(permisoMedico.fecha_fin))}. Tu posición queda congelada mientras dure — no puedes retar ni ser retado.
                 </p>
               </div>
             ) : (

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { ahora, sumarDiasEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -38,9 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Ya existe una temporada activa ("${activa.nombre}"). Ciérrala primero antes de crear una nueva.` }, { status: 400 })
     }
 
-    const limite = new Date()
-    limite.setDate(limite.getDate() + parseInt(plazoDias || '7', 10))
-    const limiteStr = limite.toISOString().slice(0, 10)
+    const limiteStr = fechaISOEnCaracas(sumarDiasEnCaracas(ahora(), parseInt(plazoDias || '7', 10)))
 
     const { error: errInsert } = await db.from('temporadas').insert([{
       nombre: nombre.trim(),

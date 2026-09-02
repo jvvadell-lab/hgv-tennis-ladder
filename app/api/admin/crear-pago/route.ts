@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { hoyEnCaracas } from '@/lib/tiempo'
 
 const TIPOS_VALIDOS = ['pago_movil', 'transferencia', 'efectivo']
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
         temporada_id: temporadaId,
         tipo_pago: tipoPago,
         monto: montoNum,
-        fecha: fecha || new Date().toISOString().slice(0, 10),
+        fecha: fecha || hoyEnCaracas(),
         referencia: referencia?.trim() || null,
         validado: true, // el admin lo registra directo, así que ya queda válido
       }])
