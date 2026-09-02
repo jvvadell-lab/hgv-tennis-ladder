@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-
-function fechaVenezuelaHoy(): string {
-  return new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-}
+import { hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -33,16 +30,15 @@ export async function POST(request: Request) {
     if (errTemp) throw errTemp
     if (!temporada) return NextResponse.json({ error: 'No hay una temporada activa' }, { status: 400 })
 
-    const fechaInicio = fechaVenezuelaHoy()
-    const fechaFin = new Date(fechaInicio + 'T00:00:00')
-    fechaFin.setDate(fechaFin.getDate() + diasNum - 1)
+    const fechaInicio = hoyEnCaracas()
+    const fechaFin = fechaISOEnCaracas(sumarDiasEnCaracas(instanteEnCaracas(fechaInicio), diasNum - 1))
 
     const { error } = await db.from('permisos_medicos').insert([{
       jugador_id: jugadorId,
       temporada_id: temporada.id,
       dias: diasNum,
       fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin.toISOString().slice(0, 10),
+      fecha_fin: fechaFin,
       motivo: motivo || null,
       informe_url: informeUrl || null,
       estado: 'aprobado',

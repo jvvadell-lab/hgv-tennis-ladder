@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { ahora, hoyEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -53,21 +54,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Tienes un reto pendiente o un partido en curso — resuélvelo antes de activar el standby.' }, { status: 400 })
     }
 
-    const fechaInicio = new Date()
-    const fechaFin = new Date()
-    fechaFin.setDate(fechaFin.getDate() + diasNum)
+    const fechaInicio = hoyEnCaracas()
+    const fechaFin = fechaISOEnCaracas(sumarDiasEnCaracas(ahora(), diasNum))
 
     const { error: errInsert } = await db.from('standby').insert([{
       jugador_id: session.id,
       temporada_id: temporada.id,
       dias: diasNum,
-      fecha_inicio: fechaInicio.toISOString().slice(0, 10),
-      fecha_fin: fechaFin.toISOString().slice(0, 10),
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
       creado_por: 'jugador',
     }])
     if (errInsert) throw errInsert
 
-    return NextResponse.json({ ok: true, fechaInicio: fechaInicio.toISOString().slice(0, 10), fechaFin: fechaFin.toISOString().slice(0, 10) })
+    return NextResponse.json({ ok: true, fechaInicio, fechaFin })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al activar el standby' }, { status: 500 })
   }

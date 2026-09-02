@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
 
 const DURACION_BASE_MIN = 60
 const DURACION_RETO_MIN = 90
@@ -48,8 +49,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Todavía es muy temprano — puedes pedir la media hora extra 5 minutos antes de que termine tu hora.' }, { status: 400 })
     }
 
-    const inicioDia = new Date(inicioMs); inicioDia.setHours(0, 0, 0, 0)
-    const finDia = new Date(inicioMs); finDia.setHours(23, 59, 59, 999)
+    const inicioDia = inicioDelDiaEnCaracas(new Date(inicioMs))
+    const finDia = finDelDiaEnCaracas(new Date(inicioMs))
 
     // Revisamos si el bloque de 30 min siguiente (los minutos 60-90 desde el inicio
     // de esta reserva) sigue libre — tanto de partidos de la escalera como de otras

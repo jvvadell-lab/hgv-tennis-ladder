@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { ahora, sumarDiasEnCaracas } from '@/lib/tiempo'
 
 const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
 
@@ -86,8 +87,7 @@ export async function POST(request: Request) {
 
     const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
     if (idsRetosPrevios.length > 0) {
-      const cincoDiasAtras = new Date()
-      cincoDiasAtras.setDate(cincoDiasAtras.getDate() - 5)
+      const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
 
       const { data: resultadoReciente } = await db
         .from('resultados')

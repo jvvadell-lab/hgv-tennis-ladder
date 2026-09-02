@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
+import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 const AJUSTES_PERMITIDOS = [-1, 2] // solo "un día antes" o "dos días después"
@@ -61,12 +62,11 @@ export async function POST(request: Request) {
     // Si acepta con un ajuste de fecha, validamos que el nuevo horario no choque
     // con otro partido o reserva en esa misma cancha antes de guardarlo.
     if (nuevoEstado === 'aceptado' && ajusteDias !== undefined && ajusteDias !== null && reto.cancha && reto.cancha !== 'FORANEA') {
-      const nuevaFecha = new Date(reto.fecha_propuesta)
-      nuevaFecha.setDate(nuevaFecha.getDate() + Number(ajusteDias))
+      const nuevaFecha = sumarDiasEnCaracas(new Date(reto.fecha_propuesta), Number(ajusteDias))
       const nuevaHoraMs = nuevaFecha.getTime()
 
-      const inicioDia = new Date(nuevaHoraMs); inicioDia.setHours(0, 0, 0, 0)
-      const finDia = new Date(nuevaHoraMs); finDia.setHours(23, 59, 59, 999)
+      const inicioDia = inicioDelDiaEnCaracas(nuevaFecha)
+      const finDia = finDelDiaEnCaracas(nuevaFecha)
 
       const { data: partidosCancha } = await db
         .from('retos')

@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-
-function fechaVenezuelaHoy(): string {
-  return new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-}
+import { hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -33,12 +30,11 @@ export async function POST(request: Request) {
 
     // Adelantamos la fecha de fin a ayer — así el jugador queda libre de inmediato
     // (no tocamos días/fecha_inicio, quedan como registro histórico de lo aprobado).
-    const ayer = new Date(fechaVenezuelaHoy() + 'T00:00:00')
-    ayer.setDate(ayer.getDate() - 1)
+    const ayer = fechaISOEnCaracas(sumarDiasEnCaracas(instanteEnCaracas(hoyEnCaracas()), -1))
 
     const { error } = await db
       .from('permisos_medicos')
-      .update({ fecha_fin: ayer.toISOString().slice(0, 10) })
+      .update({ fecha_fin: ayer })
       .eq('id', permisoId)
     if (error) throw error
 

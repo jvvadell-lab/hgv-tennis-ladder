@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { hoyEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El sorteo de esta temporada ya se realizó. Pide a un administrador que te agregue al escalafón.' }, { status: 400 })
     }
 
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyEnCaracas()
     if (temporada.fecha_limite_inscripcion && hoy > temporada.fecha_limite_inscripcion) {
       return NextResponse.json({ error: 'El plazo de inscripción ya cerró. Pide a un administrador que te agregue.' }, { status: 400 })
     }

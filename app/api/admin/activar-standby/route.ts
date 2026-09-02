@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { ahora, hoyEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -50,21 +51,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `${jugador.nombre} tiene un reto pendiente o en curso — resuélvelo primero desde Desafíos.` }, { status: 400 })
     }
 
-    const fechaInicio = new Date()
-    const fechaFin = new Date()
-    fechaFin.setDate(fechaFin.getDate() + diasNum)
+    const fechaInicio = hoyEnCaracas()
+    const fechaFin = fechaISOEnCaracas(sumarDiasEnCaracas(ahora(), diasNum))
 
     const { error: errInsert } = await db.from('standby').insert([{
       jugador_id: jugadorId,
       temporada_id: temporadaId,
       dias: diasNum,
-      fecha_inicio: fechaInicio.toISOString().slice(0, 10),
-      fecha_fin: fechaFin.toISOString().slice(0, 10),
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
       creado_por: 'admin',
     }])
     if (errInsert) throw errInsert
 
-    return NextResponse.json({ ok: true, nombre: jugador.nombre, fechaFin: fechaFin.toISOString().slice(0, 10) })
+    return NextResponse.json({ ok: true, nombre: jugador.nombre, fechaFin })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al activar el standby' }, { status: 500 })
   }

@@ -5,6 +5,7 @@ import {
   DURACION_SINGLE_MIN, DURACION_RETO_MIN, PENALIDAD_NO_PRESENTADO_DIAS,
   seSolapan, horaValidaParaCancha, fechaAlInicioDelDia, duracionParaTipoJuego,
 } from '@/lib/reservas'
+import { sumarDiasEnCaracas, finDelDiaEnCaracas, formatearHora, formatearFechaCorta } from '@/lib/tiempo'
 
 const CANCHAS_VALIDAS = ['HGV1', 'HGV2']
 
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
     // Solo se puede reservar para hoy, o (solo HGV2) para la mañana de mañana
     // — así no se puede colar una reserva para cualquier día futuro.
     const inicioHoy = fechaAlInicioDelDia(new Date())
-    const inicioManana = new Date(inicioHoy); inicioManana.setDate(inicioManana.getDate() + 1)
+    const inicioManana = sumarDiasEnCaracas(inicioHoy, 1)
     const diaSolicitado = fechaAlInicioDelDia(nuevaHora)
     const esHoy = diaSolicitado.getTime() === inicioHoy.getTime()
     const esMananaHGV2 = cancha === 'HGV2' && diaSolicitado.getTime() === inicioManana.getTime()
@@ -72,9 +73,8 @@ export async function POST(request: Request) {
       return new Date(r.fecha_hora).getTime() > ahoraMs
     })
     if (conReservaActiva) {
-      const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
       return NextResponse.json({
-        error: `Ya tienes una reserva activa (${conReservaActiva.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} a las ${fmt(new Date(conReservaActiva.fecha_hora))}) — no puedes tener más de una a la vez.`,
+        error: `Ya tienes una reserva activa (${conReservaActiva.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} a las ${formatearHora(conReservaActiva.fecha_hora)}) — no puedes tener más de una a la vez.`,
       }, { status: 400 })
     }
 
@@ -87,9 +87,8 @@ export async function POST(request: Request) {
       const ultimaMs = Math.max(...noPresentados.map((r: any) => new Date(r.fecha_hora).getTime()))
       const disponibleDesde = ultimaMs + PENALIDAD_NO_PRESENTADO_DIAS * 24 * 60 * 60 * 1000
       if (ahoraMs < disponibleDesde) {
-        const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
         return NextResponse.json({
-          error: `Por no presentarte a tu última reserva, puedes volver a reservar a partir del ${fmt(new Date(disponibleDesde))} (${PENALIDAD_NO_PRESENTADO_DIAS} días después).`,
+          error: `Por no presentarte a tu última reserva, puedes volver a reservar a partir del ${formatearFechaCorta(new Date(disponibleDesde))} (${PENALIDAD_NO_PRESENTADO_DIAS} días después).`,
         }, { status: 400 })
       }
     }
@@ -100,18 +99,17 @@ export async function POST(request: Request) {
     if (usadas.length > 0) {
       const fechaUsoMasReciente = new Date(Math.max(...usadas.map((r: any) => new Date(r.fecha_hora).getTime())))
       const diaUso = fechaAlInicioDelDia(fechaUsoMasReciente)
-      const diaBloqueado = new Date(diaUso); diaBloqueado.setDate(diaBloqueado.getDate() + 1)
+      const diaBloqueado = sumarDiasEnCaracas(diaUso, 1)
       if (diaSolicitado.getTime() === diaBloqueado.getTime()) {
-        const disponibleDesde = new Date(diaBloqueado); disponibleDesde.setDate(disponibleDesde.getDate() + 1)
-        const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
+        const disponibleDesde = sumarDiasEnCaracas(diaBloqueado, 1)
         return NextResponse.json({
-          error: `Jugaste el ${fmt(diaUso)} — las reservas son día por medio, así que recién puedes volver a reservar a partir del ${fmt(disponibleDesde)}.`,
+          error: `Jugaste el ${formatearFechaCorta(diaUso)} — las reservas son día por medio, así que recién puedes volver a reservar a partir del ${formatearFechaCorta(disponibleDesde)}.`,
         }, { status: 400 })
       }
     }
 
     const inicioDia = fechaAlInicioDelDia(nuevaHora)
-    const finDia = new Date(inicioDia.getTime() + 24 * 60 * 60 * 1000 - 1)
+    const finDia = finDelDiaEnCaracas(inicioDia)
 
     // No debe chocar con partidos de la escalera (bloquean 1h30) en esa cancha ese día
     const { data: retosDia, error: errRetos } = await db
@@ -129,9 +127,8 @@ export async function POST(request: Request) {
     if (conflictoReto) {
       const inicioOcupado = new Date(conflictoReto.fecha_propuesta)
       const finOcupado = new Date(inicioOcupado.getTime() + DURACION_RETO_MIN * 60000)
-      const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
       return NextResponse.json({
-        error: `Esa cancha tiene un partido de la escalera a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Elige otro horario.`,
+        error: `Esa cancha tiene un partido de la escalera a las ${formatearHora(inicioOcupado)} — ocupada hasta las ${formatearHora(finOcupado)}. Elige otro horario.`,
       }, { status: 400 })
     }
 
@@ -151,9 +148,8 @@ export async function POST(request: Request) {
     if (conflictoReserva) {
       const inicioOcupado = new Date(conflictoReserva.fecha_hora)
       const finOcupado = new Date(inicioOcupado.getTime() + (conflictoReserva.duracion_min || DURACION_SINGLE_MIN) * 60000)
-      const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
       return NextResponse.json({
-        error: `Esa cancha ya está reservada a las ${fmt(inicioOcupado)} — ocupada hasta las ${fmt(finOcupado)}. Elige otro horario.`,
+        error: `Esa cancha ya está reservada a las ${formatearHora(inicioOcupado)} — ocupada hasta las ${formatearHora(finOcupado)}. Elige otro horario.`,
       }, { status: 400 })
     }
 

@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-
-// Venezuela es UTC-4 fijo — usamos esto para que "hoy" no dependa de en qué
-// zona horaria corra el servidor.
-function fechaVenezuelaHoy(): string {
-  return new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-}
+import { hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
 
 export async function POST(request: Request) {
   try {
@@ -38,9 +33,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta solicitud ya fue resuelta.' }, { status: 400 })
     }
 
-    const fechaInicio = fechaVenezuelaHoy()
-    const fechaFin = new Date(fechaInicio + 'T00:00:00')
-    fechaFin.setDate(fechaFin.getDate() + diasNum - 1)
+    const fechaInicio = hoyEnCaracas()
+    const fechaFin = fechaISOEnCaracas(sumarDiasEnCaracas(instanteEnCaracas(fechaInicio), diasNum - 1))
 
     const { error } = await db
       .from('permisos_medicos')
@@ -48,7 +42,7 @@ export async function POST(request: Request) {
         estado: 'aprobado',
         dias: diasNum,
         fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin.toISOString().slice(0, 10),
+        fecha_fin: fechaFin,
       })
       .eq('id', permisoId)
     if (error) throw error
