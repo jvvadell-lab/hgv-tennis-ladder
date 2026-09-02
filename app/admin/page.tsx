@@ -4,6 +4,10 @@ import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
+import {
+  hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas,
+  finDelDiaEnCaracas, formatearFechaCorta,
+} from '@/lib/tiempo'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,7 +85,7 @@ export default function AdminPage() {
   const [pagoTipo, setPagoTipo] = useState('pago_movil')
   const [pagoMontoCentavos, setPagoMontoCentavos] = useState('')
   const [pagoReferencia, setPagoReferencia] = useState('')
-  const [pagoFecha, setPagoFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [pagoFecha, setPagoFecha] = useState(hoyEnCaracas())
   const [registrandoPago, setRegistrandoPago] = useState(false)
   const [validandoPago, setValidandoPago] = useState<string | null>(null)
   const [rechazandoPago, setRechazandoPago] = useState<string | null>(null)
@@ -90,7 +94,7 @@ export default function AdminPage() {
 
   const [retos, setRetos] = useState<any[]>([])
   const [loadingRetos, setLoadingRetos] = useState(false)
-  const [fechaReservas, setFechaReservas] = useState(new Date().toISOString().slice(0, 10))
+  const [fechaReservas, setFechaReservas] = useState(hoyEnCaracas())
   const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
   const [reservasCasualesDelDia, setReservasCasualesDelDia] = useState<any[]>([])
   const [loadingReservas, setLoadingReservas] = useState(false)
@@ -483,9 +487,8 @@ export default function AdminPage() {
       .select('id', { count: 'exact', head: true })
       .eq('estado', 'jugado')
 
-    const inicioMes = new Date()
-    inicioMes.setDate(1)
-    inicioMes.setHours(0, 0, 0, 0)
+    const [anioHoy, mesHoy] = hoyEnCaracas().split('-').map(Number)
+    const inicioMes = instanteEnCaracas(`${anioHoy}-${String(mesHoy).padStart(2, '0')}-01`)
 
     const { count: esteMes } = await supabase
       .from('retos')
@@ -506,18 +509,15 @@ export default function AdminPage() {
     if (activeSection === 'challenges') {
       fetchRetos()
       supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle().then(({ data }) => {
-        // Mismo cálculo de "hoy" en hora de Venezuela (UTC-4) usado en toda esta función.
-        const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        const hoy = hoyEnCaracas()
         setFuerzaMayorActivo(!!data?.activo && data?.fecha === hoy)
       })
     }
     if (activeSection === 'reservas') {
       fetchReservasDelDia(fechaReservas)
       if (!historialReservasDesde || !historialReservasHasta) {
-        const hoy = new Date()
-        const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30)
-        const desde = hace30.toISOString().slice(0, 10)
-        const hasta = hoy.toISOString().slice(0, 10)
+        const hasta = hoyEnCaracas()
+        const desde = fechaISOEnCaracas(sumarDiasEnCaracas(instanteEnCaracas(hasta), -30))
         setHistorialReservasDesde(desde)
         setHistorialReservasHasta(hasta)
         fetchHistorialReservas(desde, hasta)
@@ -527,9 +527,9 @@ export default function AdminPage() {
 
       fetchInscritosTempActiva()
       if (!reporteDesde || !reporteHasta) {
-        const hoy = new Date()
-        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10)
-        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().slice(0, 10)
+        const [anioHoy, mesHoy] = hoyEnCaracas().split('-').map(Number)
+        const primerDiaMes = `${anioHoy}-${String(mesHoy).padStart(2, '0')}-01`
+        const ultimoDiaMes = `${anioHoy}-${String(mesHoy).padStart(2, '0')}-${String(new Date(anioHoy, mesHoy, 0).getDate()).padStart(2, '0')}`
         setReporteDesde(primerDiaMes)
         setReporteHasta(ultimoDiaMes)
         fetchReporteUsoCancha(primerDiaMes, ultimoDiaMes)
@@ -539,9 +539,9 @@ export default function AdminPage() {
 
       fetchTemporadasParaOcupacion()
       if (!ocupacionDesde || !ocupacionHasta) {
-        const hoy = new Date()
-        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10)
-        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().slice(0, 10)
+        const [anioHoy, mesHoy] = hoyEnCaracas().split('-').map(Number)
+        const primerDiaMes = `${anioHoy}-${String(mesHoy).padStart(2, '0')}-01`
+        const ultimoDiaMes = `${anioHoy}-${String(mesHoy).padStart(2, '0')}-${String(new Date(anioHoy, mesHoy, 0).getDate()).padStart(2, '0')}`
         setOcupacionDesde(primerDiaMes)
         setOcupacionHasta(ultimoDiaMes)
         fetchOcupacionCancha(primerDiaMes, ultimoDiaMes)
@@ -562,8 +562,8 @@ export default function AdminPage() {
 
   const fetchReservasDelDia = async (fecha: string) => {
     setLoadingReservas(true)
-    const inicio = new Date(fecha + 'T00:00:00')
-    const fin = new Date(fecha + 'T23:59:59.999')
+    const inicio = instanteEnCaracas(fecha)
+    const fin = finDelDiaEnCaracas(inicio)
     const { data } = await supabase
       .from('retos')
       .select('id, cancha, nombre_cancha_foranea, fecha_propuesta, estado, retador:retador_id(nombre, categoria, genero), retado:retado_id(nombre)')
@@ -590,8 +590,8 @@ export default function AdminPage() {
     const fHasta = hasta || historialReservasHasta
     if (!fDesde || !fHasta) return
     setLoadingHistorialReservas(true)
-    const inicio = new Date(fDesde + 'T00:00:00')
-    const fin = new Date(fHasta + 'T23:59:59.999')
+    const inicio = instanteEnCaracas(fDesde)
+    const fin = finDelDiaEnCaracas(instanteEnCaracas(fHasta))
     const { data } = await supabase
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, estado, duracion_min, tipo_juego, jugadores:jugador_id(nombre)')
@@ -608,8 +608,8 @@ export default function AdminPage() {
     const fHasta = hasta || reporteHasta
     if (!fDesde || !fHasta) return
     setLoadingReporteUso(true)
-    const inicio = new Date(fDesde + 'T00:00:00')
-    const fin = new Date(fHasta + 'T23:59:59.999')
+    const inicio = instanteEnCaracas(fDesde)
+    const fin = finDelDiaEnCaracas(instanteEnCaracas(fHasta))
     const { data } = await supabase
       .from('reservas_cancha')
       .select('id, jugador_id, cancha, fecha_hora, duracion_min, estado, jugadores:jugador_id(nombre)')
@@ -639,8 +639,8 @@ export default function AdminPage() {
     const fHasta = hasta || ocupacionHasta
     if (!fDesde || !fHasta) return
     setLoadingOcupacion(true)
-    const inicio = new Date(fDesde + 'T00:00:00')
-    const fin = new Date(fHasta + 'T23:59:59.999')
+    const inicio = instanteEnCaracas(fDesde)
+    const fin = finDelDiaEnCaracas(instanteEnCaracas(fHasta))
 
     const { data: reservas } = await supabase
       .from('reservas_cancha')
@@ -670,7 +670,7 @@ export default function AdminPage() {
       .order('created_at', { ascending: true })
     setPermisosMedicosPendientes(data || [])
 
-    const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const hoy = hoyEnCaracas()
     const { data: activos } = await supabase
       .from('permisos_medicos')
       .select('id, dias, motivo, informe_url, fecha_inicio, fecha_fin, jugadores:jugador_id(nombre)')
@@ -976,7 +976,7 @@ export default function AdminPage() {
       setTasaBcvValorInput(String(data.valor))
       setTasaBcvFechaInput(data.fecha)
     } else {
-      setTasaBcvFechaInput(new Date().toISOString().slice(0, 10))
+      setTasaBcvFechaInput(hoyEnCaracas())
     }
   }
 
@@ -1714,7 +1714,7 @@ export default function AdminPage() {
   const enStandby = (jugadorId: string) => {
     const s = standbyMap[jugadorId]
     if (!s) return false
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyEnCaracas()
     return hoy >= s.fecha_inicio && hoy <= s.fecha_fin
   }
 
@@ -1737,7 +1737,7 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al activar')
-      setSorteoMsg(`✅ Standby de ${dias} días activado para ${data.nombre}, hasta el ${new Date(data.fechaFin + 'T00:00:00').toLocaleDateString('es-ES')}.`)
+      setSorteoMsg(`✅ Standby de ${dias} días activado para ${data.nombre}, hasta el ${formatearFechaCorta(instanteEnCaracas(data.fechaFin))}.`)
       fetchTemporadaYLadder()
     } catch (err: any) {
       alert('❌ ' + err.message)
@@ -2758,7 +2758,7 @@ export default function AdminPage() {
                   style={{ padding: '8px 12px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px' }}
                 />
                 <button
-                  onClick={() => setFechaReservas(new Date().toISOString().slice(0, 10))}
+                  onClick={() => setFechaReservas(hoyEnCaracas())}
                   style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
                 >
                   Hoy
@@ -3277,7 +3277,7 @@ export default function AdminPage() {
                         <div>
                           <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', color: 'var(--color-ink)' }}>{p.jugadores?.nombre || '—'}</p>
                           <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#555' }}>
-                            {p.dias} días — hasta el {new Date(p.fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+                            {p.dias} días — hasta el {formatearFechaCorta(instanteEnCaracas(p.fecha_fin))}
                           </p>
                           {p.motivo && <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#777' }}>💬 {p.motivo}</p>}
                           {p.informe_url && (
@@ -3981,7 +3981,7 @@ export default function AdminPage() {
                     </div>
 
                     {temporadaActiva.fecha_limite_inscripcion && !editandoTemp && (() => {
-                      const hoy = new Date().toISOString().slice(0, 10)
+                      const hoy = hoyEnCaracas()
                       const cerrado = hoy > temporadaActiva.fecha_limite_inscripcion
                       return (
                         <p style={{
@@ -4241,7 +4241,7 @@ export default function AdminPage() {
                                         {p.jugadores?.nombre || 'Jugador'}
                                         {enStandby(p.jugador_id) && (
                                           <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 'bold', color: '#e67e22', background: '#fff3cd', padding: '2px 5px', borderRadius: '8px' }}>
-                                            🧳 hasta {new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                            🧳 hasta {formatearFechaCorta(instanteEnCaracas(standbyMap[p.jugador_id].fecha_fin), { mes: 'corto' })}
                                           </span>
                                         )}
                                       </td>
@@ -4471,7 +4471,7 @@ export default function AdminPage() {
                               💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
                                 {tasaBcvActual.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </strong> según BCV
-                              <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {new Date(tasaBcvActual.fecha + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                              <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {formatearFechaCorta(instanteEnCaracas(tasaBcvActual.fecha), { conAnio: true })}</span>
                             </p>
                           ) : (
                             <p style={{ margin: 0, fontSize: '13px', color: '#6b6b6b' }}>💶 Todavía no se ha registrado la tasa BCV de hoy.</p>

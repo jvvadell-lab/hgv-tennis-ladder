@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { formatearFechaConAnio, formatearFechaLarga } from '@/lib/tiempo'
 
 type FotoGaleria = {
   id: string
@@ -130,7 +131,7 @@ export default function GaleriaPage() {
                     </p>
                   )}
                   <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px', margin: '5px 0 0 0' }}>
-                    {new Date(f.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {formatearFechaConAnio(f.created_at)}
                   </p>
                 </div>
               </div>
@@ -201,12 +202,8 @@ export default function GaleriaPage() {
             )}
             <p style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', fontSize: '13px', margin: '10px 0 0 0' }}>
               {fotoSeleccionada.retos?.fecha_propuesta
-                ? new Date(fotoSeleccionada.retos.fecha_propuesta).toLocaleDateString('es-ES', {
-                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-                  })
-                : new Date(fotoSeleccionada.created_at).toLocaleDateString('es-ES', {
-                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-                  })}
+                ? formatearFechaLarga(fotoSeleccionada.retos.fecha_propuesta, { conAnio: true })
+                : formatearFechaLarga(fotoSeleccionada.created_at, { conAnio: true })}
               {nombreCancha(fotoSeleccionada) && ` · Cancha ${nombreCancha(fotoSeleccionada)}`}
             </p>
           </div>

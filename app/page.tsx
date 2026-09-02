@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -76,10 +77,8 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    const inicioHoy = new Date()
-    inicioHoy.setHours(0, 0, 0, 0)
-    const finHoy = new Date()
-    finHoy.setHours(23, 59, 59, 999)
+    const inicioHoy = inicioDelDiaEnCaracas(new Date())
+    const finHoy = finDelDiaEnCaracas(new Date())
 
     supabase
       .from('retos')
