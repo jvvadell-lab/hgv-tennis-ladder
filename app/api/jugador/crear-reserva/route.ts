@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     }
 
     const inicioDia = fechaAlInicioDelDia(nuevaHora)
-    const finDia = new Date(inicioDia); finDia.setHours(23, 59, 59, 999)
+    const finDia = new Date(inicioDia.getTime() + 24 * 60 * 60 * 1000 - 1)
 
     // No debe chocar con partidos de la escalera (bloquean 1h30) en esa cancha ese día
     const { data: retosDia, error: errRetos } = await db
