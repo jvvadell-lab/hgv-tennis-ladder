@@ -5,6 +5,10 @@ import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador, type CampoSet } from '@/lib/resultados'
+import {
+  hoyEnCaracas, fechaISOEnCaracas, instanteEnCaracas, finDelDiaEnCaracas, diaDeLaSemanaEnCaracas,
+  sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora,
+} from '@/lib/tiempo'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -314,10 +318,7 @@ export default function LadderPage() {
       setMisRetos((retos as any) || [])
 
       const { data: fm } = await supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle()
-      // Venezuela es UTC-4 fijo — calculamos "hoy" así en vez de con toISOString()
-      // directo, para que no se adelante un día pasadas las 8:00pm hora local.
-      const hoyStr = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10)
-      setFuerzaMayorActivo(!!fm?.activo && fm?.fecha === hoyStr)
+      setFuerzaMayorActivo(!!fm?.activo && fm?.fecha === hoyEnCaracas())
 
       const retoIds = (retos || []).map((r: any) => r.id)
       if (retoIds.length > 0) {
@@ -357,8 +358,7 @@ export default function LadderPage() {
           if (!oponente) return
           if (r.ganador_id !== oponente) return // solo importa si el oponente fue quien ganó
 
-          const liberaEn = new Date(r.validado_at)
-          liberaEn.setDate(liberaEn.getDate() + 5)
+          const liberaEn = sumarDiasEnCaracas(new Date(r.validado_at), 5)
           if (!nuevoCooldown[oponente] || new Date(liberaEn) > new Date(nuevoCooldown[oponente])) {
             nuevoCooldown[oponente] = liberaEn.toISOString()
           }
@@ -551,9 +551,7 @@ export default function LadderPage() {
     if (cancha === 'FORANEA') return { valido: true } // cancha externa, sin restricción del club
     if (!fechaStr || !horaStr) return { valido: true }
 
-    const [y, m, d] = fechaStr.split('-').map(Number)
-    const fecha = new Date(y, m - 1, d)
-    const dia = fecha.getDay() // 0 = domingo, 1 = lunes, ... 5 = viernes, 6 = sábado
+    const dia = diaDeLaSemanaEnCaracas(instanteEnCaracas(fechaStr)) // 0 = domingo, 1 = lunes, ... 5 = viernes, 6 = sábado
     const esFinde = dia === 0 || dia === 6
     if (esFinde) return { valido: true } // sábado y domingo, todo el día, ambas canchas
 
@@ -619,8 +617,8 @@ export default function LadderPage() {
     setCargandoHorariosReto(true)
 
     ;(async () => {
-      const inicioDia = new Date(`${retoFecha}T00:00:00`)
-      const finDia = new Date(`${retoFecha}T23:59:59`)
+      const inicioDia = instanteEnCaracas(retoFecha)
+      const finDia = finDelDiaEnCaracas(inicioDia)
 
       const [{ data: retosDia }, { data: reservasDia }] = await Promise.all([
         supabase
@@ -643,11 +641,10 @@ export default function LadderPage() {
 
       const ahoraMs = Date.now()
       const opciones: { value: string; label: string }[] = []
-      const cursor = new Date(inicioDia)
 
-      while (cursor <= finDia) {
-        const horaStr = `${String(cursor.getHours()).padStart(2, '0')}:${String(cursor.getMinutes()).padStart(2, '0')}`
-        const cursorMs = cursor.getTime()
+      for (let minutosDesdeMedianoche = 0; minutosDesdeMedianoche < 24 * 60; minutosDesdeMedianoche += 15) {
+        const cursorMs = inicioDia.getTime() + minutosDesdeMedianoche * 60000
+        const horaStr = `${String(Math.floor(minutosDesdeMedianoche / 60)).padStart(2, '0')}:${String(minutosDesdeMedianoche % 60).padStart(2, '0')}`
 
         if (cursorMs > ahoraMs && cabeElPartido(retoCancha, retoFecha, horaStr)) {
           const chocaReto = (retosDia || []).some((r: any) =>
@@ -662,11 +659,10 @@ export default function LadderPage() {
           if (!chocaReto && !chocaReserva) {
             opciones.push({
               value: horaStr,
-              label: cursor.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+              label: formatearHora(new Date(cursorMs)),
             })
           }
         }
-        cursor.setMinutes(cursor.getMinutes() + 15)
       }
 
       if (!cancelado) {
@@ -709,7 +705,7 @@ export default function LadderPage() {
 
     setGuardandoReagendo(true)
     try {
-      const nuevaFechaHora = new Date(`${nuevaFechaReagendar}T${nuevaHoraReagendar}`)
+      const nuevaFechaHora = instanteEnCaracas(nuevaFechaReagendar, nuevaHoraReagendar)
 
       const res = await fetch('/api/jugador/reagendar-reto', {
         method: 'POST',
@@ -761,9 +757,8 @@ export default function LadderPage() {
         return
       }
 
-      const maxFechaReto = new Date()
-      maxFechaReto.setDate(maxFechaReto.getDate() + 6)
-      if (retoFecha > maxFechaReto.toISOString().slice(0, 10)) {
+      const maxFechaRetoStr = fechaISOEnCaracas(sumarDiasEnCaracas(new Date(), 6))
+      if (retoFecha > maxFechaRetoStr) {
         setRetoFormMsg('❌ No puedes proponer una fecha a más de 6 días — dejarías al otro jugador esperando demasiado tiempo. Elige una fecha más cercana.')
         return
       }
@@ -783,9 +778,9 @@ export default function LadderPage() {
       // por 1 hora y 30 minutos — así que rechazamos otro reto en la misma cancha
       // si su horario cae dentro de esa ventana de algún partido ya pendiente/aceptado.
       if (retoCancha !== 'FORANEA') {
-        const fechaPropuestaCheck = new Date(`${retoFecha}T${retoHora}`)
-        const inicioDia = new Date(`${retoFecha}T00:00:00`)
-        const finDia = new Date(`${retoFecha}T23:59:59`)
+        const fechaPropuestaCheck = instanteEnCaracas(retoFecha, retoHora)
+        const inicioDia = instanteEnCaracas(retoFecha)
+        const finDia = finDelDiaEnCaracas(inicioDia)
         const DURACION_PARTIDO_MS = 90 * 60 * 1000
 
         const { data: partidosCancha, error: errCancha } = await supabase
@@ -812,12 +807,11 @@ export default function LadderPage() {
           const horaConflicto = new Date(conflicto.fecha_propuesta)
           const ocupadaDesde = new Date(horaConflicto.getTime() - DURACION_PARTIDO_MS)
           const ocupadaHasta = new Date(horaConflicto.getTime() + DURACION_PARTIDO_MS)
-          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
           const nombreCancha = retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'
           setRetoFormMsg(
             conflicto.estado === 'pendiente'
-              ? `❌ ${nombreCancha} está reservada de las ${fmt(ocupadaDesde)} a las ${fmt(ocupadaHasta)} por OTRO reto que todavía está pendiente de respuesta (nadie lo ha aceptado ni rechazado). Elige un horario fuera de ese rango, o inténtalo de nuevo más tarde por si se libera.`
-              : `❌ ${nombreCancha} está ocupada hasta las ${fmt(ocupadaHasta)} (bloqueada desde las ${fmt(ocupadaDesde)} por otro partido confirmado). Elige un horario fuera de ese rango.`
+              ? `❌ ${nombreCancha} está reservada de las ${formatearHora(ocupadaDesde)} a las ${formatearHora(ocupadaHasta)} por OTRO reto que todavía está pendiente de respuesta (nadie lo ha aceptado ni rechazado). Elige un horario fuera de ese rango, o inténtalo de nuevo más tarde por si se libera.`
+              : `❌ ${nombreCancha} está ocupada hasta las ${formatearHora(ocupadaHasta)} (bloqueada desde las ${formatearHora(ocupadaDesde)} por otro partido confirmado). Elige un horario fuera de ese rango.`
           )
           return
         }
@@ -845,8 +839,7 @@ export default function LadderPage() {
         })
 
         if (conflictoReserva) {
-          const fmt = (d: Date) => d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
-          setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual a las ${fmt(new Date(conflictoReserva.fecha_hora))}. Elige otro horario.`)
+          setRetoFormMsg(`❌ ${retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ya tiene una reserva casual a las ${formatearHora(conflictoReserva.fecha_hora)}. Elige otro horario.`)
           return
         }
       }
@@ -878,8 +871,7 @@ export default function LadderPage() {
       }
 
       // Verificación de enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo
-      const cincoDiasAtras = new Date()
-      cincoDiasAtras.setDate(cincoDiasAtras.getDate() - 5)
+      const cincoDiasAtras = sumarDiasEnCaracas(new Date(), -5)
 
       const { data: retosPrevios } = await supabase
         .from('retos')
@@ -901,14 +893,13 @@ export default function LadderPage() {
           .maybeSingle()
 
         if (resultadoReciente) {
-          const libera = new Date(resultadoReciente.validado_at)
-          libera.setDate(libera.getDate() + 5)
-          setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${libera.toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}.`)
+          const libera = sumarDiasEnCaracas(new Date(resultadoReciente.validado_at), 5)
+          setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${formatearFechaCorta(libera)}.`)
           return
         }
       }
 
-      const fechaPropuesta = new Date(`${retoFecha}T${retoHora}`).toISOString()
+      const fechaPropuesta = instanteEnCaracas(retoFecha, retoHora).toISOString()
 
       const res = await fetch('/api/jugador/crear-reto', {
         method: 'POST',
@@ -945,7 +936,7 @@ export default function LadderPage() {
 
         // Enviar el correo al rival en segundo plano — si falla, no afecta el reto ya creado
         if (data.id) {
-          fetch('/api/notificar/nuevo-reto', {
+          fetch('/api/notificar-nuevo-reto', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ retoId: data.id }),
@@ -1121,14 +1112,14 @@ export default function LadderPage() {
   const enStandby = (jugadorId: string) => {
     const s = standbyMap[jugadorId]
     if (!s) return false
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyEnCaracas()
     return hoy >= s.fecha_inicio && hoy <= s.fecha_fin
   }
 
   const enPermisoMedico = (jugadorId: string) => {
     const p = permisoMedicoMap[jugadorId]
     if (!p) return false
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyEnCaracas()
     return hoy >= p.fecha_inicio && hoy <= p.fecha_fin
   }
 
@@ -1305,9 +1296,7 @@ export default function LadderPage() {
                       <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retador?.nombre}</strong> vs <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retado?.nombre}</strong>
                     </p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#5c5c5c' }}>
-                      {new Date(partido.fecha_propuesta).toLocaleString('es-ES', {
-                        weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas',
-                      })}
+                      {formatearFechaHora(partido.fecha_propuesta)}
                       {' · '}
                       {partido.cancha === 'FORANEA'
                         ? (partido.nombre_cancha_foranea || 'Cancha foránea')
@@ -1351,7 +1340,7 @@ export default function LadderPage() {
                 padding: '16px 20px', marginBottom: '24px', textAlign: 'center',
               }}>
                 <p style={{ margin: 0, color: '#7a4a0e', fontWeight: 'bold', fontSize: '14px' }}>
-                  🧳 Estás en modo standby hasta el {new Date(standbyMap[session!.id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+                  🧳 Estás en modo standby hasta el {formatearFechaCorta(instanteEnCaracas(standbyMap[session!.id].fecha_fin))}
                 </p>
                 <p style={{ margin: '4px 0 0 0', color: '#7a4a0e', fontSize: '12px' }}>
                   No puedes retar ni ser retado durante este periodo.
@@ -1365,7 +1354,7 @@ export default function LadderPage() {
                 padding: '16px 20px', marginBottom: '24px', textAlign: 'center',
               }}>
                 <p style={{ margin: 0, color: '#0c5460', fontWeight: 'bold', fontSize: '14px' }}>
-                  🩹 Tienes permiso médico hasta el {new Date(permisoMedicoMap[session.id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+                  🩹 Tienes permiso médico hasta el {formatearFechaCorta(instanteEnCaracas(permisoMedicoMap[session.id].fecha_fin))}
                 </p>
                 <p style={{ margin: '4px 0 0 0', color: '#0c5460', fontSize: '12px' }}>
                   Tu posición queda congelada — no puedes retar ni ser retado durante este periodo.
@@ -1375,7 +1364,7 @@ export default function LadderPage() {
 
             {/* Aviso para anotarse a la temporada activa */}
             {session?.role === 'jugador' && yaAnotado === false && (() => {
-              const hoy = new Date().toISOString().slice(0, 10)
+              const hoy = hoyEnCaracas()
               const plazoVencido = !!temporadaLimite && hoy > temporadaLimite
               const cerrado = plazoVencido || temporadaSorteada
 
@@ -1482,12 +1471,12 @@ export default function LadderPage() {
                             {p.jugadores?.nombre || 'Jugador'}
                             {enStandby(p.jugador_id) && (
                               <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 'bold', color: '#e67e22', background: '#fff3cd', padding: '2px 6px', borderRadius: '10px' }}>
-                                🧳 de viaje hasta {new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                🧳 de viaje hasta {formatearFechaCorta(instanteEnCaracas(standbyMap[p.jugador_id].fecha_fin), { mes: 'corto' })}
                               </span>
                             )}
                             {enPermisoMedico(p.jugador_id) && (
                               <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 'bold', color: '#0c5460', background: '#d1ecf1', padding: '2px 6px', borderRadius: '10px' }}>
-                                🩹 permiso médico hasta {new Date(permisoMedicoMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                🩹 permiso médico hasta {formatearFechaCorta(instanteEnCaracas(permisoMedicoMap[p.jugador_id].fecha_fin), { mes: 'corto' })}
                               </span>
                             )}
                           </td>
@@ -1517,11 +1506,11 @@ export default function LadderPage() {
                                       : yoEstoyCongelado
                                       ? (yoEstoyEnStandby ? 'Estás en modo standby — no puedes retar mientras dure' : 'Tienes un permiso médico activo — no puedes retar mientras dure')
                                       : enStandby(p.jugador_id)
-                                      ? `Este jugador está de viaje hasta el ${new Date(standbyMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES')}`
+                                      ? `Este jugador está de viaje hasta el ${formatearFechaCorta(instanteEnCaracas(standbyMap[p.jugador_id].fecha_fin))}`
                                       : enPermisoMedico(p.jugador_id)
-                                      ? `Este jugador tiene permiso médico hasta el ${new Date(permisoMedicoMap[p.jugador_id].fecha_fin + 'T00:00:00').toLocaleDateString('es-ES')}`
+                                      ? `Este jugador tiene permiso médico hasta el ${formatearFechaCorta(instanteEnCaracas(permisoMedicoMap[p.jugador_id].fecha_fin))}`
                                       : enEnfriamiento(p.jugador_id)
-                                      ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}`
+                                      ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${formatearFechaCorta(cooldowns[p.jugador_id])}`
                                       : jugadoresOcupados.has(p.jugador_id)
                                       ? 'Este jugador ya tiene un reto pendiente o en curso con otra persona'
                                       : bloqueado ? 'Tienes un reto pendiente o un partido en curso' : ''
@@ -1536,7 +1525,7 @@ export default function LadderPage() {
                                 )}
                                 {enEnfriamiento(p.jugador_id) && (
                                   <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
-                                    Disponible el {new Date(cooldowns[p.jugador_id]).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' })}
+                                    Disponible el {formatearFechaCorta(cooldowns[p.jugador_id])}
                                   </p>
                                 )}
                               </>
@@ -1565,8 +1554,7 @@ export default function LadderPage() {
                         onChange={(e) => setRetoFecha(e.target.value)}
                         min={temporadaInicio || undefined}
                         max={(() => {
-                          const en6Dias = new Date(); en6Dias.setDate(en6Dias.getDate() + 6)
-                          const en6DiasStr = en6Dias.toISOString().slice(0, 10)
+                          const en6DiasStr = fechaISOEnCaracas(sumarDiasEnCaracas(new Date(), 6))
                           return temporadaFin ? (en6DiasStr < temporadaFin ? en6DiasStr : temporadaFin) : en6DiasStr
                         })()}
                         style={inputPequeno}
@@ -1727,9 +1715,7 @@ export default function LadderPage() {
 
                       {r.fecha_propuesta && (
                         <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#555' }}>
-                          📅 {new Date(r.fecha_propuesta).toLocaleString('es-ES', {
-                            weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas',
-                          })}
+                          📅 {formatearFechaHora(r.fecha_propuesta)}
                         </p>
                       )}
                       {r.cancha && (
@@ -1744,8 +1730,7 @@ export default function LadderPage() {
                       )}
 
                       {fuerzaMayorActivo && ['pendiente', 'aceptado'].includes(r.estado) && r.fecha_propuesta &&
-                        new Date(new Date(r.fecha_propuesta).getTime() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10) ===
-                          new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10) && (
+                        fechaISOEnCaracas(r.fecha_propuesta) === hoyEnCaracas() && (
                         <div style={{ margin: '0 0 10px 0' }}>
                           {reagendandoRetoId === r.id ? (
                             <div style={{ background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '8px', padding: '10px 12px' }}>
@@ -1757,7 +1742,7 @@ export default function LadderPage() {
                                   type="date"
                                   value={nuevaFechaReagendar}
                                   onChange={(e) => setNuevaFechaReagendar(e.target.value)}
-                                  min={new Date().toISOString().slice(0, 10)}
+                                  min={hoyEnCaracas()}
                                   style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
                                 />
                                 {(() => {
@@ -1835,7 +1820,7 @@ export default function LadderPage() {
                             <button
                               onClick={() => {
                                 setReagendandoRetoId(r.id)
-                                setNuevaFechaReagendar(new Date().toISOString().slice(0, 10))
+                                setNuevaFechaReagendar(hoyEnCaracas())
                                 setNuevaHoraReagendar('19:00')
                                 setNuevaCanchaReagendar(r.cancha || 'HGV1')
                                 setNuevaCanchaForaneaReagendar(r.nombre_cancha_foranea || '')
@@ -1934,7 +1919,7 @@ export default function LadderPage() {
                         if (!puedeCargar) {
                           return (
                             <p style={{ fontSize: '13px', color: '#666', background: '#f0f0f0', padding: '8px 12px', borderRadius: '6px', margin: 0 }}>
-                              🕐 Podrás cargar el resultado a partir del {new Date(r.fecha_propuesta!).toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}, o antes si un administrador lo autoriza.
+                              🕐 Podrás cargar el resultado a partir del {formatearFechaHora(r.fecha_propuesta!)}, o antes si un administrador lo autoriza.
                             </p>
                           )
                         }
@@ -2356,7 +2341,7 @@ export default function LadderPage() {
                         <div key={i} style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: '6px', padding: '8px 12px', fontSize: '11px' }}>
                           vs <strong>{p.oponente}</strong> — <span style={{ fontFamily: 'var(--font-mono)' }}>{p.marcador}</span>
                           <br />
-                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? new Date(p.fecha).toLocaleDateString('es-ES', { timeZone: 'America/Caracas' }) : ''}</span>
+                          <span style={{ color: '#6b6b6b' }}>{p.temporada} · {p.fecha ? formatearFechaCorta(p.fecha, { mes: 'corto' }) : ''}</span>
                         </div>
                       ))}
                     </div>
