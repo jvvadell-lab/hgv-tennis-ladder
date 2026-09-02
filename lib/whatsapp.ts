@@ -1,5 +1,7 @@
 // Arma un link "click-to-chat" de WhatsApp (wa.me) para avisarle al rival de un reto
 // recién creado — sin API de WhatsApp Business, sin backend, igual que hace Paddit.
+import { formatearFechaLarga } from '@/lib/tiempo'
+
 export function formatWhatsAppNumber(telefono: string): string {
   const digits = telefono.replace(/\D/g, '')
   const sinCero = digits.startsWith('0') ? digits.slice(1) : digits
@@ -7,12 +9,7 @@ export function formatWhatsAppNumber(telefono: string): string {
 }
 
 export function formatearFechaLegible(fechaISO: string): string {
-  const fecha = new Date(fechaISO)
-  return new Intl.DateTimeFormat('es-VE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(fecha)
+  return formatearFechaLarga(fechaISO)
   // → "sábado 5 de septiembre"
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
+import { formatearFechaHora } from '@/lib/tiempo'
 
 function nombreCancha(cancha: string | null, nombreForanea: string | null) {
   if (!cancha) return 'Por definir'
@@ -44,12 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El retado no tiene email registrado.' }, { status: 400 })
     }
 
-    const fecha = reto.fecha_propuesta
-      ? new Date(reto.fecha_propuesta).toLocaleString('es-ES', {
-          weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
-          timeZone: 'America/Caracas',
-        })
-      : 'Por definir'
+    const fecha = reto.fecha_propuesta ? formatearFechaHora(reto.fecha_propuesta) : 'Por definir'
 
     const telefonoLimpio = retador?.telefono ? String(retador.telefono).replace(/\D/g, '') : ''
     const linkWhatsapp = telefonoLimpio ? `https://wa.me/${telefonoLimpio}` : null
