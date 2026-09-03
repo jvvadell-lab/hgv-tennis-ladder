@@ -40,8 +40,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `${nombre} tiene un reto pendiente o en curso en esta temporada — cancélalo primero desde la pestaña Desafíos.` }, { status: 400 })
     }
 
-    const { error: errDelete } = await db.from('ladder_posiciones').delete().eq('id', posicionId)
-    if (errDelete) throw errDelete
+    // El borrado y el renumerado de los que quedan detrás van en una sola transacción
+    // (la función es atómica por statement) para que un fallo a mitad de camino no deje
+    // el escalafón con una renumeración parcial — ver
+    // supabase/migrations/20260903000000_retirar_de_escalafon_renumera.sql
+    const { data: resultado, error: errRetirar } = await db.rpc('retirar_de_escalafon', {
+      p_posicion_id: posicionId,
+    })
+    if (errRetirar) {
+      console.error('[retirar-de-escalafon] falló el borrado+renumerado', {
+        posicionId,
+        temporadaId: posicion.temporada_id,
+        jugadorId: posicion.jugador_id,
+        error: errRetirar,
+      })
+      throw errRetirar
+    }
+
+    console.log('[retirar-de-escalafon] ok', { posicionId, ...resultado })
 
     return NextResponse.json({ ok: true, nombre })
   } catch (err: any) {
