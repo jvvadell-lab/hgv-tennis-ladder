@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
     const { data: reto, error: errReto } = await db
       .from('retos')
-      .select('id, estado')
+      .select('id, estado, retador_id, retado_id')
       .eq('id', retoId)
       .maybeSingle()
     if (errReto) throw errReto
@@ -29,9 +29,27 @@ export async function POST(request: Request) {
     }
 
     // Reutilizamos el estado "rechazado" para representar la cancelación
-    // administrativa — libera a ambos jugadores para retar de nuevo.
+    // administrativa — libera a ambos jugadores para retar de nuevo (trigger
+    // trg_retos_sync_ocupados limpia jugadores_ocupados automáticamente).
     const { error } = await db.from('retos').update({ estado: 'rechazado' }).eq('id', retoId)
     if (error) throw error
+
+    // No dejamos que un fallo al notificar tumbe la cancelación, que ya quedó guardada.
+    const { error: errNotif } = await db.from('notificaciones').insert([
+      {
+        jugador_id: reto.retador_id,
+        tipo: 'reto_cancelado_admin',
+        reto_id: retoId,
+        mensaje: 'Un administrador canceló tu reto pendiente. Ya puedes retar de nuevo.',
+      },
+      {
+        jugador_id: reto.retado_id,
+        tipo: 'reto_cancelado_admin',
+        reto_id: retoId,
+        mensaje: 'Un administrador canceló tu reto pendiente. Ya puedes retar de nuevo.',
+      },
+    ])
+    if (errNotif) console.error('[cancelar-reto] Error al crear notificaciones:', errNotif)
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {
