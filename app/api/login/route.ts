@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     // 2. ¿Es jugador?
     const { data: jugador } = await db
       .from('jugadores')
-      .select('id, nombre, email, pin, categoria, genero, activo')
+      .select('id, nombre, email, pin, categoria, genero, activo, email_verificado')
       .eq('email', email)
       .maybeSingle()
 
@@ -38,6 +38,13 @@ export async function POST(request: Request) {
       if (!jugador.activo) {
         return NextResponse.json(
           { error: 'Tu cuenta está inactiva. Contacta a un administrador.' },
+          { status: 403 }
+        )
+      }
+
+      if (!jugador.email_verificado) {
+        return NextResponse.json(
+          { error: 'Debes verificar tu correo antes de entrar — revisa tu bandeja de entrada (y spam).' },
           { status: 403 }
         )
       }

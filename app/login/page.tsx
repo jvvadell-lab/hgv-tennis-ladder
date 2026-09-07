@@ -1,11 +1,18 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function Login() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextParam = searchParams.get('next') || ''
+  // Solo aceptamos rutas internas relativas (empiezan con "/" pero no "//"),
+  // para que nadie pueda armar un enlace que redirija a un sitio externo.
+  const destinoDespuesDeLogin = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/ladder'
+
   const [formData, setFormData] = useState({ email: '', pin: '' })
   const [message, setMessage] = useState('')
+  const [correoSinVerificar, setCorreoSinVerificar] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -16,6 +23,7 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setMessage('')
+    setCorreoSinVerificar(false)
 
     try {
       const res = await fetch('/api/login', {
@@ -27,13 +35,14 @@ export default function Login() {
 
       if (!res.ok) {
         setMessage('❌ ' + (data.error || 'Email o PIN incorrecto'))
+        setCorreoSinVerificar(!!data.error?.includes('verificar tu correo'))
         setLoading(false)
         return
       }
 
       setMessage(`✅ ¡Bienvenido ${data.nombre}!`)
       setTimeout(() => {
-        router.push(data.role === 'admin' ? '/admin' : '/ladder')
+        router.push(data.role === 'admin' ? '/admin' : destinoDespuesDeLogin)
       }, 1000)
     } catch {
       setMessage('❌ Error al iniciar sesión. Intenta de nuevo.')
@@ -137,6 +146,16 @@ export default function Login() {
               {message}
             </div>
           )}
+          {correoSinVerificar && (
+            <p style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <a
+                href={`/reenviar-verificacion?email=${encodeURIComponent(formData.email.trim().toLowerCase())}`}
+                style={{ color: 'var(--color-court)', fontSize: '13px', textDecoration: 'underline' }}
+              >
+                Reenviar correo de verificación
+              </a>
+            </p>
+          )}
 
           <button
             type="submit"
@@ -182,5 +201,16 @@ export default function Login() {
         </div>
       </div>
     </main>
+  )
+}
+
+// useSearchParams() exige que el componente que lo usa esté envuelto en
+// Suspense — si no, Next.js no puede generar la página estáticamente y el
+// build falla. Este export es el que realmente usa Next.js como la página.
+export default function Login() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   )
 }

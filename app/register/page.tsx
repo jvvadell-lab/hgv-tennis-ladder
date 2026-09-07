@@ -72,8 +72,9 @@ function RegisterForm() {
   const [fotoCarnetError, setFotoCarnetError] = useState('')
   const [archivoParaRecortar, setArchivoParaRecortar] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [registroExitoso, setRegistroExitoso] = useState(false)
+  const [emailRegistrado, setEmailRegistrado] = useState('')
 
   // Formatos que aceptamos para la foto del carné, y tamaño máximo del archivo.
   const FORMATOS_CARNET_ACEPTADOS = ['image/jpeg', 'image/png', 'image/webp']
@@ -115,7 +116,6 @@ function RegisterForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setMessage('')
     setError('')
 
     try {
@@ -136,25 +136,32 @@ function RegisterForm() {
         fotoCarnetUrl = publicUrlData.publicUrl
       }
 
+      // El correo debe quedar verificado antes de poder iniciar sesión — generamos
+      // el token ya mismo y lo guardamos junto con el resto de los datos del registro.
+      const tokenVerificacion = crypto.randomUUID()
+      const emailNormalizado = formData.email.trim().toLowerCase()
+
       const { data: nuevoJugador, error } = await supabase
         .from('jugadores')
         .insert([{
           nombre: toTitleCase(formData.name.trim()),
-          email: formData.email.trim().toLowerCase(),
+          email: emailNormalizado,
           telefono: `+58 ${formatTelefonoLocal(formData.phone)}`,
           categoria: formData.categoria,
           genero: formData.genero,
           pin: formData.pin,
           numero_accion: formData.numeroAccion,
           foto_carnet_url: fotoCarnetUrl,
-          activo: true
+          activo: true,
+          token_verificacion: tokenVerificacion,
         }])
         .select('id')
         .single()
 
       if (error) throw error
 
-      // Correo de bienvenida en segundo plano — si falla, no afecta el registro ya hecho.
+      // Correo de bienvenida (con el enlace de verificación) en segundo plano —
+      // si falla, no afecta el registro ya hecho; el jugador puede reenviarlo después.
       if (nuevoJugador?.id) {
         fetch('/api/registro/bienvenida', {
           method: 'POST',
@@ -163,7 +170,7 @@ function RegisterForm() {
         }).catch(() => {})
 
         // Verificación automática del carné (si subieron foto) — también en
-        // segundo plano, no bloquea el registro ni el login automático.
+        // segundo plano, no bloquea el registro.
         fetch('/api/registro/verificar-carnet', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -171,20 +178,9 @@ function RegisterForm() {
         }).catch(() => {})
       }
 
-      // Dejarlo logueado de una vez con el email/PIN que acaba de crear, y mandarlo
-      // directo al destino (Reservas por defecto, o donde haya indicado el "next").
-      const resLogin = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formData.email.trim().toLowerCase(), pin: formData.pin }),
-      })
-
-      if (resLogin.ok) {
-        window.location.href = destinoDespuesDeRegistrar
-        return
-      }
-
-      setMessage('✅ ¡Registro exitoso! Ya puedes iniciar sesión con tu email y PIN')
+      // Ya no lo dejamos logueado de una vez — primero debe confirmar su correo.
+      setEmailRegistrado(emailNormalizado)
+      setRegistroExitoso(true)
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
       quitarFotoCarnet()
     } catch (err: any) {
@@ -243,6 +239,32 @@ function RegisterForm() {
           </p>
         </div>
 
+        {registroExitoso ? (
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '32px', margin: '0 0 12px 0' }}>📬</p>
+            <p style={{ fontSize: '15px', color: 'var(--color-ink)', marginBottom: '10px' }}>
+              ¡Registro exitoso! Te enviamos un correo a <strong>{emailRegistrado}</strong> para confirmar tu cuenta.
+            </p>
+            <p style={{ fontSize: '14px', color: 'var(--color-line)', marginBottom: '24px' }}>
+              Revisa tu bandeja de entrada (y la de spam, por si acaso) y haz clic en el enlace de verificación antes de iniciar sesión.
+            </p>
+            <a href={`/login?next=${encodeURIComponent(destinoDespuesDeRegistrar)}`} style={{
+              display: 'inline-block', color: 'var(--color-ink)', fontSize: '15px', fontWeight: 700,
+              fontFamily: 'var(--font-body)', textDecoration: 'none', background: 'var(--color-ball)',
+              borderRadius: '4px', padding: '12px 26px',
+            }}>
+              Ir a Iniciar sesión
+            </a>
+            <p style={{ marginTop: '18px' }}>
+              <a
+                href={`/reenviar-verificacion?email=${encodeURIComponent(emailRegistrado)}`}
+                style={{ color: 'var(--color-court)', fontSize: '13px', textDecoration: 'underline' }}
+              >
+                ¿No te llegó el correo? Reenviar verificación
+              </a>
+            </p>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '18px' }}>
             <label style={labelStyle}>Nombre completo *</label>
@@ -395,14 +417,6 @@ function RegisterForm() {
             </select>
           </div>
 
-          {message && (
-            <div style={{
-              background: 'rgba(47,82,51,0.1)', color: 'var(--color-net)',
-              padding: '12px', borderRadius: '4px', marginBottom: '18px', textAlign: 'center', fontSize: '14px'
-            }}>
-              {message}
-            </div>
-          )}
           {error && (
             <div style={{
               background: 'rgba(197,60,50,0.1)', color: '#a83226',
@@ -431,6 +445,7 @@ function RegisterForm() {
             {loading ? 'Registrando…' : 'Registrarme'}
           </button>
         </form>
+        )}
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <a href="/" style={{

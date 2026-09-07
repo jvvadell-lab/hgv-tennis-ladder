@@ -1869,7 +1869,7 @@ export default function AdminPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide')
+      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide')
       .order('created_at', { ascending: false })
     if (!error) setPlayers(data || [])
     await fetchInscritosTempActiva()
@@ -1900,6 +1900,26 @@ export default function AdminPage() {
   }
 
   const [verificando, setVerificando] = useState<string | null>(null)
+  const [verificandoCorreo, setVerificandoCorreo] = useState<string | null>(null)
+
+  const verificarCorreoManual = async (jugadorId: string) => {
+    if (!confirm('¿Marcar el correo de este jugador como verificado? Úsalo solo si estás seguro de que el correo es correcto.')) return
+    setVerificandoCorreo(jugadorId)
+    try {
+      const res = await fetch('/api/admin/verificar-correo-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al verificar el correo')
+      fetchPlayers()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setVerificandoCorreo(null)
+    }
+  }
 
   const verificarJugador = async (jugadorId: string, estado: string) => {
     setVerificando(jugadorId)
@@ -2345,7 +2365,26 @@ export default function AdminPage() {
                             >
                               {player.nombre}
                             </td>
-                            <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.email}</td>
+                            <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>
+                              {player.email}
+                              <div style={{ marginTop: '4px' }}>
+                                {player.email_verificado ? (
+                                  <span style={{ color: '#28a745', fontWeight: 'bold', fontSize: '11px' }}>✅ Correo verificado</span>
+                                ) : (
+                                  <>
+                                    <span style={{ color: '#e67e22', fontWeight: 'bold', fontSize: '11px' }}>✉️ Sin verificar</span>
+                                    <button
+                                      onClick={() => verificarCorreoManual(player.id)}
+                                      disabled={verificandoCorreo === player.id}
+                                      title="Para cuando el jugador escribió mal su correo y no puede recibir el enlace de verificación"
+                                      style={{ display: 'block', marginTop: '2px', background: 'none', border: '1px solid #e67e22', color: '#e67e22', padding: '2px 6px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}
+                                    >
+                                      {verificandoCorreo === player.id ? 'Verificando…' : 'Verificar correo manualmente'}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.telefono}</td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>
                               {player.numero_accion || '—'}

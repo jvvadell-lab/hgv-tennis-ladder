@@ -13,11 +13,28 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const { data: jugador, error } = await db
       .from('jugadores')
-      .select('nombre, email')
+      .select('nombre, email, token_verificacion')
       .eq('id', jugadorId)
       .maybeSingle()
     if (error) throw error
     if (!jugador?.email) return NextResponse.json({ ok: true }) // nada que hacer, pero no es un error del registro
+
+    const enlaceVerificacion = jugador.token_verificacion
+      ? `https://hgv-tennis-ladder.vercel.app/verificar-correo?token=${jugador.token_verificacion}`
+      : null
+
+    const bloqueVerificacion = enlaceVerificacion
+      ? `
+        <div style="background: #f0f7fc; border: 2px solid #1c7ec4; border-radius: 8px; padding: 18px 20px; margin: 20px 0; text-align: center;">
+          <p style="margin: 0 0 12px 0; font-weight: bold; color: #0c5460; font-size: 15px;">📬 Un último paso: confirma tu correo</p>
+          <p style="margin: 0 0 16px 0; font-size: 14px; color: #333;">Antes de poder iniciar sesión, necesitamos que verifiques que este correo es tuyo.</p>
+          <a href="${enlaceVerificacion}" style="display: inline-block; background: #1c7ec4; color: #ffffff; text-decoration: none; font-weight: bold; padding: 12px 28px; border-radius: 6px; font-size: 15px;">
+            ✅ Verificar mi correo
+          </a>
+          <p style="margin: 14px 0 0 0; font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br />${enlaceVerificacion}</p>
+        </div>
+      `
+      : ''
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
@@ -28,6 +45,8 @@ export async function POST(request: Request) {
         <p>Esto no se trata solo de ganar o perder. Se trata de competir con nobleza, medirnos con respeto, y fortalecer los lazos que nos hacen, ante todo, una hermandad. Cada reto que lances es una oportunidad para crecer como jugador — y para escribir, junto a todos nosotros, la primera página de esta escalera.</p>
         <p>Ahora te toca a ti, <strong>${jugador.nombre || ''}</strong>. Anótate, reta, compite — y hazte parte de esta primera escalera que esperamos se convierta en tradición.</p>
         <p>¡Nos vemos en cancha! 🎾🏆</p>
+
+        ${bloqueVerificacion}
 
         <div style="background: #fdf6d8; border: 1px solid #d4e157; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
           <p style="margin: 0 0 10px 0; font-weight: bold; color: #1c7ec4; font-size: 15px;">✅ Para quedar listo, solo necesitas:</p>
