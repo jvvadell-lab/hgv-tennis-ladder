@@ -21,11 +21,11 @@ export async function POST(request: Request) {
       .maybeSingle()
     if (errBuscar) throw errBuscar
     if (!reto) return NextResponse.json({ error: 'Reto no encontrado' }, { status: 404 })
-    if (reto.estado !== 'rechazado') {
-      return NextResponse.json({ error: 'Solo se pueden eliminar retos rechazados. Los demás usa "Cancelar reto".' }, { status: 400 })
+    if (!['rechazado', 'cancelado'].includes(reto.estado)) {
+      return NextResponse.json({ error: 'Solo se pueden eliminar retos rechazados o cancelados. Los demás usa "Cancelar reto".' }, { status: 400 })
     }
 
-    // Por si acaso quedó algún resultado huérfano asociado (no debería pasar en un rechazado).
+    // Por si acaso quedó algún resultado huérfano asociado (no debería pasar en un rechazado/cancelado).
     await db.from('resultados').delete().eq('reto_id', retoId)
 
     const { error: errDelete } = await db.from('retos').delete().eq('id', retoId)

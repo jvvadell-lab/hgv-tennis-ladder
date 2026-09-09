@@ -6,6 +6,7 @@ import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 const AJUSTES_PERMITIDOS = [-1, 2] // solo "un día antes" o "dos días después"
+const MENSAJE_LIMITE_RECHAZO = 'Ya usaste tu única oportunidad de rechazar un reto esta temporada. Si la fecha no te sirve, puedes aceptar con un día antes o dos días después en su lugar.'
 
 export async function POST(request: Request) {
   try {
@@ -51,9 +52,7 @@ export async function POST(request: Request) {
         .eq('temporada_id', reto.temporada_id)
         .eq('estado', 'rechazado')
       if ((count || 0) >= 1) {
-        return NextResponse.json({
-          error: 'Ya usaste tu única oportunidad de rechazar un reto esta temporada. Si la fecha no te sirve, puedes aceptar con un día antes o dos días después en su lugar.',
-        }, { status: 400 })
+        return NextResponse.json({ error: MENSAJE_LIMITE_RECHAZO }, { status: 400 })
       }
     }
 
@@ -107,7 +106,15 @@ export async function POST(request: Request) {
     }
 
     const { error: errUpdate } = await db.from('retos').update(updateData).eq('id', retoId)
-    if (errUpdate) throw errUpdate
+    if (errUpdate) {
+      // El índice único ux_retos_un_rechazo_por_temporada es quien de verdad
+      // garantiza el límite (a prueba de carreras) — el conteo de arriba es
+      // solo para dar el mensaje de error sin llegar a chocar con la BD.
+      if (errUpdate.code === '23505') {
+        return NextResponse.json({ error: MENSAJE_LIMITE_RECHAZO }, { status: 400 })
+      }
+      throw errUpdate
+    }
 
     // Si lo rechazó, avisamos por correo a quien lo había retado (si falla el correo, no revertimos nada)
     if (nuevoEstado === 'rechazado') {

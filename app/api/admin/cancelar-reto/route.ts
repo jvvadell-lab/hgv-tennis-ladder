@@ -28,10 +28,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Este reto ya no está activo, no hace falta cancelarlo.' }, { status: 400 })
     }
 
-    // Reutilizamos el estado "rechazado" para representar la cancelación
-    // administrativa — libera a ambos jugadores para retar de nuevo (trigger
-    // trg_retos_sync_ocupados limpia jugadores_ocupados automáticamente).
-    const { error } = await db.from('retos').update({ estado: 'rechazado' }).eq('id', retoId)
+    // Estado propio "cancelado" (distinto de "rechazado") — libera a ambos
+    // jugadores para retar de nuevo (trigger trg_retos_sync_ocupados limpia
+    // jugadores_ocupados automáticamente). Antes reutilizábamos "rechazado"
+    // para esto, pero eso inflaba silenciosamente el conteo de "1 rechazo
+    // por temporada" de un jugador con cancelaciones que no eran su culpa.
+    const { error } = await db.from('retos').update({ estado: 'cancelado' }).eq('id', retoId)
     if (error) throw error
 
     // No dejamos que un fallo al notificar tumbe la cancelación, que ya quedó guardada.

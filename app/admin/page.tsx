@@ -838,7 +838,7 @@ export default function AdminPage() {
   const [eliminandoReto, setEliminandoReto] = useState<string | null>(null)
 
   const eliminarReto = async (retoId: string) => {
-    if (!confirm('¿Eliminar este reto rechazado por completo? No se puede deshacer.')) return
+    if (!confirm('¿Eliminar este reto por completo? No se puede deshacer.')) return
     setEliminandoReto(retoId)
     try {
       const res = await fetch('/api/admin/eliminar-reto', {
@@ -905,6 +905,7 @@ export default function AdminPage() {
       pendiente: { bg: '#fff3cd', color: '#856404' },
       aceptado: { bg: '#d1ecf1', color: '#0c5460' },
       rechazado: { bg: '#f8d7da', color: '#721c24' },
+      cancelado: { bg: '#e2e3e5', color: '#383d41' },
       jugado: { bg: '#d4edda', color: '#155724' },
       no_presentado: { bg: '#e2e3e5', color: '#383d41' },
     }
@@ -2664,6 +2665,7 @@ export default function AdminPage() {
                   <option value="aceptado">Aceptado</option>
                   <option value="jugado">Jugado</option>
                   <option value="rechazado">Rechazado</option>
+                  <option value="cancelado">Cancelado</option>
                   <option value="no_presentado">No presentado</option>
                 </select>
                 <button
@@ -2744,7 +2746,7 @@ export default function AdminPage() {
                                     Cancelar reto
                                   </button>
                                 )}
-                                {r.estado === 'rechazado' && (
+                                {['rechazado', 'cancelado'].includes(r.estado) && (
                                   <button
                                     onClick={() => eliminarReto(r.id)}
                                     disabled={eliminandoReto === r.id}
