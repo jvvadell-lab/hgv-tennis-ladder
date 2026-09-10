@@ -169,6 +169,13 @@ export default function LadderPage() {
   const [retosExpressActivos, setRetosExpressActivos] = useState<{ fecha_propuesta: string; cancha: string }[]>([])
   const [canchaExpress, setCanchaExpress] = useState('HGV1')
   const [horarioExpress, setHorarioExpress] = useState('')
+  // Contador que no se usa por su valor, solo para forzar un re-render periódico:
+  // escaleraExpressActiva/ventanaExpressAbiertaAhora (más abajo) se recalculan con
+  // la hora real en cada render, pero si nadie toca la página nada dispara ese
+  // render — sin este tick, alguien que ya tenga la Escalera abierta desde antes
+  // de que abra (o cierre) la ventana no vería aparecer (ni desaparecer) la grilla
+  // sola, tendría que recargar.
+  const [, reevaluarVentanaExpress] = useState(0)
 
   // Al abrir el formulario de retar, bajamos la pantalla de una vez hasta ahí
   // — así el jugador no tiene que buscarlo manualmente más abajo en la tabla.
@@ -1183,6 +1190,17 @@ export default function LadderPage() {
   // y de nuevo desde que se cierra (se llenan los 12 cupos, o llega el sábado).
   const creacionDeRetosBloqueada = escaleraExpressActiva && !ventanaExpressAbiertaAhora
   const rangoRetoActivo = ventanaExpressAbiertaAhora ? RANGO_RETO_EXPRESS : RANGO_RETO
+
+  // Tick cada 15s, sin condición, mientras la página de la Escalera esté montada
+  // — así, si alguien la tiene abierta desde antes de que abra o cierre la ventana
+  // de Escalera Express, la pantalla se actualiza sola (aparece/desaparece la
+  // grilla, se congela/descongela el botón de retar) sin que tenga que recargar.
+  // Corre siempre (no solo mientras escaleraExpressActiva) para no depender de
+  // que ese mismo cálculo ya esté al día — es justo lo que este tick corrige.
+  useEffect(() => {
+    const interval = setInterval(() => reevaluarVentanaExpress((n) => n + 1), 15000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Mientras la ventana de Escalera Express esté abierta, refrescamos los cupos
   // solos cada 15s — se espera que varios jugadores entren a la vez a elegir
