@@ -93,6 +93,7 @@ export default function AdminPage() {
   const [sorteando, setSorteando] = useState(false)
 
   const [retos, setRetos] = useState<any[]>([])
+  const [retosConResultado, setRetosConResultado] = useState<Set<string>>(new Set())
   const [loadingRetos, setLoadingRetos] = useState(false)
   const [fechaReservas, setFechaReservas] = useState(hoyEnCaracas())
   const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
@@ -880,12 +881,23 @@ export default function AdminPage() {
 
   const fetchRetos = async () => {
     setLoadingRetos(true)
+    const { data: resultadosExistentes } = await supabase.from('resultados').select('reto_id')
+    setRetosConResultado(new Set((resultadosExistentes || []).map((r: any) => r.reto_id)))
+
     const { data } = await supabase
       .from('retos')
       .select('id, estado, fecha_propuesta, cancha, nombre_cancha_foranea, comentarios, created_at, resultado_anticipado_autorizado, retador:retador_id(nombre, categoria, genero), retado:retado_id(nombre)')
       .order('created_at', { ascending: false })
     setRetos(data || [])
     setLoadingRetos(false)
+  }
+
+  // Días calendario en Caracas desde una fecha pasada hasta hoy — misma
+  // cuenta que usa el cron (procesar-retos) para sus recordatorios.
+  const diasDesdeEnCaracas = (fechaISO: string): number => {
+    const a = new Date(fechaISO + 'T00:00:00Z').getTime()
+    const b = new Date(hoyEnCaracas() + 'T00:00:00Z').getTime()
+    return Math.round((b - a) / (24 * 60 * 60 * 1000))
   }
 
   const autorizarAnticipado = async (retoId: string) => {
@@ -2724,6 +2736,13 @@ export default function AdminPage() {
                                 <span style={{ background: ec.bg, color: ec.color, padding: '4px 10px', borderRadius: '20px', fontSize: '13px', fontWeight: '600' }}>
                                   {r.estado}
                                 </span>
+                                {r.estado === 'aceptado' && r.fecha_propuesta && new Date(r.fecha_propuesta) < new Date() && !retosConResultado.has(r.id) && (
+                                  <div style={{ marginTop: '6px' }}>
+                                    <span style={{ background: '#f8d7da', color: '#721c24', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                      ⚠️ resultado pendiente hace {diasDesdeEnCaracas(fechaISOEnCaracas(r.fecha_propuesta))}d
+                                    </span>
+                                  </div>
+                                )}
                               </td>
                               <td style={{ padding: '12px 16px' }}>
                                 {r.estado === 'aceptado' && r.fecha_propuesta && new Date() < new Date(r.fecha_propuesta) && (

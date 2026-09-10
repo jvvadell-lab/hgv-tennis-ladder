@@ -118,7 +118,11 @@ export async function GET(request: Request) {
 
   const db = supabaseServer()
   const hoy = hoyEnCaracas()
-  const resumen = { recordatorio1: 0, recordatorio2: 0, autoAceptados: 0, avisoDelDia: 0, descensosPermisoMedico: 0, errores: [] as string[] }
+  const resumen = {
+    recordatorio1: 0, recordatorio2: 0, autoAceptados: 0, avisoDelDia: 0, descensosPermisoMedico: 0,
+    recordatorioResultado1: 0, recordatorioResultado2: 0, avisoAdminResultado: 0,
+    errores: [] as string[],
+  }
 
   try {
     // 1) Retos pendientes: recordatorios día 1 y 2, aceptación automática al día 3
@@ -183,8 +187,85 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2) Retos aceptados con partido programado para HOY — aviso de la mañana
     const inicioHoy = instanteEnCaracas(hoy)
+
+    // 2) Retos aceptados cuya fecha de partido ya pasó y nadie cargó el
+    // resultado: recordatorio a ambos jugadores los días 1 y 2, y al día 3
+    // un aviso al administrador para que intervenga manualmente — no se
+    // decide nada por el reto (ni estado ni ganador), solo se avisa. Usa su
+    // propio contador (recordatorios_resultado_enviados) en vez de
+    // recordatorios_enviados, porque ese otro campo ya se gastó en la fase
+    // 'pendiente' (recordatorios de respuesta) y podría llegar aquí ya en 1
+    // o 2, haciendo que el cron crea que ya avisó cuando en realidad nunca
+    // mandó estos correos.
+    const { data: resultadosExistentes } = await db.from('resultados').select('reto_id')
+    const idsConResultado = new Set((resultadosExistentes || []).map((res: any) => res.reto_id))
+
+    const { data: aceptadosSinResultado } = await db
+      .from('retos')
+      .select('id, fecha_propuesta, cancha, nombre_cancha_foranea, recordatorios_resultado_enviados, retador:retador_id(nombre, email), retado:retado_id(nombre, email)')
+      .eq('estado', 'aceptado')
+      .not('fecha_propuesta', 'is', null)
+      .lt('fecha_propuesta', inicioHoy.toISOString())
+
+    for (const r of (aceptadosSinResultado || []).filter((r: any) => !idsConResultado.has(r.id))) {
+      const dias = diasEntre(fechaISOEnCaracas(r.fecha_propuesta), hoy)
+      const retador: any = r.retador
+      const retado: any = r.retado
+      const fechaFmt = formatearFechaHora(r.fecha_propuesta)
+      const canchaFmt = nombreCancha(r.cancha, r.nombre_cancha_foranea)
+      const enviados = r.recordatorios_resultado_enviados || 0
+
+      try {
+        if (dias === 1 && enviados < 1) {
+          await db.from('retos').update({ recordatorios_resultado_enviados: 1 }).eq('id', r.id)
+          resumen.recordatorioResultado1++
+          for (const [destinatario, rival] of [[retador, retado], [retado, retador]] as const) {
+            if (!destinatario?.email) continue
+            await enviarCorreo(destinatario.email, '🎾 Recordatorio: registra el resultado de tu partido', envoltorio(`
+              <p>Hola ${destinatario.nombre || ''},</p>
+              <p>Tu partido contra <strong>${rival?.nombre || 'tu rival'}</strong> ya debería haberse jugado:</p>
+              ${tablaPartido(rival?.nombre || 'Rival', fechaFmt, canchaFmt)}
+              <p>Entra a la escalera y registra el resultado: si jugaron, carga el marcador; si tu rival no se presentó, usa la opción <strong>"El rival no se presentó"</strong> al registrar el resultado.</p>
+            `))
+          }
+        } else if (dias === 2 && enviados < 2) {
+          await db.from('retos').update({ recordatorios_resultado_enviados: 2 }).eq('id', r.id)
+          resumen.recordatorioResultado2++
+          for (const [destinatario, rival] of [[retador, retado], [retado, retador]] as const) {
+            if (!destinatario?.email) continue
+            await enviarCorreo(destinatario.email, '🎾 Último recordatorio: registra el resultado de tu partido', envoltorio(`
+              <p>Hola ${destinatario.nombre || ''},</p>
+              <p>Este es tu <strong>último recordatorio</strong> — todavía no se ha registrado el resultado de tu partido contra <strong>${rival?.nombre || 'tu rival'}</strong>:</p>
+              ${tablaPartido(rival?.nombre || 'Rival', fechaFmt, canchaFmt)}
+              <p>Entra a la escalera y registra el resultado: si jugaron, carga el marcador; si tu rival no se presentó, usa la opción <strong>"El rival no se presentó"</strong> al registrar el resultado. Si nadie lo hace, un administrador va a tener que intervenir manualmente.</p>
+            `))
+          }
+        } else if (dias === 3 && enviados < 3) {
+          await db.from('retos').update({ recordatorios_resultado_enviados: 3 }).eq('id', r.id)
+          resumen.avisoAdminResultado++
+
+          const { data: admins } = await db.from('administradores').select('email')
+          for (const admin of admins || []) {
+            if (!admin.email) continue
+            await enviarCorreo(admin.email, '⚠️ Partido sin resultado hace 3 días — revisión manual', envoltorio(`
+              <p>El siguiente partido de la Escalera lleva <strong>3 días</strong> sin que nadie cargue el resultado ni reporte inasistencia:</p>
+              <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                <tr><td style="padding: 6px 0; color: #666;">⚔️ Retador</td><td style="padding: 6px 0;"><strong>${retador?.nombre || '—'}</strong></td></tr>
+                <tr><td style="padding: 6px 0; color: #666;">🆚 Retado</td><td style="padding: 6px 0;"><strong>${retado?.nombre || '—'}</strong></td></tr>
+                <tr><td style="padding: 6px 0; color: #666;">📅 Fecha del partido</td><td style="padding: 6px 0;"><strong>${fechaFmt}</strong></td></tr>
+                <tr><td style="padding: 6px 0; color: #666;">🎾 Cancha</td><td style="padding: 6px 0;"><strong>${canchaFmt}</strong></td></tr>
+              </table>
+              <p>Contáctalos directamente para resolver qué pasó — el reto sigue en estado <strong>aceptado</strong>, no se tomó ninguna acción automática.</p>
+            `))
+          }
+        }
+      } catch (err: any) {
+        resumen.errores.push(`reto ${r.id} (resultado pendiente): ${err.message}`)
+      }
+    }
+
+    // 3) Retos aceptados con partido programado para HOY — aviso de la mañana
     const finHoy = sumarDiasEnCaracas(inicioHoy, 1)
 
     const { data: partidosHoy } = await db
@@ -224,7 +305,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // 3) Permisos médicos activos: descuento de posición cada 3 días
+    // 4) Permisos médicos activos: descuento de posición cada 3 días
     const { descensosAplicados, errores: erroresPermiso } = await aplicarDescensosPermisosMedicos(db, hoy)
     resumen.descensosPermisoMedico = descensosAplicados
     resumen.errores.push(...erroresPermiso)
