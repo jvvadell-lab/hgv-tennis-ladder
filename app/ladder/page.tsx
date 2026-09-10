@@ -9,6 +9,7 @@ import {
   hoyEnCaracas, fechaISOEnCaracas, instanteEnCaracas, finDelDiaEnCaracas, diaDeLaSemanaEnCaracas,
   sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora,
 } from '@/lib/tiempo'
+import { esEscaleraExpress, RANGO_RETO_EXPRESS, ventanaExpressAbierta, calcularCuposExpress } from '@/lib/escaleraExpress'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -39,6 +40,7 @@ type Reto = {
   nombre_cancha_foranea: string | null
   comentarios: string | null
   resultado_anticipado_autorizado: boolean
+  escalera_express: boolean
   retador?: { nombre: string } | null
   retado?: { nombre: string } | null
 }
@@ -48,6 +50,7 @@ type ProximoPartido = {
   fecha_propuesta: string
   cancha: string
   nombre_cancha_foranea: string | null
+  escalera_express: boolean
   retador: { nombre: string; categoria: string; genero: string } | null
   retado: { nombre: string } | null
 }
@@ -161,6 +164,12 @@ export default function LadderPage() {
   const [horariosRetoDisponibles, setHorariosRetoDisponibles] = useState<{ value: string; label: string }[]>([])
   const [cargandoHorariosReto, setCargandoHorariosReto] = useState(false)
 
+  // Escalera Express: retos activos (pendiente/aceptado) del evento, para saber
+  // qué cupos horario×cancha ya están ocupados y si la ventana sigue abierta.
+  const [retosExpressActivos, setRetosExpressActivos] = useState<{ fecha_propuesta: string; cancha: string }[]>([])
+  const [canchaExpress, setCanchaExpress] = useState('HGV1')
+  const [horarioExpress, setHorarioExpress] = useState('')
+
   // Al abrir el formulario de retar, bajamos la pantalla de una vez hasta ahí
   // — así el jugador no tiene que buscarlo manualmente más abajo en la tabla.
   useEffect(() => {
@@ -200,6 +209,22 @@ export default function LadderPage() {
       })
   }, [])
 
+  // Escalera Express: cupos horario×cancha ya tomados por retos pendientes/aceptados
+  // del evento — para saber si la ventana de creación sigue abierta y mostrar la
+  // grilla. Aparte de cargarDatos() (que trae todo lo demás), se llama sola al abrir
+  // el formulario de retar y tras un intento fallido, para que la grilla no se quede
+  // desactualizada mientras el jugador sigue en la página sin recargar.
+  const refrescarCuposExpress = useCallback(async () => {
+    if (!temporadaId) return
+    const { data: expressActivos } = await supabase
+      .from('retos')
+      .select('fecha_propuesta, cancha')
+      .eq('temporada_id', temporadaId)
+      .eq('escalera_express', true)
+      .in('estado', ['pendiente', 'aceptado'])
+    setRetosExpressActivos((expressActivos as any) || [])
+  }, [temporadaId])
+
   const cargarDatos = useCallback(async () => {
     if (!temporadaId) return
     setLoading(true)
@@ -229,6 +254,8 @@ export default function LadderPage() {
       ocupados.add(r.retado_id)
     })
     setJugadoresOcupados(ocupados)
+
+    await refrescarCuposExpress()
 
     // Jugadores en modo standby (viaje) en esta temporada — quien esté de viaje
     // no puede retar ni ser retado mientras dure su rango de fechas.
@@ -310,7 +337,7 @@ export default function LadderPage() {
     if (session?.role === 'jugador') {
       const { data: retos } = await supabase
         .from('retos')
-        .select('id, retador_id, retado_id, estado, created_at, fecha_propuesta, cancha, nombre_cancha_foranea, comentarios, resultado_anticipado_autorizado, retador:retador_id(nombre), retado:retado_id(nombre)')
+        .select('id, retador_id, retado_id, estado, created_at, fecha_propuesta, cancha, nombre_cancha_foranea, comentarios, resultado_anticipado_autorizado, escalera_express, retador:retador_id(nombre), retado:retado_id(nombre)')
         .eq('temporada_id', temporadaId)
         .or(`retador_id.eq.${session.id},retado_id.eq.${session.id}`)
         .order('created_at', { ascending: false })
@@ -372,13 +399,13 @@ export default function LadderPage() {
     }
 
     setLoading(false)
-  }, [temporadaId, categoria, genero, session])
+  }, [temporadaId, categoria, genero, session, refrescarCuposExpress])
 
   const cargarProximosPartidos = useCallback(async () => {
     if (!temporadaId) return
     const { data } = await supabase
       .from('retos')
-      .select('id, fecha_propuesta, cancha, nombre_cancha_foranea, retador:retador_id(nombre, categoria, genero), retado:retado_id(nombre)')
+      .select('id, fecha_propuesta, cancha, nombre_cancha_foranea, escalera_express, retador:retador_id(nombre, categoria, genero), retado:retado_id(nombre)')
       .eq('temporada_id', temporadaId)
       .eq('estado', 'aceptado')
       .gte('fecha_propuesta', new Date().toISOString())
@@ -948,6 +975,62 @@ export default function LadderPage() {
     }
   }
 
+  async function lanzarRetoExpress() {
+    if (!session || session.role !== 'jugador' || !temporadaId || !retandoA) return
+    if (enviandoReto) return
+    if (!horarioExpress || !canchaExpress) {
+      setRetoFormMsg('❌ Elige un horario y cancha')
+      return
+    }
+    setEnviandoReto(true)
+    setActionMsg('')
+    setRetoFormMsg('')
+    setRetoCreado(null)
+    try {
+      const res = await fetch('/api/jugador/crear-reto-express', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temporadaId,
+          retadoId: retandoA,
+          cancha: canchaExpress,
+          horario: horarioExpress,
+        }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setRetoFormMsg('❌ Error al lanzar el reto: ' + (data.error || 'intenta de nuevo'))
+        // El error más común aquí es que alguien más se llevó el cupo justo antes
+        // que nosotros — refrescamos la grilla para que no quede viéndose "libre".
+        refrescarCuposExpress()
+      } else {
+        setActionMsg('✅ ¡Reto de Escalera Express enviado!')
+        if (data.retado) {
+          setRetoCreado({
+            retadoNombre: data.retado.nombre,
+            retadoTelefono: data.retado.telefono,
+            fechaPropuesta: data.reto?.fecha_propuesta,
+          })
+        }
+        setRetandoA(null)
+        setHorarioExpress('')
+        setCanchaExpress('HGV1')
+        cargarDatos()
+
+        if (data.id) {
+          fetch('/api/notificar-nuevo-reto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ retoId: data.id }),
+          }).catch(() => {})
+        }
+      }
+    } finally {
+      setEnviandoReto(false)
+    }
+  }
+
   async function responderReto(retoId: string, nuevoEstado: 'aceptado' | 'rechazado', ajusteDias?: number) {
     try {
       const res = await fetch('/api/jugador/responder-reto', {
@@ -1089,6 +1172,28 @@ export default function LadderPage() {
     window.location.href = '/'
   }
 
+  const escaleraExpressActiva = esEscaleraExpress(hoyEnCaracas())
+  // Cupos horario×cancha del evento (12 en total) — cada reto Express pendiente o
+  // aceptado ocupa exactamente uno (a prueba de condición de carrera por el índice
+  // único ux_retos_escalera_express_slot en la base de datos).
+  const cuposExpress = calcularCuposExpress(retosExpressActivos)
+  const ventanaExpressAbiertaAhora = escaleraExpressActiva && ventanaExpressAbierta(new Date(), retosExpressActivos.length)
+  // Del 10 al 12 de sept: si la ventana especial del jueves no está abierta, se
+  // bloquea la creación de CUALQUIER reto (normal o Express) — antes de que abra,
+  // y de nuevo desde que se cierra (se llenan los 12 cupos, o llega el sábado).
+  const creacionDeRetosBloqueada = escaleraExpressActiva && !ventanaExpressAbiertaAhora
+  const rangoRetoActivo = ventanaExpressAbiertaAhora ? RANGO_RETO_EXPRESS : RANGO_RETO
+
+  // Mientras la ventana de Escalera Express esté abierta, refrescamos los cupos
+  // solos cada 15s — se espera que varios jugadores entren a la vez a elegir
+  // horario/cancha, y sin esto la grilla se queda desactualizada hasta que alguien
+  // recargue o interactúe con la página.
+  useEffect(() => {
+    if (!ventanaExpressAbiertaAhora) return
+    const interval = setInterval(() => { refrescarCuposExpress() }, 15000)
+    return () => clearInterval(interval)
+  }, [ventanaExpressAbiertaAhora, refrescarCuposExpress])
+
   const miPosicion = session?.role === 'jugador'
     ? posiciones.find((p) => p.jugador_id === session.id)
     : null
@@ -1142,7 +1247,7 @@ export default function LadderPage() {
     const puestosEntreMedio = posiciones.filter((x) =>
       x.posicion >= p.posicion && x.posicion < miPosicion!.posicion && !congelado(x.jugador_id)
     ).length
-    return puestosEntreMedio > 0 && puestosEntreMedio <= RANGO_RETO
+    return puestosEntreMedio > 0 && puestosEntreMedio <= rangoRetoActivo
   }
 
   const enEnfriamiento = (jugadorId: string) => {
@@ -1157,6 +1262,7 @@ export default function LadderPage() {
       temporadaSorteada &&
       !bloqueado &&
       !retandoA &&
+      !creacionDeRetosBloqueada &&
       !enEnfriamiento(p.jugador_id) &&
       !jugadoresOcupados.has(p.jugador_id) &&
       !congelado(p.jugador_id) &&
@@ -1207,6 +1313,22 @@ export default function LadderPage() {
             </div>
           ) : (
             <p style={{ color: 'var(--color-chalk)', marginTop: '6px' }}>No hay temporada activa</p>
+          )}
+
+          {escaleraExpressActiva && (
+            <div style={{
+              background: '#fff3cd', border: '2px solid #e67e22', borderRadius: '12px',
+              padding: '14px 20px', maxWidth: '420px', margin: '16px auto 0 auto',
+            }}>
+              <p style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#7a4a0e' }}>
+                🚀 Escalera Express
+              </p>
+              <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#7a4a0e' }}>
+                {ventanaExpressAbiertaAhora
+                  ? `¡Ventana especial abierta! Puedes retar a jugadores hasta ${RANGO_RETO_EXPRESS} posiciones arriba de ti para jugar el sábado 12 de septiembre, en un horario fijo. Se cierra sola cuando se llenan los 12 cupos.`
+                  : 'Del 10 al 12 de septiembre los retos normales quedan congelados (no se pueden crear, aceptar ni rechazar). Los retos de Escalera Express ya creados sí se pueden aceptar/rechazar normalmente.'}
+              </p>
+            </div>
           )}
 
           {!session && (
@@ -1294,6 +1416,11 @@ export default function LadderPage() {
                   <div key={partido.id} style={{ borderBottom: '1px solid #eee', padding: '10px 0' }}>
                     <p style={{ margin: 0 }}>
                       <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retador?.nombre}</strong> vs <strong style={{ fontFamily: 'var(--font-mono)' }}>{partido.retado?.nombre}</strong>
+                      {partido.escalera_express && (
+                        <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', background: '#e67e22', color: '#fff', marginLeft: '6px', fontWeight: 'bold' }}>
+                          🚀 Express
+                        </span>
+                      )}
                     </p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#5c5c5c' }}>
                       {formatearFechaHora(partido.fecha_propuesta)}
@@ -1497,12 +1624,21 @@ export default function LadderPage() {
                             {esElegible(p) && retandoA !== p.jugador_id && (
                               <>
                                 <button
-                                  onClick={() => puedoRetar(p) && (setRetandoA(p.jugador_id), setRetoFormMsg(''))}
+                                  onClick={() => {
+                                    if (!puedoRetar(p)) return
+                                    setCanchaExpress('HGV1')
+                                    setHorarioExpress('')
+                                    setRetandoA(p.jugador_id)
+                                    setRetoFormMsg('')
+                                    refrescarCuposExpress()
+                                  }}
                                   disabled={!puedoRetar(p)}
                                   style={puedoRetar(p) ? btnRetar : btnRetarDeshabilitado}
                                   title={
                                     !temporadaSorteada
                                       ? 'El sorteo de esta temporada todavía no se ha realizado'
+                                      : creacionDeRetosBloqueada
+                                      ? '🚀 Escalera Express: la creación de retos está congelada en este momento'
                                       : yoEstoyCongelado
                                       ? (yoEstoyEnStandby ? 'Estás en modo standby — no puedes retar mientras dure' : 'Tienes un permiso médico activo — no puedes retar mientras dure')
                                       : enStandby(p.jugador_id)
@@ -1545,6 +1681,37 @@ export default function LadderPage() {
                     Retar a {posiciones.find(p => p.jugador_id === retandoA)?.jugadores?.nombre}
                   </h4>
 
+                  {ventanaExpressAbiertaAhora ? (
+                    <>
+                      <p style={{ fontSize: '12px', color: '#7a4a0e', background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '6px', padding: '8px 12px', margin: '0 0 12px 0' }}>
+                        🚀 Este reto es de <strong>Escalera Express</strong> — se juega el sábado 12 de septiembre, a la hora exacta que elijas. No se puede cambiar la fecha.
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                        {cuposExpress.map((cupo) => {
+                          const seleccionado = cupo.horario === horarioExpress && cupo.cancha === canchaExpress
+                          return (
+                            <button
+                              key={`${cupo.cancha}-${cupo.horario}`}
+                              type="button"
+                              disabled={cupo.ocupado}
+                              onClick={() => { setHorarioExpress(cupo.horario); setCanchaExpress(cupo.cancha) }}
+                              style={{
+                                padding: '10px 8px', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold',
+                                cursor: cupo.ocupado ? 'not-allowed' : 'pointer',
+                                border: seleccionado ? '2px solid var(--color-ball)' : '1px solid #ccc',
+                                background: cupo.ocupado ? '#eee' : seleccionado ? '#fff3cd' : '#fff',
+                                color: cupo.ocupado ? '#999' : '#333',
+                                textDecoration: cupo.ocupado ? 'line-through' : 'none',
+                              }}
+                            >
+                              {formatearHora(instanteEnCaracas('2026-09-12', cupo.horario))} · {cupo.cancha === 'HGV1' ? 'HGV 1' : 'HGV 2'}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <>
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '140px' }}>
                       <label style={labelStyle}>📅 Fecha propuesta</label>
@@ -1655,9 +1822,15 @@ export default function LadderPage() {
                       style={{ ...inputPequeno, width: '100%' }}
                     />
                   </div>
+                    </>
+                  )}
 
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={lanzarReto} disabled={enviandoReto} style={btnPequeno(enviandoReto ? '#ccc' : 'var(--color-ball)')}>
+                    <button
+                      onClick={ventanaExpressAbiertaAhora ? lanzarRetoExpress : lanzarReto}
+                      disabled={enviandoReto || (ventanaExpressAbiertaAhora && !horarioExpress)}
+                      style={btnPequeno(enviandoReto ? '#ccc' : 'var(--color-ball)')}
+                    >
                       {enviandoReto ? 'Enviando…' : 'Enviar reto'}
                     </button>
                     <button onClick={() => { setRetandoA(null); setRetoFormMsg('') }} disabled={enviandoReto} style={btnPequeno('#6b6b6b')}>Cancelar</button>
@@ -1677,6 +1850,11 @@ export default function LadderPage() {
                   🔒 El sorteo de esta temporada todavía no se ha realizado — los retos se habilitan después de que el admin lo haga.
                 </p>
               )}
+              {session?.role === 'jugador' && temporadaSorteada && !bloqueado && creacionDeRetosBloqueada && (
+                <p style={{ fontSize: '13px', color: '#c0392b', marginTop: '8px', fontWeight: 'bold' }}>
+                  🚀 Escalera Express: la creación de retos está congelada en este momento.
+                </p>
+              )}
               {session?.role === 'jugador' && temporadaSorteada && bloqueado && (
                 <p style={{ fontSize: '13px', color: '#c0392b', marginTop: '8px', fontWeight: 'bold' }}>
                   {tengoPartidoEnCurso
@@ -1686,9 +1864,11 @@ export default function LadderPage() {
                     : 'Tienes un reto pendiente de respuesta — no puedes lanzar otro hasta que se resuelva.'}
                 </p>
               )}
-              {session?.role === 'jugador' && miPosicion && temporadaSorteada && !bloqueado && (
+              {session?.role === 'jugador' && miPosicion && temporadaSorteada && !bloqueado && !creacionDeRetosBloqueada && (
                 <p style={{ fontSize: '13px', color: '#5c5c5c', marginTop: '12px' }}>
-                  Puedes retar a jugadores hasta {RANGO_RETO} posiciones arriba de ti.
+                  {ventanaExpressAbiertaAhora
+                    ? `🚀 Escalera Express: puedes retar a jugadores hasta ${RANGO_RETO_EXPRESS} posiciones arriba de ti (en vez de las ${RANGO_RETO} normales), para jugar el sábado.`
+                    : `Puedes retar a jugadores hasta ${RANGO_RETO} posiciones arriba de ti.`}
                 </p>
               )}
             </div>
@@ -1711,6 +1891,11 @@ export default function LadderPage() {
                         }}>
                           {r.estado}
                         </span>
+                        {r.escalera_express && (
+                          <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', background: '#e67e22', color: '#fff', marginLeft: '4px', fontWeight: 'bold' }}>
+                            🚀 Express
+                          </span>
+                        )}
                       </p>
 
                       {r.fecha_propuesta && (
@@ -1870,7 +2055,11 @@ export default function LadderPage() {
 
                       {/* Aceptar / rechazar si me retaron a mí */}
                       {r.estado === 'pendiente' && r.retado_id === session.id && (
-                        tengoPartidoEnCurso ? (
+                        (!r.escalera_express && escaleraExpressActiva) ? (
+                          <p style={{ fontSize: '13px', color: '#7a4a0e', background: '#fff3cd', border: '1px solid #e67e22', borderRadius: '6px', padding: '8px 12px', margin: '4px 0' }}>
+                            🚀 Escalera Express: este reto queda congelado hasta el 13 de septiembre — no se puede aceptar ni rechazar por ahora.
+                          </p>
+                        ) : tengoPartidoEnCurso ? (
                           <p style={{ fontSize: '13px', color: '#c0392b', margin: '4px 0' }}>
                             Tienes un partido en curso — resuélvelo antes de aceptar este reto.
                           </p>
@@ -1894,7 +2083,7 @@ export default function LadderPage() {
                         ) : (
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <button onClick={() => responderReto(r.id, 'aceptado')} style={btnPequeno('#28a745')}>Aceptar</button>
-                            {r.cancha && r.cancha !== 'FORANEA' && (
+                            {!r.escalera_express && r.cancha && r.cancha !== 'FORANEA' && (
                               <button onClick={() => setAjustandoFechaRetoId(r.id)} style={btnPequeno('#1c7ec4')}>
                                 📅 Aceptar con otra fecha
                               </button>

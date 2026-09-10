@@ -298,7 +298,7 @@ export default function AdminPage() {
         ganador:ganador_id(nombre),
         jugador_retirado:jugador_retirado_id(nombre),
         retos:reto_id(
-          id, temporada_id, retador_id, retado_id, cancha, nombre_cancha_foranea, fecha_propuesta,
+          id, temporada_id, retador_id, retado_id, cancha, nombre_cancha_foranea, fecha_propuesta, escalera_express,
           retador:retador_id(nombre, categoria, genero),
           retado:retado_id(nombre)
         )
@@ -3675,6 +3675,11 @@ export default function AdminPage() {
                           <div>
                             <p style={{ margin: '0 0 4px 0', fontWeight: '600', color: '#333' }}>
                               {r.retos?.retador?.nombre} vs {r.retos?.retado?.nombre}
+                              {r.retos?.escalera_express && (
+                                <span style={{ marginLeft: '8px', fontSize: '11px', background: '#e67e22', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                                  🚀 EXPRESS
+                                </span>
+                              )}
                               {r.no_presentado && (
                                 <span style={{ marginLeft: '8px', fontSize: '11px', background: '#f8d7da', color: '#721c24', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
                                   NO PRESENTADO

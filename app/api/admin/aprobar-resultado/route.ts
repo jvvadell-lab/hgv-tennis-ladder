@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       .select(`
         id, ganador_id, no_presentado, reto_id, marcador_retador, marcador_retado,
         retos:reto_id(
-          id, temporada_id, retador_id, retado_id,
+          id, temporada_id, retador_id, retado_id, escalera_express,
           retador:retador_id(nombre, email),
           retado:retado_id(nombre, email)
         )
@@ -39,27 +39,41 @@ export async function POST(request: Request) {
     const reto: any = resultado.retos
     if (!reto) return NextResponse.json({ error: 'No se encontró el reto asociado' }, { status: 404 })
 
-    const { data: posActuales, error: errPos } = await db
-      .from('ladder_posiciones')
-      .select('id, jugador_id, posicion')
-      .eq('temporada_id', reto.temporada_id)
-      .in('jugador_id', [reto.retador_id, reto.retado_id])
+    let intercambio = false
 
-    if (errPos) throw errPos
+    if (reto.escalera_express) {
+      // Mecanismo especial "cuela en la fila" — ver
+      // supabase/migrations/20260909210000_escalera_express.sql. Si ganó el
+      // retado (defensor), la función no mueve nada, igual que en el mecanismo normal.
+      const { data: ascenso, error: errAscenso } = await db.rpc('ascender_ganador_escalera_express', {
+        p_reto_id: reto.id,
+        p_ganador_id: resultado.ganador_id,
+      })
+      if (errAscenso) throw errAscenso
+      intercambio = !!ascenso?.cambio
+    } else {
+      const { data: posActuales, error: errPos } = await db
+        .from('ladder_posiciones')
+        .select('id, jugador_id, posicion')
+        .eq('temporada_id', reto.temporada_id)
+        .in('jugador_id', [reto.retador_id, reto.retado_id])
 
-    const posRetador = posActuales?.find((p: any) => p.jugador_id === reto.retador_id)
-    const posRetado = posActuales?.find((p: any) => p.jugador_id === reto.retado_id)
+      if (errPos) throw errPos
 
-    const retadorGana = resultado.ganador_id === reto.retador_id
-    const intercambio = !!(retadorGana && posRetador && posRetado && posRetador.posicion > posRetado.posicion)
+      const posRetador = posActuales?.find((p: any) => p.jugador_id === reto.retador_id)
+      const posRetado = posActuales?.find((p: any) => p.jugador_id === reto.retado_id)
 
-    if (intercambio && posRetador && posRetado) {
-      const { error: e1 } = await db.from('ladder_posiciones').update({ posicion: -1 }).eq('id', posRetador.id)
-      if (e1) throw e1
-      const { error: e2 } = await db.from('ladder_posiciones').update({ posicion: posRetador.posicion }).eq('id', posRetado.id)
-      if (e2) throw e2
-      const { error: e3 } = await db.from('ladder_posiciones').update({ posicion: posRetado.posicion }).eq('id', posRetador.id)
-      if (e3) throw e3
+      const retadorGana = resultado.ganador_id === reto.retador_id
+      intercambio = !!(retadorGana && posRetador && posRetado && posRetador.posicion > posRetado.posicion)
+
+      if (intercambio && posRetador && posRetado) {
+        const { error: e1 } = await db.from('ladder_posiciones').update({ posicion: -1 }).eq('id', posRetador.id)
+        if (e1) throw e1
+        const { error: e2 } = await db.from('ladder_posiciones').update({ posicion: posRetador.posicion }).eq('id', posRetado.id)
+        if (e2) throw e2
+        const { error: e3 } = await db.from('ladder_posiciones').update({ posicion: posRetado.posicion }).eq('id', posRetador.id)
+        if (e3) throw e3
+      }
     }
 
     const { error: errUpdateResultado } = await db

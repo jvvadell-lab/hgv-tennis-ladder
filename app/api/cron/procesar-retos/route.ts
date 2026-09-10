@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
 import { hoyEnCaracas, fechaISOEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, formatearFechaHora, formatearHora } from '@/lib/tiempo'
+import { esEscaleraExpress, ESCALERA_EXPRESS_FECHA_RECORDATORIO, ESCALERA_EXPRESS_FECHA_JUEGO } from '@/lib/escaleraExpress'
 
 function diasEntre(fechaA: string, fechaB: string): number {
   const a = new Date(fechaA + 'T00:00:00Z').getTime()
@@ -120,16 +121,21 @@ export async function GET(request: Request) {
   const hoy = hoyEnCaracas()
   const resumen = {
     recordatorio1: 0, recordatorio2: 0, autoAceptados: 0, avisoDelDia: 0, descensosPermisoMedico: 0,
+    recordatorioExpress: 0, autoAceptadosExpress: 0,
     recordatorioResultado1: 0, recordatorioResultado2: 0, avisoAdminResultado: 0,
     errores: [] as string[],
   }
 
   try {
     // 1) Retos pendientes: recordatorios día 1 y 2, aceptación automática al día 3
-    const { data: pendientes } = await db
-      .from('retos')
-      .select('id, created_at, fecha_propuesta, cancha, nombre_cancha_foranea, recordatorios_enviados, retador:retador_id(nombre, email), retado:retado_id(nombre, email)')
-      .eq('estado', 'pendiente')
+    // (pausado durante Escalera Express: los retos quedan congelados esos días, así
+    // que no tiene sentido recordarle a nadie que responda ni auto-aceptarlos)
+    const { data: pendientes } = esEscaleraExpress(hoy)
+      ? { data: [] }
+      : await db
+          .from('retos')
+          .select('id, created_at, fecha_propuesta, cancha, nombre_cancha_foranea, recordatorios_enviados, retador:retador_id(nombre, email), retado:retado_id(nombre, email)')
+          .eq('estado', 'pendiente')
 
     for (const r of pendientes || []) {
       const dias = diasEntre(fechaISOEnCaracas(r.created_at), hoy)
@@ -184,6 +190,68 @@ export async function GET(request: Request) {
         }
       } catch (err: any) {
         resumen.errores.push(`reto ${r.id}: ${err.message}`)
+      }
+    }
+
+    // 1.5) Escalera Express tiene su propio ciclo de recordatorio/auto-aceptación,
+    // independiente del de 3 días de arriba (no cabe en la ventana jueves-tarde →
+    // sábado 4pm). Como el cron corre una sola vez al día, se ancla a fechas
+    // calendario fijas en vez de "días desde la creación":
+    //   - Viernes (única corrida antes del cierre): recordatorio a quien no respondió.
+    //   - Sábado (última corrida antes de que empiecen los partidos a las 4pm):
+    //     aceptación automática de lo que siga pendiente, para no perder el cupo.
+    // Nota: un reto creado el viernes después de esta corrida (si la ventana seguía
+    // abierta por no llenarse los 12 cupos) se salta el recordatorio y va directo a
+    // la aceptación automática del sábado — inevitable con una corrida diaria.
+    if (hoy === ESCALERA_EXPRESS_FECHA_RECORDATORIO || hoy === ESCALERA_EXPRESS_FECHA_JUEGO) {
+      const { data: pendientesExpress } = await db
+        .from('retos')
+        .select('id, fecha_propuesta, cancha, recordatorios_enviados, retador:retador_id(nombre, email), retado:retado_id(nombre, email)')
+        .eq('estado', 'pendiente')
+        .eq('escalera_express', true)
+
+      for (const r of pendientesExpress || []) {
+        const retador: any = r.retador
+        const retado: any = r.retado
+        const fechaFmt = r.fecha_propuesta ? formatearFechaHora(r.fecha_propuesta) : 'Por definir'
+        const canchaFmt = nombreCancha(r.cancha, null)
+
+        try {
+          if (hoy === ESCALERA_EXPRESS_FECHA_JUEGO) {
+            const { error } = await db.from('retos').update({ estado: 'aceptado' }).eq('id', r.id)
+            if (error) throw error
+            resumen.autoAceptadosExpress++
+
+            if (retado?.email) {
+              await enviarCorreo(retado.email, '🚀 Tu reto de Escalera Express quedó aceptado automáticamente', envoltorio(`
+                <p>Hola ${retado.nombre || ''},</p>
+                <p>Como no respondiste a tiempo la solicitud de reto de <strong>${retador?.nombre || 'un jugador'}</strong> de Escalera Express, el partido quedó <strong>aceptado automáticamente</strong> para hoy, con la hora ya propuesta:</p>
+                ${tablaPartido(retador?.nombre || 'Rival', fechaFmt, canchaFmt)}
+              `))
+            }
+            if (retador?.email) {
+              await enviarCorreo(retador.email, '🚀 Tu reto de Escalera Express quedó aceptado automáticamente', envoltorio(`
+                <p>Hola ${retador.nombre || ''},</p>
+                <p><strong>${retado?.nombre || 'Tu rival'}</strong> no respondió a tiempo, así que tu partido de Escalera Express quedó <strong>aceptado automáticamente</strong> para hoy:</p>
+                ${tablaPartido(retado?.nombre || 'Rival', fechaFmt, canchaFmt)}
+              `))
+            }
+          } else if ((r.recordatorios_enviados || 0) < 1) {
+            await db.from('retos').update({ recordatorios_enviados: 1 }).eq('id', r.id)
+            resumen.recordatorioExpress++
+
+            if (retado?.email) {
+              await enviarCorreo(retado.email, '🚀 Responde ya tu reto de Escalera Express', envoltorio(`
+                <p>Hola ${retado.nombre || ''},</p>
+                <p>Tienes un reto de <strong>Escalera Express</strong> sin responder, de parte de <strong>${retador?.nombre || 'un jugador'}</strong>:</p>
+                ${tablaPartido(retador?.nombre || 'Rival', fechaFmt, canchaFmt)}
+                <p>Entra a la escalera para <strong>aceptar</strong> o <strong>rechazar</strong> el reto. Si no respondes, mañana sábado quedará <strong>aceptado automáticamente</strong> con esta misma fecha y hora, para no perder el cupo de cancha.</p>
+              `))
+            }
+          }
+        } catch (err: any) {
+          resumen.errores.push(`reto express ${r.id}: ${err.message}`)
+        }
       }
     }
 

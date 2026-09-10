@@ -1,29 +1,37 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { ahora, sumarDiasEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
-import { esEscaleraExpress } from '@/lib/escaleraExpress'
+import { ahora, sumarDiasEnCaracas } from '@/lib/tiempo'
+import {
+  RANGO_RETO_EXPRESS, ESCALERA_EXPRESS_HORARIOS, ESCALERA_EXPRESS_CANCHAS,
+  ventanaExpressAbierta, instanteCupoExpress,
+} from '@/lib/escaleraExpress'
 
-const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
-
+// Crea un reto de Escalera Express: horario y cancha fijos (elegidos de una lista
+// cerrada, no un datetime libre), rango ampliado a 5 posiciones, y siempre para
+// jugarse el sábado 12 de septiembre de 2026. Ver lib/escaleraExpress.ts para el
+// resto de las reglas del evento. Endpoint separado de crear-reto/route.ts porque
+// las reglas de validación son bastante distintas (horario fijo vs. libre, rango 5
+// vs. 3) y esto es temporal — se puede borrar entero después del evento.
 export async function POST(request: Request) {
   try {
     const session = await getSession()
     if (!session || session.role !== 'jugador') {
       return NextResponse.json({ error: 'Debes iniciar sesión como jugador' }, { status: 403 })
     }
-    if (esEscaleraExpress(hoyEnCaracas())) {
-      return NextResponse.json({
-        error: '🚀 Escalera Express: del 10 al 12 de septiembre no se pueden crear retos normales. El jueves desde las 5:00pm se abre una ventana especial para retos de Escalera Express.',
-      }, { status: 403 })
-    }
 
-    const { temporadaId, retadoId, cancha, nombreCanchaForanea, fechaPropuesta, comentarios } = await request.json()
-    if (!temporadaId || !retadoId || !cancha || !fechaPropuesta) {
+    const { temporadaId, retadoId, cancha, horario } = await request.json()
+    if (!temporadaId || !retadoId || !cancha || !horario) {
       return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
     }
     if (retadoId === session.id) {
       return NextResponse.json({ error: 'No puedes retarte a ti mismo' }, { status: 400 })
+    }
+    if (!(ESCALERA_EXPRESS_CANCHAS as readonly string[]).includes(cancha)) {
+      return NextResponse.json({ error: 'Cancha inválida' }, { status: 400 })
+    }
+    if (!ESCALERA_EXPRESS_HORARIOS.includes(horario)) {
+      return NextResponse.json({ error: 'Horario inválido' }, { status: 400 })
     }
 
     const db = supabaseServer()
@@ -41,8 +49,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El sorteo de esta temporada todavía no se ha realizado' }, { status: 400 })
     }
 
-    // El retador siempre es quien tiene la sesión — nunca lo que mande el cliente,
-    // para que nadie pueda lanzar un reto haciéndose pasar por otro jugador.
+    // Contamos los cupos ya ocupados (pendientes o aceptados) para saber si la
+    // ventana sigue abierta, y de paso si el cupo pedido ya lo tomó otro jugador.
+    const { data: retosExpressActivos, error: errActivos } = await db
+      .from('retos')
+      .select('fecha_propuesta, cancha')
+      .eq('temporada_id', temporadaId)
+      .eq('escalera_express', true)
+      .in('estado', ['pendiente', 'aceptado'])
+    if (errActivos) throw errActivos
+
+    if (!ventanaExpressAbierta(ahora(), (retosExpressActivos || []).length)) {
+      return NextResponse.json({
+        error: 'La ventana de Escalera Express está cerrada — ya no se pueden crear nuevos retos de este evento.',
+      }, { status: 403 })
+    }
+
+    const fechaPropuesta = instanteCupoExpress(horario)
+    const cupoTomado = (retosExpressActivos || []).some((r: any) =>
+      r.cancha === cancha && new Date(r.fecha_propuesta).getTime() === fechaPropuesta.getTime()
+    )
+    if (cupoTomado) {
+      return NextResponse.json({ error: 'Ese horario y cancha ya fue tomado por otro jugador — elige otro cupo.' }, { status: 400 })
+    }
+
+    // El retador siempre es quien tiene la sesión — nunca lo que mande el cliente.
     const { data: posiciones, error: errPos } = await db
       .from('ladder_posiciones')
       .select('jugador_id, categoria, genero, posicion')
@@ -64,8 +95,8 @@ export async function POST(request: Request) {
     }
 
     const puestosEntreMedio = yo.posicion - rival.posicion
-    if (puestosEntreMedio <= 0 || puestosEntreMedio > RANGO_RETO) {
-      return NextResponse.json({ error: `Solo puedes retar a jugadores hasta ${RANGO_RETO} posiciones arriba de ti` }, { status: 403 })
+    if (puestosEntreMedio <= 0 || puestosEntreMedio > RANGO_RETO_EXPRESS) {
+      return NextResponse.json({ error: `Durante Escalera Express solo puedes retar a jugadores hasta ${RANGO_RETO_EXPRESS} posiciones arriba de ti` }, { status: 403 })
     }
 
     const { data: existentes, error: errCheck } = await db
@@ -116,52 +147,49 @@ export async function POST(request: Request) {
       retador_id: session.id,
       retado_id: retadoId,
       cancha,
-      nombre_cancha_foranea: cancha === 'FORANEA' ? (nombreCanchaForanea || null) : null,
-      fecha_propuesta: fechaPropuesta,
-      comentarios: comentarios || null,
+      fecha_propuesta: fechaPropuesta.toISOString(),
       estado: 'pendiente',
+      escalera_express: true,
     }]).select('id').single()
     if (errInsert) {
-      // El trigger sync_jugadores_ocupados en la BD es la última línea de defensa contra
-      // la condición de carrera: si dos requests casi simultáneos llegan hasta aquí, solo
-      // uno logra insertar en jugadores_ocupados y el otro recibe este error atómicamente.
       if (errInsert.message?.includes('RETO_JUGADOR_OCUPADO')) {
         return NextResponse.json({
           error: 'Ya tienes un reto pendiente o un partido en curso — no puedes lanzar otro.',
         }, { status: 400 })
       }
+      // Índice único ux_retos_escalera_express_slot: alguien más tomó ese cupo
+      // en el instante entre nuestra verificación y el insert.
+      if (errInsert.code === '23505') {
+        return NextResponse.json({ error: 'Ese horario y cancha ya fue tomado por otro jugador — elige otro cupo.' }, { status: 400 })
+      }
       throw errInsert
     }
 
-    // No dejamos que un fallo al crear la notificación in-app tumbe la creación
-    // del reto, que ya quedó guardada — el correo tampoco depende de esto.
     const { error: errNotif } = await db.from('notificaciones').insert([{
       jugador_id: retadoId,
       tipo: 'reto_recibido',
       reto_id: nuevoReto.id,
-      mensaje: `${session.nombre} te ha retado a un partido`,
+      mensaje: `${session.nombre} te ha retado a un partido de Escalera Express`,
     }])
-    if (errNotif) console.error('[crear-reto] Error al crear notificación:', errNotif)
+    if (errNotif) console.error('[crear-reto-express] Error al crear notificación:', errNotif)
 
-    // Nombre y teléfono del retado, solo para el botón "Avisar por WhatsApp" que ve
-    // el retador que acaba de crear el reto — no se expone en ningún otro endpoint.
     const { data: retadoInfo, error: errRetadoInfo } = await db
       .from('jugadores')
       .select('nombre, telefono')
       .eq('id', retadoId)
       .maybeSingle()
-    if (errRetadoInfo) console.error('[crear-reto] Error al obtener datos del retado:', errRetadoInfo)
+    if (errRetadoInfo) console.error('[crear-reto-express] Error al obtener datos del retado:', errRetadoInfo)
 
     return NextResponse.json({
       ok: true,
       id: nuevoReto.id,
-      reto: { id: nuevoReto.id, fecha_propuesta: fechaPropuesta },
+      reto: { id: nuevoReto.id, fecha_propuesta: fechaPropuesta.toISOString() },
       retado: {
         nombre: retadoInfo?.nombre ?? null,
         telefono: retadoInfo?.telefono || null,
       },
     })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Error al lanzar el reto' }, { status: 500 })
+    return NextResponse.json({ error: err.message || 'Error al lanzar el reto de Escalera Express' }, { status: 500 })
   }
 }

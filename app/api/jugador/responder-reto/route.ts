@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
-import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
+import { esEscaleraExpress } from '@/lib/escaleraExpress'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 const AJUSTES_PERMITIDOS = [-1, 2] // solo "un día antes" o "dos días después"
@@ -27,11 +28,31 @@ export async function POST(request: Request) {
 
     const { data: reto, error: errReto } = await db
       .from('retos')
-      .select('id, retador_id, retado_id, estado, temporada_id, fecha_propuesta, cancha, retador:retador_id(nombre, email), retado:retado_id(nombre)')
+      .select('id, retador_id, retado_id, estado, temporada_id, fecha_propuesta, cancha, escalera_express, retador:retador_id(nombre, email), retado:retado_id(nombre)')
       .eq('id', retoId)
       .maybeSingle()
     if (errReto) throw errReto
     if (!reto) return NextResponse.json({ error: 'Reto no encontrado' }, { status: 404 })
+
+    // El congelamiento de Escalera Express solo aplica a retos normales — uno
+    // marcado escalera_express se acepta/rechaza siempre igual que cualquier otro,
+    // sin importar la fecha (incluidas las reglas normales, como 1 rechazo por temporada).
+    if (!reto.escalera_express && esEscaleraExpress(hoyEnCaracas())) {
+      return NextResponse.json({
+        error: '🚀 Escalera Express: del 10 al 12 de septiembre los retos quedan congelados — no se pueden aceptar ni rechazar hasta que termine el evento.',
+      }, { status: 403 })
+    }
+
+    // Los retos de Escalera Express tienen fecha y horario fijos (sábado, elegidos
+    // de una grilla cerrada) — no se puede correr esa fecha como en un reto normal,
+    // porque eso rompería el conteo de cupos (ux_retos_escalera_express_slot /
+    // calcularCuposExpress en lib/escaleraExpress.ts siguen comparando contra el
+    // instante fijo del sábado) y sacaría el partido de la ventana congelada.
+    if (reto.escalera_express && ajusteDias !== undefined && ajusteDias !== null) {
+      return NextResponse.json({
+        error: 'Los retos de Escalera Express no permiten cambiar la fecha — se juegan el sábado a la hora acordada.',
+      }, { status: 400 })
+    }
 
     // Solo el jugador retado puede aceptar o rechazar, y solo si sigue pendiente
     if (reto.retado_id !== session.id) {
