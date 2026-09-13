@@ -432,7 +432,7 @@ export default function ReservasPage() {
               boxShadow: '0 4px 14px rgba(220,38,38,0.25)',
             }}>
               <p style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#7a1f1f', lineHeight: 1.5 }}>
-                ⚠️ Importante: al llegar a la cancha, toca <u>&quot;Ya llegué&quot;</u> en esta misma pantalla (en &quot;Mis próximas reservas&quot;, abajo). Si no lo haces, el sistema no puede distinguir que sí jugaste — y te puede aplicar la penalidad de {PENALIDAD_NO_PRESENTADO_DIAS} días como si no hubieras asistido.
+                🎾 ¡Disfruta tu partido! Al llegar a la cancha, no olvides tocar <u>&quot;Ya llegué&quot;</u> en &quot;Mis próximas reservas&quot; (abajo) — así evitas la penalidad de {PENALIDAD_NO_PRESENTADO_DIAS} días.
               </p>
             </div>
           )}
