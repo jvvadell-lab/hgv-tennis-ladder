@@ -205,6 +205,7 @@ export default function AdminPage() {
     const { data: todosLosRetos } = await supabase
       .from('retos')
       .select('id, estado, fecha_propuesta, retador_id, retado_id, retador:retador_id(nombre), retado:retado_id(nombre)')
+      .eq('estado', 'aceptado')
       .order('created_at', { ascending: false })
 
     setRetosSinResultado((todosLosRetos || []).filter((r: any) => !idsConResultado.has(r.id)))
