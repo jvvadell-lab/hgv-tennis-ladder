@@ -166,6 +166,7 @@ export default function AdminPage() {
   const [tbRetadorD, setTbRetadorD] = useState('')
   const [tbRetadoD, setTbRetadoD] = useState('')
   const [noPresentadoDirectoId, setNoPresentadoDirectoId] = useState('')
+  const [setUnicoDirecto, setSetUnicoDirecto] = useState(false)
   const [retiroDirecto, setRetiroDirecto] = useState(false)
   const [jugadorRetiradoDirectoId, setJugadorRetiradoDirectoId] = useState('')
   const [notaRetiroDirecto, setNotaRetiroDirecto] = useState('')
@@ -215,6 +216,7 @@ export default function AdminPage() {
     setSet1TbRetadorD(''); setSet1TbRetadoD(''); setSet2TbRetadorD(''); setSet2TbRetadoD('')
     setTbRetadorD(''); setTbRetadoD('')
     setNoPresentadoDirectoId('')
+    setSetUnicoDirecto(false)
     setRetiroDirecto(false)
     setJugadorRetiradoDirectoId('')
     setNotaRetiroDirecto('')
@@ -235,12 +237,13 @@ export default function AdminPage() {
         set2: { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
         st: { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
         retiro: retiroDirecto,
+        setUnico: setUnicoDirecto,
       })
       if ('error' in resultado) {
         setResultadosMsg('❌ ' + resultado.error + ', o marca "No se presentó".')
         return
       }
-      if (retiroDirecto && !jugadorRetiradoDirectoId) {
+      if (!setUnicoDirecto && retiroDirecto && !jugadorRetiradoDirectoId) {
         setResultadosMsg('❌ Indica quién se retiró')
         return
       }
@@ -268,9 +271,10 @@ export default function AdminPage() {
           retoId: reto.id,
           noPresentadoId: noPresentadoDirectoId || null,
           sets,
-          tipoResultado: retiroDirecto ? 'retiro' : 'normal',
-          jugadorRetiradoId: retiroDirecto ? jugadorRetiradoDirectoId : null,
-          nota: retiroDirecto ? notaRetiroDirecto : null,
+          tipoResultado: !setUnicoDirecto && retiroDirecto ? 'retiro' : 'normal',
+          setUnico: setUnicoDirecto,
+          jugadorRetiradoId: !setUnicoDirecto && retiroDirecto ? jugadorRetiradoDirectoId : null,
+          nota: !setUnicoDirecto && retiroDirecto ? notaRetiroDirecto : null,
           fotoUrl,
         }),
       })
@@ -3509,8 +3513,44 @@ export default function AdminPage() {
                             </button>
                           </div>
                         </div>
-                      ) : (
+      ) : (
                         <>
+                          <div style={{ marginBottom: '10px' }}>
+                            <label style={{ fontSize: '12px', color: '#8e44ad', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={setUnicoDirecto}
+                                onChange={(e) => {
+                                  setSetUnicoDirecto(e.target.checked)
+                                  setRetiroDirecto(false); setJugadorRetiradoDirectoId(''); setNotaRetiroDirecto('')
+                                }}
+                              />
+                              Partido a un solo set (formato Escalera Express)
+                            </label>
+                          </div>
+
+                          {setUnicoDirecto ? (
+                            <>
+                              <p style={{ fontSize: '12px', color: '#6b6b6b', margin: '0 0 8px 0' }}>
+                                Games ganados en el único set (ej. 8-6). Si quedan empatados, se pide un desempate.
+                              </p>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
+                                <span style={{ fontSize: '12px', color: '#555' }}>Set único</span>
+                                <input type="number" min="0" placeholder={reto.retador?.nombre} value={set1RetadorD} onChange={(e) => setSet1RetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                                <input type="number" min="0" placeholder={reto.retado?.nombre} value={set1RetadoD} onChange={(e) => setSet1RetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                              </div>
+
+                              {set1RetadorD !== '' && set1RetadoD !== '' && parseInt(set1RetadorD, 10) === parseInt(set1RetadoD, 10) && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
+                                  <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>Desempate</span>
+                                  <input type="number" min="0" placeholder={reto.retador?.nombre} value={set1TbRetadorD} onChange={(e) => setSet1TbRetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                                  <input type="number" min="0" placeholder={reto.retado?.nombre} value={set1TbRetadoD} onChange={(e) => setSet1TbRetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                          <>
                           <p style={{ fontSize: '12px', color: '#6b6b6b', margin: '0 0 8px 0' }}>
                             Juegos ganados por set. Si un set queda 6-6, se pide su tie-break. Si el partido queda 1-1 en sets, se pide el Super Tiebreak.
                           </p>
@@ -3556,15 +3596,19 @@ export default function AdminPage() {
                               </div>
                             )
                           })()}
+                          </>
+                          )}
 
+                          {!setUnicoDirecto && (
                           <div style={{ marginBottom: '10px' }}>
                             <label style={{ fontSize: '12px', color: '#c0392b', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                               <input type="checkbox" checked={retiroDirecto} onChange={(e) => setRetiroDirecto(e.target.checked)} />
                               ¿Hubo retiro por lesión u otro motivo?
                             </label>
                           </div>
+                          )}
 
-                          {retiroDirecto && (
+                          {!setUnicoDirecto && retiroDirecto && (
                             <div style={{ marginBottom: '10px', padding: '10px', background: '#fdecea', borderRadius: '6px', maxWidth: '420px' }}>
                               <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>¿Quién se retiró?</label>
                               <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
@@ -3607,11 +3651,13 @@ export default function AdminPage() {
                               set1: { golesRetador: set1RetadorD, golesRetado: set1RetadoD, tbRetador: set1TbRetadorD, tbRetado: set1TbRetadoD },
                               set2: { golesRetador: set2RetadorD, golesRetado: set2RetadoD, tbRetador: set2TbRetadorD, tbRetado: set2TbRetadoD },
                               st: { golesRetador: tbRetadorD, golesRetado: tbRetadoD },
-                              retiro: retiroDirecto,
+                              retiro: !setUnicoDirecto && retiroDirecto,
+                              setUnico: setUnicoDirecto,
                             })
                             if ('error' in resultado) return null
-                            const { marcadorRetador } = generarMarcadores(resultado.sets, retiroDirecto ? 'retiro' : 'normal')
-                            const ganador = retiroDirecto
+                            const retiroActivo = !setUnicoDirecto && retiroDirecto
+                            const { marcadorRetador } = generarMarcadores(resultado.sets, retiroActivo ? 'retiro' : 'normal')
+                            const ganador = retiroActivo
                               ? (jugadorRetiradoDirectoId ? (jugadorRetiradoDirectoId === reto.retador_id ? reto.retado?.nombre : reto.retador?.nombre) : null)
                               : (() => {
                                   const id = calcularGanador(resultado.sets, reto.retador_id, reto.retado_id)

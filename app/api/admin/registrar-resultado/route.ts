@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta acción requiere permisos de administrador completo.' }, { status: 403 })
     }
 
-    const { retoId, noPresentadoId, sets, tipoResultado, jugadorRetiradoId, nota, fotoUrl } = await request.json()
+    const { retoId, noPresentadoId, sets, tipoResultado, setUnico, jugadorRetiradoId, nota, fotoUrl } = await request.json()
     if (!retoId) {
       return NextResponse.json({ error: 'Falta el partido' }, { status: 400 })
     }
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     const { data: reto, error: errReto } = await db
       .from('retos')
-      .select('id, retador_id, retado_id, estado')
+      .select('id, retador_id, retado_id, estado, escalera_express')
       .eq('id', retoId)
       .maybeSingle()
     if (errReto) throw errReto
@@ -72,8 +72,11 @@ export async function POST(request: Request) {
       if (tipoResultado !== 'normal' && tipoResultado !== 'retiro') {
         return NextResponse.json({ error: 'Tipo de resultado inválido' }, { status: 400 })
       }
+      if (setUnico && !reto.escalera_express) {
+        return NextResponse.json({ error: 'El set único solo aplica a partidos de Escalera Express' }, { status: 400 })
+      }
 
-      const errorSets = validarSets(sets, tipoResultado as TipoResultado)
+      const errorSets = validarSets(sets, tipoResultado as TipoResultado, { setUnico: !!setUnico })
       if (errorSets) return NextResponse.json({ error: errorSets }, { status: 400 })
 
       let ganadorId: string

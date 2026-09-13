@@ -147,18 +147,90 @@ function setRealmenteTerminado(fila: SetJugado): boolean {
   return false
 }
 
+// Evalúa el set único del formato Escalera Express (a 8 games, gana quien
+// tenga más games): a diferencia de evaluarSet, no exige llegar a ningún
+// número mínimo — solo que los games no queden empatados. Si quedan
+// empatados (ej. 8-8), hace falta desempate — mismo patrón de tie-break
+// (margen 2, mínimo 7) que ya usa evaluarSet para el 6-6 de un set normal.
+export function evaluarSetUnico(c: CampoSet): { completo: boolean; ganadorEsRetador: boolean | null } {
+  const gr = parseInt(c.golesRetador, 10)
+  const gd = parseInt(c.golesRetado, 10)
+  if (isNaN(gr) || isNaN(gd)) return { completo: false, ganadorEsRetador: null }
+
+  if (gr === gd) {
+    const tbr = parseInt(c.tbRetador || '', 10)
+    const tbd = parseInt(c.tbRetado || '', 10)
+    if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) return { completo: false, ganadorEsRetador: null }
+    if (!margenTiebreakValido(7, Math.max(tbr, tbd), Math.min(tbr, tbd))) return { completo: false, ganadorEsRetador: null }
+    return { completo: true, ganadorEsRetador: tbr > tbd }
+  }
+
+  return { completo: true, ganadorEsRetador: gr > gd }
+}
+
+// Convierte el campo del set único en la fila que se guarda en `sets`. Si se
+// definió por tie-break (empate en games), el ganador se anota con un game
+// más que el empate (ej. empate en 8, gana 9-8) y el tie-break se guarda
+// aparte — mismo criterio que filaDesdeCampoSet usa para el 7-6 de un set normal.
+export function filaDesdeCampoSetUnico(c: CampoSet): SetJugado | null {
+  const gr = parseInt(c.golesRetador, 10)
+  const gd = parseInt(c.golesRetado, 10)
+  if (isNaN(gr) && isNaN(gd)) return null
+
+  if (!isNaN(gr) && !isNaN(gd) && gr === gd) {
+    const tbr = parseInt(c.tbRetador || '', 10)
+    const tbd = parseInt(c.tbRetado || '', 10)
+    if (isNaN(tbr) || isNaN(tbd) || tbr === tbd) {
+      return { numero: 1, games_j1: gr, games_j2: gd, completo: false }
+    }
+    if (margenTiebreakValido(7, Math.max(tbr, tbd), Math.min(tbr, tbd))) {
+      const retadorGanaTb = tbr > tbd
+      return {
+        numero: 1,
+        games_j1: retadorGanaTb ? gr + 1 : gr,
+        games_j2: retadorGanaTb ? gd : gd + 1,
+        completo: true,
+        tiebreak_retador: tbr,
+        tiebreak_retado: tbd,
+      }
+    }
+    return { numero: 1, games_j1: gr, games_j2: gd, completo: false, tiebreak_retador: tbr, tiebreak_retado: tbd }
+  }
+
+  return {
+    numero: 1,
+    games_j1: isNaN(gr) ? 0 : gr,
+    games_j2: isNaN(gd) ? 0 : gd,
+    completo: evaluarSetUnico(c).completo,
+  }
+}
+
 // Arma el array `sets` a partir de los 3 campos fijos del formulario (set1,
 // set2, Super Tiebreak) y si hubo retiro. Sin retiro, el comportamiento es
 // exactamente el de siempre: exige los 2 sets completos (y el Super Tiebreak
 // si hace falta). Con retiro, se congela lo realmente jugado — el primer
 // set (o el Super Tiebreak) que no llegó a completarse queda como último
 // elemento del array, marcado `completo:false`.
+//
+// setUnico (ajuste puntual para Escalera Express): ignora set2/st/retiro y
+// arma un único set a partir de set1, evaluado con evaluarSetUnico/
+// filaDesdeCampoSetUnico en vez de las reglas de un set normal de tenis.
 export function construirSets(args: {
   set1: CampoSet
   set2: CampoSet
   st: CampoSet
   retiro: boolean
+  setUnico?: boolean
 }): { sets: SetJugado[] } | { error: string } {
+  if (args.setUnico) {
+    const fila = filaDesdeCampoSetUnico(args.set1)
+    if (!fila) return { error: 'Ingresa el resultado del set único.' }
+    if (!evaluarSetUnico(args.set1).completo) {
+      return { error: 'Completa el set único (y el desempate si hay empate en games) con un marcador válido' }
+    }
+    return { sets: [fila] }
+  }
+
   const fila1 = filaDesdeCampoSet(1, args.set1)
   if (!fila1) return { error: 'Ingresa al menos el resultado del set 1.' }
   const e1 = evaluarSet(args.set1)
@@ -259,9 +331,19 @@ export function calcularGanador(sets: SetJugado[], retadorId: string, retadoId: 
 
 // Validación server-side de `sets` — independiente de construirSets, porque
 // el servidor no puede confiar en que el array haya salido de ese builder.
-export function validarSets(sets: unknown, tipoResultado: TipoResultado): string | null {
+//
+// opciones.setUnico (ajuste puntual para Escalera Express): valida un único
+// set a 8 games en vez de un set normal de tenis — exige exactamente 1 set,
+// y su "marcador de set real" es simplemente games distintos (o, si se
+// definió por tie-break, games separados por 1 con el tie-break registrado).
+export function validarSets(sets: unknown, tipoResultado: TipoResultado, opciones?: { setUnico?: boolean }): string | null {
   if (!Array.isArray(sets) || sets.length === 0) return 'Falta el marcador (sets)'
-  if (tipoResultado === 'normal' && sets.length < 2) return 'Un resultado normal necesita al menos 2 sets'
+  const setUnico = !!opciones?.setUnico
+  if (setUnico) {
+    if (sets.length !== 1) return 'Un resultado a un solo set debe tener exactamente 1 set'
+  } else if (tipoResultado === 'normal' && sets.length < 2) {
+    return 'Un resultado normal necesita al menos 2 sets'
+  }
 
   for (let i = 0; i < sets.length; i++) {
     const s: any = sets[i]
@@ -283,11 +365,14 @@ export function validarSets(sets: unknown, tipoResultado: TipoResultado): string
       if (typeof s.tiebreak_retador !== 'number' || typeof s.tiebreak_retado !== 'number') {
         return 'tiebreak_retador y tiebreak_retado deben venir juntos'
       }
-      const formaValida =
-        (s.games_j1 === 7 && s.games_j2 === 6) || (s.games_j1 === 6 && s.games_j2 === 7) ||
-        (s.games_j1 === 6 && s.games_j2 === 6)
+      const formaValida = setUnico
+        ? Math.abs(s.games_j1 - s.games_j2) <= 1
+        : (s.games_j1 === 7 && s.games_j2 === 6) || (s.games_j1 === 6 && s.games_j2 === 7) ||
+          (s.games_j1 === 6 && s.games_j2 === 6)
       if (!formaValida) {
-        return 'tiebreak_retador/tiebreak_retado solo aplican a un set 7-6, 6-7, o 6-6 (tie-break sin terminar)'
+        return setUnico
+          ? 'tiebreak_retador/tiebreak_retado solo aplican a un set único empatado o decidido por 1 game de diferencia'
+          : 'tiebreak_retador/tiebreak_retado solo aplican a un set 7-6, 6-7, o 6-6 (tie-break sin terminar)'
       }
       // El margen de 2 puntos solo es exigible cuando el set quedó DECIDIDO
       // por el tie-break (7-6/6-7) — un 6-6 con tie-break interrumpido
@@ -305,7 +390,8 @@ export function validarSets(sets: unknown, tipoResultado: TipoResultado): string
     // "Marcador de set real": exigible solo cuando el set se declara
     // completo — el último set de un retiro puede quedar con cualquier
     // marcador parcial (incluido un tie-break interrumpido).
-    if (s.completo && !setRealmenteTerminado(s as SetJugado)) {
+    const terminado = setUnico ? s.games_j1 !== s.games_j2 : setRealmenteTerminado(s as SetJugado)
+    if (s.completo && !terminado) {
       return s.es_super_tiebreak
         ? 'El Super Tiebreak debe ganarse por al menos 2 puntos, llegando mínimo a 10'
         : 'Ese no es un marcador de set válido'
