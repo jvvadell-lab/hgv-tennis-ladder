@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, estado, duracion_min')
       .eq('jugador_id', session.id)
-      .in('estado', ['activa', 'usada'])
+      .eq('estado', 'activa')
       .gte('fecha_hora', desdeVentana.toISOString())
     if (errMisReservas) throw errMisReservas
 
@@ -89,21 +89,6 @@ export async function POST(request: Request) {
       if (ahoraMs < disponibleDesde) {
         return NextResponse.json({
           error: `Por no presentarte a tu última reserva, puedes volver a reservar a partir del ${formatearFechaCorta(new Date(disponibleDesde))} (${PENALIDAD_NO_PRESENTADO_DIAS} días después).`,
-        }, { status: 400 })
-      }
-    }
-
-    // 3) Uso normal de la cancha — "día por medio": si jugaste un día, el
-    // siguiente día queda bloqueado, pero el de después ya está disponible.
-    const usadas = (misReservasRecientes || []).filter((r: any) => r.estado === 'usada')
-    if (usadas.length > 0) {
-      const fechaUsoMasReciente = new Date(Math.max(...usadas.map((r: any) => new Date(r.fecha_hora).getTime())))
-      const diaUso = fechaAlInicioDelDia(fechaUsoMasReciente)
-      const diaBloqueado = sumarDiasEnCaracas(diaUso, 1)
-      if (diaSolicitado.getTime() === diaBloqueado.getTime()) {
-        const disponibleDesde = sumarDiasEnCaracas(diaBloqueado, 1)
-        return NextResponse.json({
-          error: `Jugaste el ${formatearFechaCorta(diaUso)} — las reservas son día por medio, así que recién puedes volver a reservar a partir del ${formatearFechaCorta(disponibleDesde)}.`,
         }, { status: 400 })
       }
     }

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 import { comprimirImagen } from '@/lib/comprimirImagen'
@@ -1378,6 +1379,28 @@ export default function LadderPage() {
               </button>
             </p>
           )}
+        </div>
+
+        {/* Botón grande de Reservar Cancha — bien visible, jugadores caen acá */}
+        {/* directo después de iniciar sesión y no siempre pasan por el inicio. */}
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <Link href="/reservas" style={{
+            display: 'inline-block',
+            background: 'var(--color-ball)',
+            color: 'var(--color-ink)',
+            padding: '18px 40px',
+            borderRadius: '10px',
+            textDecoration: 'none',
+            fontWeight: 900,
+            fontSize: '18px',
+            fontFamily: 'var(--font-display)',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+            width: '100%',
+            maxWidth: '380px',
+            boxSizing: 'border-box',
+          }}>
+            🎾 Reservar Cancha
+          </Link>
         </div>
 
         {!temporadaId && (

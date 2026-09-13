@@ -25,6 +25,7 @@ export default function ReservasPage() {
   const [horaSeleccionada, setHoraSeleccionada] = useState<string>('') // ISO completo (fecha + hora) de la opción elegida
   const [reservando, setReservando] = useState(false)
   const [msg, setMsg] = useState('')
+  const [reservaExitosa, setReservaExitosa] = useState(false)
 
   const [misReservas, setMisReservas] = useState<any[]>([])
   const [loadingMisReservas, setLoadingMisReservas] = useState(true)
@@ -168,6 +169,7 @@ export default function ReservasPage() {
   const crearReserva = async () => {
     if (!session || session.role !== 'jugador') return
     setMsg('')
+    setReservaExitosa(false)
 
     if (!horaSeleccionada) {
       setMsg('❌ No hay horarios disponibles para reservar en este momento.')
@@ -187,10 +189,12 @@ export default function ReservasPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al reservar')
 
-      setMsg('✅ ¡Cancha reservada! No olvides confirmar que llegaste, o cancelarla a tiempo si no vas a poder ir.')
+      setMsg('✅ ¡Cancha reservada!')
+      setReservaExitosa(true)
       cargarMisReservas()
     } catch (err: any) {
       setMsg('❌ Error al reservar: ' + err.message)
+      setReservaExitosa(false)
     } finally {
       setReservando(false)
     }
@@ -320,7 +324,6 @@ export default function ReservasPage() {
             <li>Recuerda, al llegar a la cancha, confirmar desde la app que ya llegaste (botón <strong>"Ya llegué"</strong> en tus reservas).</li>
             <li>Si reservas y no puedes ir, <strong>cancela antes de la hora</strong> — no tiene ninguna penalidad.</li>
             <li>Si no cancelas a tiempo y no te presentas, no podrás reservar hasta dentro de <strong>{PENALIDAD_NO_PRESENTADO_DIAS} días</strong>.</li>
-            <li>Si usas la cancha, puedes hacer una nueva reserva <strong>día por medio</strong> — jugaste hoy, el siguiente día no puedes reservar, pero el de después sí.</li>
           </ul>
 
           <div style={{ marginBottom: '18px' }}>
@@ -419,6 +422,18 @@ export default function ReservasPage() {
               color: msg.includes('✅') ? 'var(--color-net)' : '#a83226',
             }}>
               {msg}
+            </div>
+          )}
+
+          {reservaExitosa && (
+            <div style={{
+              marginTop: '14px', padding: '18px 20px', borderRadius: '8px',
+              background: '#fff3cd', border: '3px solid #dc2626',
+              boxShadow: '0 4px 14px rgba(220,38,38,0.25)',
+            }}>
+              <p style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#7a1f1f', lineHeight: 1.5 }}>
+                ⚠️ Importante: al llegar a la cancha, toca <u>&quot;Ya llegué&quot;</u> en esta misma pantalla (en &quot;Mis próximas reservas&quot;, abajo). Si no lo haces, el sistema no puede distinguir que sí jugaste — y te puede aplicar la penalidad de {PENALIDAD_NO_PRESENTADO_DIAS} días como si no hubieras asistido.
+              </p>
             </div>
           )}
         </div>
