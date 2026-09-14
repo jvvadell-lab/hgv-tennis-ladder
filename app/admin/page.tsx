@@ -95,6 +95,10 @@ export default function AdminPage() {
   const [retos, setRetos] = useState<any[]>([])
   const [retosConResultado, setRetosConResultado] = useState<Set<string>>(new Set())
   const [loadingRetos, setLoadingRetos] = useState(false)
+  const [reporteRechazosAbierto, setReporteRechazosAbierto] = useState(false)
+  const [reporteRechazos, setReporteRechazos] = useState<{ id: string; nombre: string; rechazos: number; cancelados: number }[]>([])
+  const [loadingReporteRechazos, setLoadingReporteRechazos] = useState(false)
+  const [temporadaActivaRechazos, setTemporadaActivaRechazos] = useState<any>(null)
   const [fechaReservas, setFechaReservas] = useState(hoyEnCaracas())
   const [reservasDelDia, setReservasDelDia] = useState<any[]>([])
   const [reservasCasualesDelDia, setReservasCasualesDelDia] = useState<any[]>([])
@@ -514,6 +518,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeSection === 'challenges') {
       fetchRetos()
+      fetchReporteRechazos()
       supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle().then(({ data }) => {
         const hoy = hoyEnCaracas()
         setFuerzaMayorActivo(!!data?.activo && data?.fecha === hoy)
@@ -895,6 +900,52 @@ export default function AdminPage() {
       .order('created_at', { ascending: false })
     setRetos(data || [])
     setLoadingRetos(false)
+  }
+
+  // Reporte "Rechazos y cancelaciones" — para la temporada activa, cuenta por
+  // jugador cuántos retos rechazó él mismo (estado='rechazado', su límite es 1,
+  // ver ux_retos_un_rechazo_por_temporada) y cuántos retos donde participó fueron
+  // cancelados por un admin (estado='cancelado', solo informativo).
+  const fetchReporteRechazos = async () => {
+    setLoadingReporteRechazos(true)
+    const { data: temporada } = await supabase.from('temporadas').select('id, nombre').eq('estado', 'activa').maybeSingle()
+    setTemporadaActivaRechazos(temporada || null)
+    if (!temporada) {
+      setReporteRechazos([])
+      setLoadingReporteRechazos(false)
+      return
+    }
+
+    const [{ data: rechazados }, { data: cancelados }] = await Promise.all([
+      supabase
+        .from('retos')
+        .select('retado_id, retado:retado_id(nombre)')
+        .eq('temporada_id', temporada.id)
+        .eq('estado', 'rechazado'),
+      supabase
+        .from('retos')
+        .select('retador_id, retado_id, retador:retador_id(nombre), retado:retado_id(nombre)')
+        .eq('temporada_id', temporada.id)
+        .eq('estado', 'cancelado'),
+    ])
+
+    const porJugador: Record<string, { id: string; nombre: string; rechazos: number; cancelados: number }> = {}
+    const asegurar = (id: string, nombre: string) => {
+      if (!porJugador[id]) porJugador[id] = { id, nombre: nombre || '—', rechazos: 0, cancelados: 0 }
+      return porJugador[id]
+    }
+
+    for (const r of rechazados || []) {
+      asegurar(r.retado_id, (r.retado as any)?.nombre).rechazos++
+    }
+    for (const r of cancelados || []) {
+      asegurar(r.retador_id, (r.retador as any)?.nombre).cancelados++
+      asegurar(r.retado_id, (r.retado as any)?.nombre).cancelados++
+    }
+
+    const filas = Object.values(porJugador).sort((a, b) => b.rechazos - a.rechazos || b.cancelados - a.cancelados)
+    setReporteRechazos(filas)
+    setLoadingReporteRechazos(false)
   }
 
   // Días calendario en Caracas desde una fecha pasada hasta hoy — misma
@@ -2664,6 +2715,61 @@ export default function AdminPage() {
                 >
                   {cargandoFuerzaMayor ? '⏳...' : fuerzaMayorActivo ? 'Desactivar' : 'Activar para hoy'}
                 </button>
+              </div>
+
+              <div style={{
+                background: 'var(--color-chalk)', borderRadius: '12px',
+                marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)', overflow: 'hidden',
+              }}>
+                <button
+                  onClick={() => setReporteRechazosAbierto(a => !a)}
+                  style={{
+                    width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '10px',
+                    fontSize: '15px', fontWeight: 'bold', color: '#333', textAlign: 'left',
+                  }}
+                >
+                  <span style={{ transform: reporteRechazosAbierto ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+                  📊 Rechazos y cancelaciones — temporada activa
+                  {temporadaActivaRechazos && (
+                    <span style={{ fontWeight: 'normal', fontSize: '13px', color: '#6b6b6b' }}>({temporadaActivaRechazos.nombre})</span>
+                  )}
+                </button>
+                {reporteRechazosAbierto && (
+                  <div style={{ padding: '0 20px 20px 20px' }}>
+                    <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: '#6b6b6b' }}>
+                      <strong>Rechazos:</strong> retos que el jugador rechazó él mismo esta temporada (límite: 1). <strong>Cancelados por admin:</strong> retos donde participó que un administrador canceló — es solo informativo, no cuenta contra él.
+                    </p>
+                    {loadingReporteRechazos ? (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando reporte...</div>
+                    ) : !temporadaActivaRechazos ? (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#6b6b6b' }}>😔 No hay una temporada activa.</div>
+                    ) : reporteRechazos.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#6b6b6b' }}>✅ Sin rechazos ni cancelaciones registrados esta temporada.</div>
+                    ) : (
+                      <div className="table-scroll">
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ background: 'var(--color-court)', color: 'var(--color-chalk)' }}>
+                              <th style={{ padding: '10px 14px', textAlign: 'left' }}>Jugador</th>
+                              <th style={{ padding: '10px 14px', textAlign: 'left' }}>Rechazos</th>
+                              <th style={{ padding: '10px 14px', textAlign: 'left' }}>Cancelados por admin</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reporteRechazos.map((f, index) => (
+                              <tr key={f.id} style={{ borderBottom: '1px solid #f0f0f0', background: index % 2 === 0 ? 'var(--color-chalk)' : '#fafafa' }}>
+                                <td style={{ padding: '10px 14px', fontWeight: '600', color: '#333' }}>{f.nombre}</td>
+                                <td style={{ padding: '10px 14px', color: f.rechazos >= 1 ? '#721c24' : '#333' }}>{f.rechazos}</td>
+                                <td style={{ padding: '10px 14px', color: '#555' }}>{f.cancelados}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={{
