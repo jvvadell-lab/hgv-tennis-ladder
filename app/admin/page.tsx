@@ -903,9 +903,9 @@ export default function AdminPage() {
   }
 
   // Reporte "Rechazos y cancelaciones" — para la temporada activa, cuenta por
-  // jugador cuántos retos rechazó él mismo (estado='rechazado', su límite es 1,
-  // ver ux_retos_un_rechazo_por_temporada) y cuántos retos donde participó fueron
-  // cancelados por un admin (estado='cancelado', solo informativo).
+  // jugador cuántos retos rechazó él mismo (estado='rechazado' — el primero es
+  // gratis, del segundo en adelante baja 1 posición, ver responder-reto/route.ts)
+  // y cuántos retos donde participó fueron cancelados por un admin (estado='cancelado', solo informativo).
   const fetchReporteRechazos = async () => {
     setLoadingReporteRechazos(true)
     const { data: temporada } = await supabase.from('temporadas').select('id, nombre').eq('estado', 'activa').maybeSingle()
@@ -2738,7 +2738,7 @@ export default function AdminPage() {
                 {reporteRechazosAbierto && (
                   <div style={{ padding: '0 20px 20px 20px' }}>
                     <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: '#6b6b6b' }}>
-                      <strong>Rechazos:</strong> retos que el jugador rechazó él mismo esta temporada (límite: 1). <strong>Cancelados por admin:</strong> retos donde participó que un administrador canceló — es solo informativo, no cuenta contra él.
+                      <strong>Rechazos:</strong> retos que el jugador rechazó él mismo esta temporada — el primero es gratis, del segundo en adelante bajó 1 posición cada vez. <strong>Cancelados por admin:</strong> retos donde participó que un administrador canceló — es solo informativo, no cuenta contra él.
                     </p>
                     {loadingReporteRechazos ? (
                       <div style={{ textAlign: 'center', padding: '20px', color: '#6b6b6b' }} className="loading-row"><span className="spinner" /> Cargando reporte...</div>

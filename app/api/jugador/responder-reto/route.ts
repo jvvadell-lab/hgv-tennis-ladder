@@ -7,7 +7,56 @@ import { esEscaleraExpress } from '@/lib/escaleraExpress'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 const AJUSTES_PERMITIDOS = [-1, 2] // solo "un día antes" o "dos días después"
-const MENSAJE_LIMITE_RECHAZO = 'Ya usaste tu única oportunidad de rechazar un reto esta temporada. Si la fecha no te sirve, puedes aceptar con un día antes o dos días después en su lugar.'
+
+// Baja 1 posición al jugador dado, intercambiando con el primer jugador NO
+// congelado (standby o permiso médico activo hoy) que esté justo debajo de
+// él en su misma categoría+género — salta a los congelados como si no
+// estuvieran ahí, mismo criterio que esElegible() en app/ladder/page.tsx.
+// Si no hay nadie disponible debajo (ya es el último activo), no hace nada.
+async function bajarUnaPosicion(db: any, temporadaId: string, jugadorId: string, hoy: string) {
+  const { data: miFila, error: errMiFila } = await db
+    .from('ladder_posiciones')
+    .select('id, categoria, genero, posicion')
+    .eq('temporada_id', temporadaId)
+    .eq('jugador_id', jugadorId)
+    .maybeSingle()
+  if (errMiFila) throw errMiFila
+  if (!miFila || miFila.posicion === null) return
+
+  const { data: debajo, error: errDebajo } = await db
+    .from('ladder_posiciones')
+    .select('id, jugador_id, posicion')
+    .eq('temporada_id', temporadaId)
+    .eq('categoria', miFila.categoria)
+    .eq('genero', miFila.genero)
+    .gt('posicion', miFila.posicion)
+    .order('posicion', { ascending: true })
+  if (errDebajo) throw errDebajo
+  if (!debajo || debajo.length === 0) return
+
+  const idsDebajo = debajo.map((d: any) => d.jugador_id)
+
+  const [{ data: standbys }, { data: permisos }] = await Promise.all([
+    db.from('standby').select('jugador_id, fecha_inicio, fecha_fin').eq('temporada_id', temporadaId).in('jugador_id', idsDebajo),
+    db.from('permisos_medicos').select('jugador_id, fecha_inicio, fecha_fin').eq('temporada_id', temporadaId).eq('estado', 'aprobado').in('jugador_id', idsDebajo),
+  ])
+
+  const congelado = new Set<string>()
+  ;(standbys || []).forEach((s: any) => { if (hoy >= s.fecha_inicio && hoy <= s.fecha_fin) congelado.add(s.jugador_id) })
+  ;(permisos || []).forEach((p: any) => { if (hoy >= p.fecha_inicio && hoy <= p.fecha_fin) congelado.add(p.jugador_id) })
+
+  const vecino = debajo.find((d: any) => !congelado.has(d.jugador_id))
+  if (!vecino) return
+
+  // Mismo truco que aprobar-resultado: pasar por -1 para no chocar con el
+  // índice único (temporada, categoria, genero, posicion).
+  const { error: e1 } = await db.from('ladder_posiciones').update({ posicion: -1 }).eq('id', miFila.id)
+  if (e1) throw e1
+  const { error: e2 } = await db.from('ladder_posiciones').update({ posicion: miFila.posicion }).eq('id', vecino.id)
+  if (e2) throw e2
+  const { error: e3 } = await db.from('ladder_posiciones').update({ posicion: vecino.posicion }).eq('id', miFila.id)
+  if (e3) throw e3
+}
 
 export async function POST(request: Request) {
   try {
@@ -16,7 +65,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Debes iniciar sesión como jugador' }, { status: 403 })
     }
 
-    const { retoId, nuevoEstado, ajusteDias } = await request.json()
+    const { retoId, nuevoEstado, ajusteDias, confirmado } = await request.json()
     if (!retoId || !['aceptado', 'rechazado'].includes(nuevoEstado)) {
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
     }
@@ -36,7 +85,8 @@ export async function POST(request: Request) {
 
     // El congelamiento de Escalera Express solo aplica a retos normales — uno
     // marcado escalera_express se acepta/rechaza siempre igual que cualquier otro,
-    // sin importar la fecha (incluidas las reglas normales, como 1 rechazo por temporada).
+    // sin importar la fecha (incluidas las reglas normales, como la penalidad de
+    // posición por rechazo repetido).
     if (!reto.escalera_express && esEscaleraExpress(hoyEnCaracas())) {
       return NextResponse.json({
         error: '🚀 Escalera Express: del 10 al 12 de septiembre los retos quedan congelados — no se pueden aceptar ni rechazar hasta que termine el evento.',
@@ -62,9 +112,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Este reto ya no está pendiente' }, { status: 400 })
     }
 
-    // Un jugador solo puede rechazar UN reto por temporada — la escalera se hizo
-    // para jugarla; si la fecha no le sirve, tiene la opción de ajustarla en vez
-    // de rechazar directamente.
+    // El primer rechazo de la temporada es gratis. Del segundo en adelante,
+    // además de rechazar, el jugador baja 1 posición — así que hay que
+    // confirmarlo explícitamente antes de aplicarlo (el cliente reintenta
+    // con confirmado:true una vez que el jugador aceptó la advertencia).
+    let rechazosPrevios = 0
     if (nuevoEstado === 'rechazado') {
       const { count } = await db
         .from('retos')
@@ -72,12 +124,20 @@ export async function POST(request: Request) {
         .eq('retado_id', session.id)
         .eq('temporada_id', reto.temporada_id)
         .eq('estado', 'rechazado')
-      if ((count || 0) >= 1) {
-        return NextResponse.json({ error: MENSAJE_LIMITE_RECHAZO }, { status: 400 })
+      rechazosPrevios = count || 0
+
+      if (rechazosPrevios >= 1 && !confirmado) {
+        return NextResponse.json({
+          requiereConfirmacion: true,
+          mensaje: `Este sería tu rechazo #${rechazosPrevios + 1} esta temporada — vas a bajar 1 posición en la escalera. ¿Confirmas?`,
+        })
       }
     }
 
     const updateData: any = { estado: nuevoEstado }
+    if (nuevoEstado === 'rechazado') {
+      updateData.rechazado_at = new Date().toISOString()
+    }
 
     // Si acepta con un ajuste de fecha, validamos que el nuevo horario no choque
     // con otro partido o reserva en esa misma cancha antes de guardarlo.
@@ -126,16 +186,16 @@ export async function POST(request: Request) {
       updateData.fecha_propuesta = nuevaFecha.toISOString()
     }
 
-    const { error: errUpdate } = await db.from('retos').update(updateData).eq('id', retoId)
-    if (errUpdate) {
-      // El índice único ux_retos_un_rechazo_por_temporada es quien de verdad
-      // garantiza el límite (a prueba de carreras) — el conteo de arriba es
-      // solo para dar el mensaje de error sin llegar a chocar con la BD.
-      if (errUpdate.code === '23505') {
-        return NextResponse.json({ error: MENSAJE_LIMITE_RECHAZO }, { status: 400 })
-      }
-      throw errUpdate
+    // Si este rechazo cuesta una posición, la bajamos ANTES de marcar el reto
+    // como rechazado — igual que aprobar-resultado hace el intercambio antes
+    // de marcar el resultado validado, para no dejar el reto en un estado
+    // inconsistente si el swap fallara a mitad de camino.
+    if (nuevoEstado === 'rechazado' && rechazosPrevios >= 1) {
+      await bajarUnaPosicion(db, reto.temporada_id, session.id, hoyEnCaracas())
     }
+
+    const { error: errUpdate } = await db.from('retos').update(updateData).eq('id', retoId)
+    if (errUpdate) throw errUpdate
 
     // Si lo rechazó, avisamos por correo a quien lo había retado (si falla el correo, no revertimos nada)
     if (nuevoEstado === 'rechazado') {

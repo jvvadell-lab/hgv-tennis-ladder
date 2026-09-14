@@ -111,6 +111,27 @@ export async function POST(request: Request) {
       }
     }
 
+    // Enfriamiento anti-acoso: si ESTE jugador (como retado) me rechazó hace menos
+    // de 5 días, no puedo volver a retarlo — evita que alguien lo rete repetidamente
+    // solo esperando a que rechace, para irlo hundiendo de a poco. A diferencia del
+    // enfriamiento por victoria (arriba), este es direccional: solo afecta al
+    // retador que fue rechazado, no al revés.
+    const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
+    const { data: rechazoReciente } = await db
+      .from('retos')
+      .select('id')
+      .eq('temporada_id', temporadaId)
+      .eq('retador_id', session.id)
+      .eq('retado_id', retadoId)
+      .eq('estado', 'rechazado')
+      .gte('rechazado_at', cincoDiasAtras.toISOString())
+      .limit(1)
+      .maybeSingle()
+
+    if (rechazoReciente) {
+      return NextResponse.json({ error: 'Este jugador rechazó tu reto recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+    }
+
     const { data: nuevoReto, error: errInsert } = await db.from('retos').insert([{
       temporada_id: temporadaId,
       retador_id: session.id,

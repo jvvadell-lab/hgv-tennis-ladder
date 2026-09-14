@@ -36,6 +36,7 @@ type Reto = {
   retado_id: string
   estado: string
   created_at: string
+  rechazado_at: string | null
   fecha_propuesta: string | null
   cancha: string | null
   nombre_cancha_foranea: string | null
@@ -110,6 +111,9 @@ export default function LadderPage() {
   }
   const [misRetos, setMisRetos] = useState<Reto[]>([])
   const [ajustandoFechaRetoId, setAjustandoFechaRetoId] = useState<string | null>(null)
+  const [confirmandoRechazoRetoId, setConfirmandoRechazoRetoId] = useState<string | null>(null)
+  const [mensajeConfirmacionRechazo, setMensajeConfirmacionRechazo] = useState('')
+  const [rechazando, setRechazando] = useState(false)
   const [fuerzaMayorActivo, setFuerzaMayorActivo] = useState(false)
   const [reagendandoRetoId, setReagendandoRetoId] = useState<string | null>(null)
   const [nuevaFechaReagendar, setNuevaFechaReagendar] = useState('')
@@ -119,6 +123,7 @@ export default function LadderPage() {
   const [guardandoReagendo, setGuardandoReagendo] = useState(false)
   const [reagendoMsg, setReagendoMsg] = useState('')
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
+  const [cooldownsRechazo, setCooldownsRechazo] = useState<Record<string, string>>({}) // jugador_id que rechazó mi reto -> fecha en que se libera
   const [jugadoresOcupados, setJugadoresOcupados] = useState<Set<string>>(new Set()) // cualquiera con un reto pendiente/aceptado, sin importar quién lo inició
   const [standbyMap, setStandbyMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de standby (viaje) en esta temporada
   const [permisoMedicoMap, setPermisoMedicoMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de permiso médico aprobado en esta temporada
@@ -345,7 +350,7 @@ export default function LadderPage() {
     if (session?.role === 'jugador') {
       const { data: retos } = await supabase
         .from('retos')
-        .select('id, retador_id, retado_id, estado, created_at, fecha_propuesta, cancha, nombre_cancha_foranea, comentarios, resultado_anticipado_autorizado, escalera_express, retador:retador_id(nombre), retado:retado_id(nombre)')
+        .select('id, retador_id, retado_id, estado, created_at, rechazado_at, fecha_propuesta, cancha, nombre_cancha_foranea, comentarios, resultado_anticipado_autorizado, escalera_express, retador:retador_id(nombre), retado:retado_id(nombre)')
         .eq('temporada_id', temporadaId)
         .or(`retador_id.eq.${session.id},retado_id.eq.${session.id}`)
         .order('created_at', { ascending: false })
@@ -399,9 +404,23 @@ export default function LadderPage() {
           }
         })
         setCooldowns(nuevoCooldown)
+
+        // Enfriamiento anti-acoso: si alguien rechazó un reto mío en el que YO era
+        // el retador, no puedo volver a retarlo hasta que se cumplan 5 días desde
+        // el rechazo — direccional, distinto del de arriba (por victoria).
+        const nuevoCooldownRechazo: Record<string, string> = {}
+        ;(retos || []).forEach((r: any) => {
+          if (r.retador_id !== session.id || r.estado !== 'rechazado' || !r.rechazado_at) return
+          const liberaEn = sumarDiasEnCaracas(new Date(r.rechazado_at), 5)
+          if (!nuevoCooldownRechazo[r.retado_id] || new Date(liberaEn) > new Date(nuevoCooldownRechazo[r.retado_id])) {
+            nuevoCooldownRechazo[r.retado_id] = liberaEn.toISOString()
+          }
+        })
+        setCooldownsRechazo(nuevoCooldownRechazo)
       } else {
         setRetosConResultadoPendiente(new Set())
         setCooldowns({})
+        setCooldownsRechazo({})
         setResultadosPorReto({})
       }
     }
@@ -1039,21 +1058,34 @@ export default function LadderPage() {
     }
   }
 
-  async function responderReto(retoId: string, nuevoEstado: 'aceptado' | 'rechazado', ajusteDias?: number) {
+  async function responderReto(retoId: string, nuevoEstado: 'aceptado' | 'rechazado', ajusteDias?: number, confirmado?: boolean) {
     try {
+      if (nuevoEstado === 'rechazado') setRechazando(true)
       const res = await fetch('/api/jugador/responder-reto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ retoId, nuevoEstado, ajusteDias }),
+        body: JSON.stringify({ retoId, nuevoEstado, ajusteDias, confirmado }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al responder')
 
+      // Del 2° rechazo en adelante, el servidor pide confirmar antes de aplicar
+      // la penalidad de posición — mostramos la advertencia en vez de cerrar.
+      if (data.requiereConfirmacion) {
+        setConfirmandoRechazoRetoId(retoId)
+        setMensajeConfirmacionRechazo(data.mensaje || '')
+        return
+      }
+
       setAjustandoFechaRetoId(null)
+      setConfirmandoRechazoRetoId(null)
+      setMensajeConfirmacionRechazo('')
       cargarDatos()
       cargarProximosPartidos()
     } catch (err: any) {
       setActionMsg('❌ ' + err.message)
+    } finally {
+      setRechazando(false)
     }
   }
 
@@ -1275,6 +1307,12 @@ export default function LadderPage() {
     return new Date() < new Date(fecha)
   }
 
+  const enEnfriamientoRechazo = (jugadorId: string) => {
+    const fecha = cooldownsRechazo[jugadorId]
+    if (!fecha) return false
+    return new Date() < new Date(fecha)
+  }
+
   const puedoRetar = (p: Posicion) => {
     return (
       esElegible(p) &&
@@ -1283,6 +1321,7 @@ export default function LadderPage() {
       !retandoA &&
       !creacionDeRetosBloqueada &&
       !enEnfriamiento(p.jugador_id) &&
+      !enEnfriamientoRechazo(p.jugador_id) &&
       !jugadoresOcupados.has(p.jugador_id) &&
       !congelado(p.jugador_id) &&
       !yoEstoyCongelado
@@ -1688,6 +1727,8 @@ export default function LadderPage() {
                                       ? `Este jugador tiene permiso médico hasta el ${formatearFechaCorta(instanteEnCaracas(permisoMedicoMap[p.jugador_id].fecha_fin))}`
                                       : enEnfriamiento(p.jugador_id)
                                       ? `Te ganó recientemente — puedes retarlo de nuevo a partir del ${formatearFechaCorta(cooldowns[p.jugador_id])}`
+                                      : enEnfriamientoRechazo(p.jugador_id)
+                                      ? `Te rechazó un reto recientemente — puedes retarlo de nuevo a partir del ${formatearFechaCorta(cooldownsRechazo[p.jugador_id])}`
                                       : jugadoresOcupados.has(p.jugador_id)
                                       ? 'Este jugador ya tiene un reto pendiente o en curso con otra persona'
                                       : bloqueado ? 'Tienes un reto pendiente o un partido en curso' : ''
@@ -1695,7 +1736,7 @@ export default function LadderPage() {
                                 >
                                   ⚔️ Retar
                                 </button>
-                                {temporadaSorteada && !enEnfriamiento(p.jugador_id) && !congelado(p.jugador_id) && jugadoresOcupados.has(p.jugador_id) && (
+                                {temporadaSorteada && !enEnfriamiento(p.jugador_id) && !enEnfriamientoRechazo(p.jugador_id) && !congelado(p.jugador_id) && jugadoresOcupados.has(p.jugador_id) && (
                                   <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
                                     Ocupado en otro reto
                                   </p>
@@ -1703,6 +1744,11 @@ export default function LadderPage() {
                                 {enEnfriamiento(p.jugador_id) && (
                                   <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
                                     Disponible el {formatearFechaCorta(cooldowns[p.jugador_id])}
+                                  </p>
+                                )}
+                                {enEnfriamientoRechazo(p.jugador_id) && (
+                                  <p style={{ fontSize: '10px', color: '#c0392b', margin: '4px 0 0 0' }}>
+                                    Disponible el {formatearFechaCorta(cooldownsRechazo[p.jugador_id])}
                                   </p>
                                 )}
                               </>
@@ -2117,6 +2163,28 @@ export default function LadderPage() {
                                 Dos días después
                               </button>
                               <button onClick={() => setAjustandoFechaRetoId(null)} style={btnPequeno('#6b6b6b')}>
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : confirmandoRechazoRetoId === r.id ? (
+                          <div style={{ background: '#fdf1f1', border: '1px solid #dc3545', borderRadius: '8px', padding: '10px 12px' }}>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#721c24' }}>
+                              ⚠️ {mensajeConfirmacionRechazo}
+                            </p>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button
+                                disabled={rechazando}
+                                onClick={() => responderReto(r.id, 'rechazado', undefined, true)}
+                                style={btnPequeno('#dc3545')}
+                              >
+                                {rechazando ? 'Rechazando…' : 'Sí, rechazar (bajaré 1 posición)'}
+                              </button>
+                              <button
+                                disabled={rechazando}
+                                onClick={() => { setConfirmandoRechazoRetoId(null); setMensajeConfirmacionRechazo('') }}
+                                style={btnPequeno('#6b6b6b')}
+                              >
                                 Cancelar
                               </button>
                             </div>
