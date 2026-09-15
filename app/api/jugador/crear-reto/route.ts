@@ -85,10 +85,13 @@ export async function POST(request: Request) {
     }
 
     // Enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
+    // Excluye retos de Escalera Express: una derrota en ese evento especial no debe
+    // bloquear los retos normales de temporada.
     const { data: retosPrevios } = await db
       .from('retos')
       .select('id')
       .eq('temporada_id', temporadaId)
+      .eq('escalera_express', false)
       .or(`and(retador_id.eq.${session.id},retado_id.eq.${retadoId}),and(retador_id.eq.${retadoId},retado_id.eq.${session.id})`)
 
     const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
