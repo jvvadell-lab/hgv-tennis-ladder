@@ -6,7 +6,7 @@ import { comprimirImagen } from '@/lib/comprimirImagen'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
   hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas,
-  finDelDiaEnCaracas, formatearFechaCorta,
+  finDelDiaEnCaracas, formatearFechaCorta, minutosDesdeMedianocheEnCaracas,
 } from '@/lib/tiempo'
 
 const supabase = createClient(
@@ -896,10 +896,68 @@ export default function AdminPage() {
 
     const { data } = await supabase
       .from('retos')
-      .select('id, estado, fecha_propuesta, cancha, nombre_cancha_foranea, comentarios, created_at, resultado_anticipado_autorizado, retador:retador_id(nombre, categoria, genero), retado:retado_id(nombre)')
+      .select('id, estado, fecha_propuesta, cancha, nombre_cancha_foranea, comentarios, created_at, resultado_anticipado_autorizado, escalera_express, retador:retador_id(nombre, categoria, genero), retado:retado_id(nombre)')
       .order('created_at', { ascending: false })
     setRetos(data || [])
     setLoadingRetos(false)
+  }
+
+  // Reagendar reto (admin completo) — reemplaza el reagendo manual directo en
+  // Supabase, que ayer chocó con un juego ya pautado sin que nadie lo detectara.
+  const [reagendarModal, setReagendarModal] = useState<any>(null)
+  const [reagendarFecha, setReagendarFecha] = useState('')
+  const [reagendarCancha, setReagendarCancha] = useState('')
+  const [reagendarNombreForanea, setReagendarNombreForanea] = useState('')
+  const [reagendando, setReagendando] = useState(false)
+  const [reagendarError, setReagendarError] = useState('')
+
+  // Formatea un instante a "YYYY-MM-DDTHH:mm" en hora de Caracas, para
+  // precargar el <input type="datetime-local"> — que no acepta zona horaria,
+  // así que si no se ajusta a Caracas quedaría en la hora local del navegador.
+  const datetimeLocalEnCaracas = (instante: string) => {
+    const fechaISO = fechaISOEnCaracas(instante)
+    const minutos = minutosDesdeMedianocheEnCaracas(new Date(instante))
+    const hh = String(Math.floor(minutos / 60)).padStart(2, '0')
+    const mm = String(minutos % 60).padStart(2, '0')
+    return `${fechaISO}T${hh}:${mm}`
+  }
+
+  const abrirReagendarModal = (r: any) => {
+    setReagendarModal(r)
+    setReagendarFecha(datetimeLocalEnCaracas(r.fecha_propuesta))
+    setReagendarCancha(r.cancha)
+    setReagendarNombreForanea(r.nombre_cancha_foranea || '')
+    setReagendarError('')
+  }
+
+  const confirmarReagendar = async () => {
+    if (!reagendarModal || !reagendarFecha) return
+    setReagendando(true)
+    setReagendarError('')
+    try {
+      // El input datetime-local entrega "YYYY-MM-DDTHH:mm" sin zona horaria —
+      // se interpreta como hora de pared en Caracas, no en la del navegador.
+      const [fechaISO, horaHHMM] = reagendarFecha.split('T')
+      const nuevaFechaPropuesta = instanteEnCaracas(fechaISO, horaHHMM).toISOString()
+      const res = await fetch('/api/admin/reagendar-reto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          retoId: reagendarModal.id,
+          nuevaFechaPropuesta,
+          nuevaCancha: reagendarCancha,
+          nuevoNombreCanchaForanea: reagendarNombreForanea,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al reagendar')
+      setReagendarModal(null)
+      fetchRetos()
+    } catch (err: any) {
+      setReagendarError(err.message)
+    } finally {
+      setReagendando(false)
+    }
   }
 
   // Reporte "Rechazos y cancelaciones" — para la temporada activa, cuenta por
@@ -2867,6 +2925,14 @@ export default function AdminPage() {
                                       Autorizar carga anticipada
                                     </button>
                                   )
+                                )}
+                                {['pendiente', 'aceptado'].includes(r.estado) && !r.escalera_express && (
+                                  <button
+                                    onClick={() => abrirReagendarModal(r)}
+                                    style={{ background: '#e8f0fe', color: '#1c5fc4', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', marginRight: '6px', marginBottom: '4px' }}
+                                  >
+                                    🗓️ Reagendar
+                                  </button>
                                 )}
                                 {['pendiente', 'aceptado'].includes(r.estado) && (
                                   <button
@@ -5151,6 +5217,102 @@ export default function AdminPage() {
 
         </div>
       </div>
+
+      {reagendarModal && (
+        <div
+          onClick={() => !reagendando && setReagendarModal(null)}
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(15,27,38,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px', zIndex: 1000, cursor: 'zoom-out',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--color-chalk)', borderRadius: '12px', borderTop: '3px solid var(--color-ball)',
+              padding: '28px', maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', cursor: 'default',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '20px', margin: 0 }}>
+                🗓️ Reagendar reto
+              </h3>
+              <button
+                onClick={() => setReagendarModal(null)}
+                disabled={reagendando}
+                style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#999', lineHeight: 1 }}
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', color: '#6b6b6b', margin: '6px 0 18px 0' }}>
+              {reagendarModal.retador?.nombre || '—'} vs {reagendarModal.retado?.nombre || '—'}
+            </p>
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '6px' }}>
+              Nueva fecha y hora (hora de Venezuela)
+            </label>
+            <input
+              type="datetime-local"
+              value={reagendarFecha}
+              onChange={(e) => setReagendarFecha(e.target.value)}
+              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px', marginBottom: '16px' }}
+            />
+
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '6px' }}>
+              Cancha
+            </label>
+            <select
+              value={reagendarCancha}
+              onChange={(e) => setReagendarCancha(e.target.value)}
+              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px', marginBottom: '16px' }}
+            >
+              <option value="HGV1">HGV 1</option>
+              <option value="HGV2">HGV 2</option>
+              <option value="FORANEA">Foránea</option>
+            </select>
+
+            {reagendarCancha === 'FORANEA' && (
+              <>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '6px' }}>
+                  Nombre de la cancha foránea
+                </label>
+                <input
+                  type="text"
+                  value={reagendarNombreForanea}
+                  onChange={(e) => setReagendarNombreForanea(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px', marginBottom: '16px' }}
+                />
+              </>
+            )}
+
+            {reagendarError && (
+              <p style={{ background: '#f8d7da', color: '#721c24', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
+                ❌ {reagendarError}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setReagendarModal(null)}
+                disabled={reagendando}
+                style={{ background: 'none', border: '1px solid #ddd', color: '#555', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarReagendar}
+                disabled={reagendando || !reagendarFecha}
+                style={{ background: reagendando ? '#ccc' : 'var(--color-court)', color: 'var(--color-chalk)', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: reagendando ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 'bold' }}
+              >
+                {reagendando ? 'Guardando…' : 'Confirmar reagendo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {jugadorModal && (
         <div
