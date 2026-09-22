@@ -380,10 +380,11 @@ export default function LadderPage() {
         setResultadosPorReto(mapaResultados)
 
         // Calcular "enfriamiento": si un rival me ganó hace menos de 5 días,
-        // no puedo volver a retarlo hasta que se cumplan esos 5 días.
+        // no puedo volver a retarlo hasta que se cumplan esos 5 días. Cuenta
+        // desde que se jugó el partido (fecha_propuesta), igual que en el servidor.
         const { data: resultadosJugados } = await supabase
           .from('resultados')
-          .select('ganador_id, validado_at, reto_id')
+          .select('ganador_id, reto_id')
           .in('reto_id', retoIds)
           .eq('validado', true)
 
@@ -393,12 +394,13 @@ export default function LadderPage() {
         const nuevoCooldown: Record<string, string> = {}
         ;(resultadosJugados || []).forEach((r: any) => {
           const reto = retosMap[r.reto_id]
-          if (!reto || !r.validado_at) return
+          if (!reto || !reto.fecha_propuesta) return
+          if (reto.escalera_express) return // una derrota en Escalera Express no bloquea retos normales — igual que en el servidor (f749ea9)
           const oponente = reto.retador_id === session.id ? reto.retado_id : reto.retado_id === session.id ? reto.retador_id : null
           if (!oponente) return
           if (r.ganador_id !== oponente) return // solo importa si el oponente fue quien ganó
 
-          const liberaEn = sumarDiasEnCaracas(new Date(r.validado_at), 5)
+          const liberaEn = sumarDiasEnCaracas(new Date(reto.fecha_propuesta), 5)
           if (!nuevoCooldown[oponente] || new Date(liberaEn) > new Date(nuevoCooldown[oponente])) {
             nuevoCooldown[oponente] = liberaEn.toISOString()
           }
@@ -924,30 +926,35 @@ export default function LadderPage() {
         return
       }
 
-      // Verificación de enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo
+      // Verificación de enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
+      // Cuenta desde que se jugó el partido (fecha_propuesta), igual que en el servidor.
       const cincoDiasAtras = sumarDiasEnCaracas(new Date(), -5)
 
       const { data: retosPrevios } = await supabase
         .from('retos')
-        .select('id, retador_id, retado_id')
+        .select('id, retador_id, retado_id, fecha_propuesta')
         .eq('temporada_id', temporadaId)
+        .eq('escalera_express', false)
         .or(`and(retador_id.eq.${session.id},retado_id.eq.${retandoA}),and(retador_id.eq.${retandoA},retado_id.eq.${session.id})`)
 
       const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
       if (idsRetosPrevios.length > 0) {
-        const { data: resultadoReciente } = await supabase
+        const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
+
+        const { data: resultadosGanadosPorRival } = await supabase
           .from('resultados')
-          .select('ganador_id, validado_at')
+          .select('reto_id')
           .in('reto_id', idsRetosPrevios)
           .eq('validado', true)
           .eq('ganador_id', retandoA)
-          .gte('validado_at', cincoDiasAtras.toISOString())
-          .order('validado_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
 
-        if (resultadoReciente) {
-          const libera = sumarDiasEnCaracas(new Date(resultadoReciente.validado_at), 5)
+        const masReciente = (resultadosGanadosPorRival || [])
+          .map((r: any) => fechaPorReto.get(r.reto_id))
+          .filter((fecha: string | undefined): fecha is string => !!fecha && new Date(fecha) >= cincoDiasAtras)
+          .sort((a: string, b: string) => new Date(b).getTime() - new Date(a).getTime())[0]
+
+        if (masReciente) {
+          const libera = sumarDiasEnCaracas(new Date(masReciente), 5)
           setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${formatearFechaCorta(libera)}.`)
           return
         }

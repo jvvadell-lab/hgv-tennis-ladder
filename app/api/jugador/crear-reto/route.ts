@@ -89,27 +89,31 @@ export async function POST(request: Request) {
     // bloquear los retos normales de temporada.
     const { data: retosPrevios } = await db
       .from('retos')
-      .select('id')
+      .select('id, fecha_propuesta')
       .eq('temporada_id', temporadaId)
       .eq('escalera_express', false)
       .or(`and(retador_id.eq.${session.id},retado_id.eq.${retadoId}),and(retador_id.eq.${retadoId},retado_id.eq.${session.id})`)
 
     const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
     if (idsRetosPrevios.length > 0) {
+      // El enfriamiento cuenta desde que se JUGÓ el partido (fecha_propuesta),
+      // no desde que el admin aprobó el resultado (validado_at).
+      const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
       const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
 
-      const { data: resultadoReciente } = await db
+      const { data: resultadosGanadosPorRival } = await db
         .from('resultados')
-        .select('ganador_id, validado_at')
+        .select('reto_id')
         .in('reto_id', idsRetosPrevios)
         .eq('validado', true)
         .eq('ganador_id', retadoId)
-        .gte('validado_at', cincoDiasAtras.toISOString())
-        .order('validado_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
 
-      if (resultadoReciente) {
+      const meGanoReciente = (resultadosGanadosPorRival || []).some((r: any) => {
+        const fecha = fechaPorReto.get(r.reto_id)
+        return fecha && new Date(fecha) >= cincoDiasAtras
+      })
+
+      if (meGanoReciente) {
         return NextResponse.json({ error: 'Este jugador te ganó recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
       }
     }
