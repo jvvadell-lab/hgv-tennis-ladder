@@ -11,6 +11,7 @@ import {
   sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora,
 } from '@/lib/tiempo'
 import { esEscaleraExpress, RANGO_RETO_EXPRESS, ventanaExpressAbierta, calcularCuposExpress } from '@/lib/escaleraExpress'
+import { cooldownPausado } from '@/lib/cooldownReto'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -124,6 +125,7 @@ export default function LadderPage() {
   const [reagendoMsg, setReagendoMsg] = useState('')
   const [cooldowns, setCooldowns] = useState<Record<string, string>>({}) // jugador_id que me ganó -> fecha en que se libera el reto
   const [cooldownsRechazo, setCooldownsRechazo] = useState<Record<string, string>>({}) // jugador_id que rechazó mi reto -> fecha en que se libera
+  const [cooldownPausadoActivo, setCooldownPausadoActivo] = useState(false) // si un admin pausó temporalmente los cooldowns de arriba para toda la temporada
   const [jugadoresOcupados, setJugadoresOcupados] = useState<Set<string>>(new Set()) // cualquiera con un reto pendiente/aceptado, sin importar quién lo inició
   const [standbyMap, setStandbyMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de standby (viaje) en esta temporada
   const [permisoMedicoMap, setPermisoMedicoMap] = useState<Record<string, { fecha_inicio: string; fecha_fin: string }>>({}) // jugador_id -> rango de permiso médico aprobado en esta temporada
@@ -207,7 +209,7 @@ export default function LadderPage() {
   useEffect(() => {
     supabase
       .from('temporadas')
-      .select('id, nombre, fecha_limite_inscripcion, fecha_inicio, fecha_fin, sorteo_realizado')
+      .select('id, nombre, fecha_limite_inscripcion, fecha_inicio, fecha_fin, sorteo_realizado, cooldown_pausado')
       .eq('estado', 'activa')
       .maybeSingle()
       .then(({ data }) => {
@@ -218,6 +220,7 @@ export default function LadderPage() {
           setTemporadaInicio(data.fecha_inicio || null)
           setTemporadaFin(data.fecha_fin || null)
           setTemporadaSorteada(!!data.sorteo_realizado)
+          setCooldownPausadoActivo(cooldownPausado(data))
         }
       })
   }, [])
@@ -379,46 +382,52 @@ export default function LadderPage() {
         ;(resultadosTodos || []).forEach((r: any) => { mapaResultados[r.reto_id] = { id: r.id, foto_url: r.foto_url } })
         setResultadosPorReto(mapaResultados)
 
-        // Calcular "enfriamiento": si un rival me ganó hace menos de 5 días,
-        // no puedo volver a retarlo hasta que se cumplan esos 5 días. Cuenta
-        // desde que se jugó el partido (fecha_propuesta), igual que en el servidor.
-        const { data: resultadosJugados } = await supabase
-          .from('resultados')
-          .select('ganador_id, reto_id')
-          .in('reto_id', retoIds)
-          .eq('validado', true)
+        if (cooldownPausadoActivo) {
+          // Los cooldowns están pausados para toda la temporada — nadie ve badge de bloqueo.
+          setCooldowns({})
+          setCooldownsRechazo({})
+        } else {
+          // Calcular "enfriamiento": si un rival me ganó hace menos de 5 días,
+          // no puedo volver a retarlo hasta que se cumplan esos 5 días. Cuenta
+          // desde que se jugó el partido (fecha_propuesta), igual que en el servidor.
+          const { data: resultadosJugados } = await supabase
+            .from('resultados')
+            .select('ganador_id, reto_id')
+            .in('reto_id', retoIds)
+            .eq('validado', true)
 
-        const retosMap: Record<string, Reto> = {}
-        ;(retos || []).forEach((r: any) => { retosMap[r.id] = r })
+          const retosMap: Record<string, Reto> = {}
+          ;(retos || []).forEach((r: any) => { retosMap[r.id] = r })
 
-        const nuevoCooldown: Record<string, string> = {}
-        ;(resultadosJugados || []).forEach((r: any) => {
-          const reto = retosMap[r.reto_id]
-          if (!reto || !reto.fecha_propuesta) return
-          if (reto.escalera_express) return // una derrota en Escalera Express no bloquea retos normales — igual que en el servidor (f749ea9)
-          const oponente = reto.retador_id === session.id ? reto.retado_id : reto.retado_id === session.id ? reto.retador_id : null
-          if (!oponente) return
-          if (r.ganador_id !== oponente) return // solo importa si el oponente fue quien ganó
+          const nuevoCooldown: Record<string, string> = {}
+          ;(resultadosJugados || []).forEach((r: any) => {
+            const reto = retosMap[r.reto_id]
+            if (!reto || !reto.fecha_propuesta) return
+            if (reto.escalera_express) return // una derrota en Escalera Express no bloquea retos normales — igual que en el servidor (f749ea9)
+            const oponente = reto.retador_id === session.id ? reto.retado_id : reto.retado_id === session.id ? reto.retador_id : null
+            if (!oponente) return
+            if (r.ganador_id !== oponente) return // solo importa si el oponente fue quien ganó
 
-          const liberaEn = sumarDiasEnCaracas(new Date(reto.fecha_propuesta), 5)
-          if (!nuevoCooldown[oponente] || new Date(liberaEn) > new Date(nuevoCooldown[oponente])) {
-            nuevoCooldown[oponente] = liberaEn.toISOString()
-          }
-        })
-        setCooldowns(nuevoCooldown)
+            const liberaEn = sumarDiasEnCaracas(new Date(reto.fecha_propuesta), 5)
+            if (!nuevoCooldown[oponente] || new Date(liberaEn) > new Date(nuevoCooldown[oponente])) {
+              nuevoCooldown[oponente] = liberaEn.toISOString()
+            }
+          })
+          setCooldowns(nuevoCooldown)
 
-        // Enfriamiento anti-acoso: si alguien rechazó un reto mío en el que YO era
-        // el retador, no puedo volver a retarlo hasta que se cumplan 5 días desde
-        // el rechazo — direccional, distinto del de arriba (por victoria).
-        const nuevoCooldownRechazo: Record<string, string> = {}
-        ;(retos || []).forEach((r: any) => {
-          if (r.retador_id !== session.id || r.estado !== 'rechazado' || !r.rechazado_at) return
-          const liberaEn = sumarDiasEnCaracas(new Date(r.rechazado_at), 5)
-          if (!nuevoCooldownRechazo[r.retado_id] || new Date(liberaEn) > new Date(nuevoCooldownRechazo[r.retado_id])) {
-            nuevoCooldownRechazo[r.retado_id] = liberaEn.toISOString()
-          }
-        })
-        setCooldownsRechazo(nuevoCooldownRechazo)
+          // Enfriamiento anti-acoso: si alguien rechazó un reto mío en el que YO era
+          // el retador, no puedo volver a retarlo hasta que se cumplan 5 días desde
+          // el rechazo — direccional, distinto del de arriba (por victoria).
+          const nuevoCooldownRechazo: Record<string, string> = {}
+          ;(retos || []).forEach((r: any) => {
+            if (r.retador_id !== session.id || r.estado !== 'rechazado' || !r.rechazado_at) return
+            const liberaEn = sumarDiasEnCaracas(new Date(r.rechazado_at), 5)
+            if (!nuevoCooldownRechazo[r.retado_id] || new Date(liberaEn) > new Date(nuevoCooldownRechazo[r.retado_id])) {
+              nuevoCooldownRechazo[r.retado_id] = liberaEn.toISOString()
+            }
+          })
+          setCooldownsRechazo(nuevoCooldownRechazo)
+        }
       } else {
         setRetosConResultadoPendiente(new Set())
         setCooldowns({})
@@ -926,37 +935,39 @@ export default function LadderPage() {
         return
       }
 
-      // Verificación de enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
-      // Cuenta desde que se jugó el partido (fecha_propuesta), igual que en el servidor.
-      const cincoDiasAtras = sumarDiasEnCaracas(new Date(), -5)
+      if (!cooldownPausadoActivo) {
+        // Verificación de enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
+        // Cuenta desde que se jugó el partido (fecha_propuesta), igual que en el servidor.
+        const cincoDiasAtras = sumarDiasEnCaracas(new Date(), -5)
 
-      const { data: retosPrevios } = await supabase
-        .from('retos')
-        .select('id, retador_id, retado_id, fecha_propuesta')
-        .eq('temporada_id', temporadaId)
-        .eq('escalera_express', false)
-        .or(`and(retador_id.eq.${session.id},retado_id.eq.${retandoA}),and(retador_id.eq.${retandoA},retado_id.eq.${session.id})`)
+        const { data: retosPrevios } = await supabase
+          .from('retos')
+          .select('id, retador_id, retado_id, fecha_propuesta')
+          .eq('temporada_id', temporadaId)
+          .eq('escalera_express', false)
+          .or(`and(retador_id.eq.${session.id},retado_id.eq.${retandoA}),and(retador_id.eq.${retandoA},retado_id.eq.${session.id})`)
 
-      const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
-      if (idsRetosPrevios.length > 0) {
-        const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
+        const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
+        if (idsRetosPrevios.length > 0) {
+          const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
 
-        const { data: resultadosGanadosPorRival } = await supabase
-          .from('resultados')
-          .select('reto_id')
-          .in('reto_id', idsRetosPrevios)
-          .eq('validado', true)
-          .eq('ganador_id', retandoA)
+          const { data: resultadosGanadosPorRival } = await supabase
+            .from('resultados')
+            .select('reto_id')
+            .in('reto_id', idsRetosPrevios)
+            .eq('validado', true)
+            .eq('ganador_id', retandoA)
 
-        const masReciente = (resultadosGanadosPorRival || [])
-          .map((r: any) => fechaPorReto.get(r.reto_id))
-          .filter((fecha: string | undefined): fecha is string => !!fecha && new Date(fecha) >= cincoDiasAtras)
-          .sort((a: string, b: string) => new Date(b).getTime() - new Date(a).getTime())[0]
+          const masReciente = (resultadosGanadosPorRival || [])
+            .map((r: any) => fechaPorReto.get(r.reto_id))
+            .filter((fecha: string | undefined): fecha is string => !!fecha && new Date(fecha) >= cincoDiasAtras)
+            .sort((a: string, b: string) => new Date(b).getTime() - new Date(a).getTime())[0]
 
-        if (masReciente) {
-          const libera = sumarDiasEnCaracas(new Date(masReciente), 5)
-          setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${formatearFechaCorta(libera)}.`)
-          return
+          if (masReciente) {
+            const libera = sumarDiasEnCaracas(new Date(masReciente), 5)
+            setRetoFormMsg(`❌ Este jugador te ganó recientemente — puedes retarlo de nuevo a partir del ${formatearFechaCorta(libera)}.`)
+            return
+          }
         }
       }
 

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { ahora, sumarDiasEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
+import { cooldownPausado } from '@/lib/cooldownReto'
 
 const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')
-      .select('id, estado, sorteo_realizado')
+      .select('id, estado, sorteo_realizado, cooldown_pausado')
       .eq('id', temporadaId)
       .maybeSingle()
     if (errTemp) throw errTemp
@@ -84,59 +85,61 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // Enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
-    // Excluye retos de Escalera Express: una derrota en ese evento especial no debe
-    // bloquear los retos normales de temporada.
-    const { data: retosPrevios } = await db
-      .from('retos')
-      .select('id, fecha_propuesta')
-      .eq('temporada_id', temporadaId)
-      .eq('escalera_express', false)
-      .or(`and(retador_id.eq.${session.id},retado_id.eq.${retadoId}),and(retador_id.eq.${retadoId},retado_id.eq.${session.id})`)
+    if (!cooldownPausado(temporada)) {
+      // Enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
+      // Excluye retos de Escalera Express: una derrota en ese evento especial no debe
+      // bloquear los retos normales de temporada.
+      const { data: retosPrevios } = await db
+        .from('retos')
+        .select('id, fecha_propuesta')
+        .eq('temporada_id', temporadaId)
+        .eq('escalera_express', false)
+        .or(`and(retador_id.eq.${session.id},retado_id.eq.${retadoId}),and(retador_id.eq.${retadoId},retado_id.eq.${session.id})`)
 
-    const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
-    if (idsRetosPrevios.length > 0) {
-      // El enfriamiento cuenta desde que se JUGÓ el partido (fecha_propuesta),
-      // no desde que el admin aprobó el resultado (validado_at).
-      const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
-      const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
+      const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
+      if (idsRetosPrevios.length > 0) {
+        // El enfriamiento cuenta desde que se JUGÓ el partido (fecha_propuesta),
+        // no desde que el admin aprobó el resultado (validado_at).
+        const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
+        const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
 
-      const { data: resultadosGanadosPorRival } = await db
-        .from('resultados')
-        .select('reto_id')
-        .in('reto_id', idsRetosPrevios)
-        .eq('validado', true)
-        .eq('ganador_id', retadoId)
+        const { data: resultadosGanadosPorRival } = await db
+          .from('resultados')
+          .select('reto_id')
+          .in('reto_id', idsRetosPrevios)
+          .eq('validado', true)
+          .eq('ganador_id', retadoId)
 
-      const meGanoReciente = (resultadosGanadosPorRival || []).some((r: any) => {
-        const fecha = fechaPorReto.get(r.reto_id)
-        return fecha && new Date(fecha) >= cincoDiasAtras
-      })
+        const meGanoReciente = (resultadosGanadosPorRival || []).some((r: any) => {
+          const fecha = fechaPorReto.get(r.reto_id)
+          return fecha && new Date(fecha) >= cincoDiasAtras
+        })
 
-      if (meGanoReciente) {
-        return NextResponse.json({ error: 'Este jugador te ganó recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+        if (meGanoReciente) {
+          return NextResponse.json({ error: 'Este jugador te ganó recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+        }
       }
-    }
 
-    // Enfriamiento anti-acoso: si ESTE jugador (como retado) me rechazó hace menos
-    // de 5 días, no puedo volver a retarlo — evita que alguien lo rete repetidamente
-    // solo esperando a que rechace, para irlo hundiendo de a poco. A diferencia del
-    // enfriamiento por victoria (arriba), este es direccional: solo afecta al
-    // retador que fue rechazado, no al revés.
-    const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
-    const { data: rechazoReciente } = await db
-      .from('retos')
-      .select('id')
-      .eq('temporada_id', temporadaId)
-      .eq('retador_id', session.id)
-      .eq('retado_id', retadoId)
-      .eq('estado', 'rechazado')
-      .gte('rechazado_at', cincoDiasAtras.toISOString())
-      .limit(1)
-      .maybeSingle()
+      // Enfriamiento anti-acoso: si ESTE jugador (como retado) me rechazó hace menos
+      // de 5 días, no puedo volver a retarlo — evita que alguien lo rete repetidamente
+      // solo esperando a que rechace, para irlo hundiendo de a poco. A diferencia del
+      // enfriamiento por victoria (arriba), este es direccional: solo afecta al
+      // retador que fue rechazado, no al revés.
+      const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
+      const { data: rechazoReciente } = await db
+        .from('retos')
+        .select('id')
+        .eq('temporada_id', temporadaId)
+        .eq('retador_id', session.id)
+        .eq('retado_id', retadoId)
+        .eq('estado', 'rechazado')
+        .gte('rechazado_at', cincoDiasAtras.toISOString())
+        .limit(1)
+        .maybeSingle()
 
-    if (rechazoReciente) {
-      return NextResponse.json({ error: 'Este jugador rechazó tu reto recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+      if (rechazoReciente) {
+        return NextResponse.json({ error: 'Este jugador rechazó tu reto recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+      }
     }
 
     const { data: nuevoReto, error: errInsert } = await db.from('retos').insert([{

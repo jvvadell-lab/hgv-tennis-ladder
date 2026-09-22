@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { ahora, sumarDiasEnCaracas } from '@/lib/tiempo'
+import { cooldownPausado } from '@/lib/cooldownReto'
 import {
   RANGO_RETO_EXPRESS, ESCALERA_EXPRESS_HORARIOS, ESCALERA_EXPRESS_CANCHAS,
   ventanaExpressAbierta, instanteCupoExpress,
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
 
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')
-      .select('id, estado, sorteo_realizado')
+      .select('id, estado, sorteo_realizado, cooldown_pausado')
       .eq('id', temporadaId)
       .maybeSingle()
     if (errTemp) throw errTemp
@@ -115,33 +116,35 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // Enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
-    const { data: retosPrevios } = await db
-      .from('retos')
-      .select('id, fecha_propuesta')
-      .eq('temporada_id', temporadaId)
-      .eq('escalera_express', true)
-      .or(`and(retador_id.eq.${session.id},retado_id.eq.${retadoId}),and(retador_id.eq.${retadoId},retado_id.eq.${session.id})`)
+    if (!cooldownPausado(temporada)) {
+      // Enfriamiento: si el rival me ganó hace menos de 5 días, no puedo retarlo de nuevo.
+      const { data: retosPrevios } = await db
+        .from('retos')
+        .select('id, fecha_propuesta')
+        .eq('temporada_id', temporadaId)
+        .eq('escalera_express', true)
+        .or(`and(retador_id.eq.${session.id},retado_id.eq.${retadoId}),and(retador_id.eq.${retadoId},retado_id.eq.${session.id})`)
 
-    const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
-    if (idsRetosPrevios.length > 0) {
-      const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
-      const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
+      const idsRetosPrevios = (retosPrevios || []).map((r: any) => r.id)
+      if (idsRetosPrevios.length > 0) {
+        const fechaPorReto = new Map((retosPrevios || []).map((r: any) => [r.id, r.fecha_propuesta]))
+        const cincoDiasAtras = sumarDiasEnCaracas(ahora(), -5)
 
-      const { data: resultadosGanadosPorRival } = await db
-        .from('resultados')
-        .select('reto_id')
-        .in('reto_id', idsRetosPrevios)
-        .eq('validado', true)
-        .eq('ganador_id', retadoId)
+        const { data: resultadosGanadosPorRival } = await db
+          .from('resultados')
+          .select('reto_id')
+          .in('reto_id', idsRetosPrevios)
+          .eq('validado', true)
+          .eq('ganador_id', retadoId)
 
-      const meGanoReciente = (resultadosGanadosPorRival || []).some((r: any) => {
-        const fecha = fechaPorReto.get(r.reto_id)
-        return fecha && new Date(fecha) >= cincoDiasAtras
-      })
+        const meGanoReciente = (resultadosGanadosPorRival || []).some((r: any) => {
+          const fecha = fechaPorReto.get(r.reto_id)
+          return fecha && new Date(fecha) >= cincoDiasAtras
+        })
 
-      if (meGanoReciente) {
-        return NextResponse.json({ error: 'Este jugador te ganó recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+        if (meGanoReciente) {
+          return NextResponse.json({ error: 'Este jugador te ganó recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+        }
       }
     }
 

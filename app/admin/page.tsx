@@ -117,6 +117,10 @@ export default function AdminPage() {
   const [permisoMedicoMsgAdmin, setPermisoMedicoMsgAdmin] = useState('')
   const [fuerzaMayorActivo, setFuerzaMayorActivo] = useState(false)
   const [cargandoFuerzaMayor, setCargandoFuerzaMayor] = useState(false)
+  const [temporadaActivaCooldownId, setTemporadaActivaCooldownId] = useState<string | null>(null)
+  const [cooldownPausadoActivo, setCooldownPausadoActivo] = useState(false)
+  const [cooldownPausadoInfo, setCooldownPausadoInfo] = useState<{ at: string | null; por: string | null } | null>(null)
+  const [cargandoCooldownPausado, setCargandoCooldownPausado] = useState(false)
   const [historialReservas, setHistorialReservas] = useState<any[]>([])
   const [loadingHistorialReservas, setLoadingHistorialReservas] = useState(false)
   const [historialReservasDesde, setHistorialReservasDesde] = useState('')
@@ -519,6 +523,7 @@ export default function AdminPage() {
     if (activeSection === 'challenges') {
       fetchRetos()
       fetchReporteRechazos()
+      fetchCooldownPausado()
       supabase.from('fuerza_mayor').select('activo, fecha').eq('id', 1).maybeSingle().then(({ data }) => {
         const hoy = hoyEnCaracas()
         setFuerzaMayorActivo(!!data?.activo && data?.fecha === hoy)
@@ -807,6 +812,44 @@ export default function AdminPage() {
       setPermisoMedicoMsgAdmin('❌ ' + err.message)
     } finally {
       setActivandoDirecto(false)
+    }
+  }
+
+  const fetchCooldownPausado = async () => {
+    const { data } = await supabase
+      .from('temporadas')
+      .select('id, cooldown_pausado, cooldown_pausado_at, cooldown_pausado_por, administrador_pausa:cooldown_pausado_por(nombre)')
+      .eq('estado', 'activa')
+      .maybeSingle()
+    setTemporadaActivaCooldownId(data?.id || null)
+    setCooldownPausadoActivo(!!data?.cooldown_pausado)
+    setCooldownPausadoInfo(
+      data?.cooldown_pausado
+        ? { at: data.cooldown_pausado_at, por: (data as any).administrador_pausa?.nombre || null }
+        : null
+    )
+  }
+
+  const toggleCooldownPausado = async () => {
+    const pausar = !cooldownPausadoActivo
+    const mensaje = pausar
+      ? '¿Pausar el cooldown de 5 días para TODA la temporada? Cualquier jugador va a poder retar sin importar cuándo jugó o le rechazaron su último reto, hasta que lo reactives a mano.'
+      : '¿Reactivar el cooldown de 5 días? Vuelve a funcionar exactamente igual que antes de pausarlo, para todos los jugadores.'
+    if (!confirm(mensaje)) return
+    setCargandoCooldownPausado(true)
+    try {
+      const res = await fetch('/api/admin/pausar-cooldown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temporadaId: temporadaActivaCooldownId, pausar }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar')
+      await fetchCooldownPausado()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setCargandoCooldownPausado(false)
     }
   }
 
@@ -2749,6 +2792,38 @@ export default function AdminPage() {
           {/* DESAFÍOS */}
           {activeSection === 'challenges' && (
             <div>
+              <div style={{
+                background: cooldownPausadoActivo ? '#f8d7da' : 'var(--color-chalk)',
+                border: cooldownPausadoActivo ? '2px solid #dc2626' : 'none',
+                borderRadius: '12px', padding: '20px',
+                marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap'
+              }}>
+                <span style={{ fontWeight: 'bold', color: '#333' }}>
+                  ⏸️ Cooldown de 5 días: {cooldownPausadoActivo ? '🔴 PAUSADO' : '🟢 Activo (comportamiento normal)'}
+                </span>
+                {cooldownPausadoActivo && cooldownPausadoInfo && (
+                  <span style={{ fontSize: '13px', color: '#7f1d1d', fontWeight: 600 }}>
+                    Pausado desde el {cooldownPausadoInfo.at ? formatearFechaCorta(cooldownPausadoInfo.at) : '—'}
+                    {cooldownPausadoInfo.por ? ` por ${cooldownPausadoInfo.por}` : ''}
+                  </span>
+                )}
+                <p style={{ margin: 0, fontSize: '13px', color: '#6b6b6b', flex: '1 1 260px' }}>
+                  Al pausarlo, cualquier jugador puede retar sin importar si perdió recientemente o le rechazaron un reto. El resto de las reglas (rango, un reto activo, inscripción) sigue intacto. No se auto-reactiva.
+                </p>
+                <button
+                  onClick={toggleCooldownPausado}
+                  disabled={cargandoCooldownPausado || !temporadaActivaCooldownId}
+                  style={{
+                    background: cargandoCooldownPausado ? '#ccc' : (cooldownPausadoActivo ? '#16a34a' : '#dc2626'),
+                    color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px',
+                    cursor: cargandoCooldownPausado ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold',
+                  }}
+                >
+                  {cargandoCooldownPausado ? '⏳...' : cooldownPausadoActivo ? 'Reactivar cooldown' : 'Pausar cooldown'}
+                </button>
+              </div>
+
               <div style={{
                 background: fuerzaMayorActivo ? '#fff3cd' : 'var(--color-chalk)',
                 border: fuerzaMayorActivo ? '2px solid #e67e22' : 'none',
