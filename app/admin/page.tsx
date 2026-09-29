@@ -3,6 +3,7 @@ import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import Delegacion from './Delegacion'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
   hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas,
@@ -80,6 +81,8 @@ export default function AdminPage() {
   const [loadingPagos, setLoadingPagos] = useState(true)
   const [temporadaActivaPagos, setTemporadaActivaPagos] = useState<any>(null)
   const [jugadoresParaPago, setJugadoresParaPago] = useState<any[]>([])
+  // Pagos → Escalera (tabla pagos, lo de siempre) | Delegación (torneos inter-clubes y uniformes)
+  const [subPagos, setSubPagos] = useState<'escalera' | 'delegacion'>('escalera')
   const [inscritos, setInscritos] = useState<any[]>([])
   const [pagoJugadorId, setPagoJugadorId] = useState('')
   const [pagoTipo, setPagoTipo] = useState('pago_movil')
@@ -4813,6 +4816,26 @@ export default function AdminPage() {
           {/* PAGOS */}
           {activeSection === 'payments' && (
             <div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                {([['escalera', '🎾 Escalera'], ['delegacion', '🏟️ Delegación']] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setSubPagos(id)}
+                    style={{
+                      padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+                      border: subPagos === id ? '2px solid var(--color-ink)' : '1px solid #ddd',
+                      background: subPagos === id ? 'var(--color-ink)' : 'white',
+                      color: subPagos === id ? 'white' : 'var(--color-ink)',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {subPagos === 'delegacion' ? (
+                <Delegacion esAdminCompleto={!esAdminLimitado} />
+              ) : (
+              <>
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                 <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>💳 Registrar pago</h3>
                 <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '16px' }}>
@@ -5287,6 +5310,8 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+              </>
+              )}
             </div>
           )}
 
