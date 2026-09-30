@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { hoyEnCaracas, fechaISOEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
         .from('reservas_cancha')
         .select('id, fecha_hora, duracion_min')
         .eq('cancha', cancha)
-        .eq('estado', 'activa')
+        .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
         .gte('fecha_hora', inicioDia.toISOString())
         .lte('fecha_hora', finDia.toISOString())
 

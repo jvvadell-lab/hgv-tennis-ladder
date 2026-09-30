@@ -9,6 +9,7 @@ import {
   hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas,
   finDelDiaEnCaracas, formatearFechaCorta, minutosDesdeMedianocheEnCaracas,
 } from '@/lib/tiempo'
+import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -595,7 +596,7 @@ export default function AdminPage() {
     const { data: casuales } = await supabase
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, estado, duracion_min, tipo_juego, jugadores:jugador_id(nombre)')
-      .eq('estado', 'activa')
+      .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
       .gte('fecha_hora', inicio.toISOString())
       .lte('fecha_hora', fin.toISOString())
       .order('fecha_hora', { ascending: true })

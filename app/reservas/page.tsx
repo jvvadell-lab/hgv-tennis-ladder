@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import {
-  DURACION_SINGLE_MIN, DURACION_RETO_MIN, PENALIDAD_NO_PRESENTADO_DIAS,
+  DURACION_SINGLE_MIN, DURACION_RETO_MIN, PENALIDAD_NO_PRESENTADO_DIAS, ESTADOS_RESERVA_OCUPAN_CANCHA,
   PASO_MIN, APERTURA_MISMO_DIA_MIN, APERTURA_MANANA_MIN, MANANA_HGV2_INICIO_MIN, MANANA_HGV2_FIN_MIN,
   seSolapan, horaValidaParaCancha, fechaAlInicioDelDia, duracionParaTipoJuego,
 } from '@/lib/reservas'
@@ -55,7 +55,7 @@ export default function ReservasPage() {
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, estado, duracion_min, tipo_juego')
       .eq('jugador_id', session.id)
-      .eq('estado', 'activa')
+      .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA) // las 'usada' se filtran abajo: solo mientras estén en curso
       .gte('fecha_hora', inicioHoy.toISOString())
       .order('fecha_hora', { ascending: true })
       .then(({ data }) => {
@@ -87,7 +87,7 @@ export default function ReservasPage() {
       const inicioHoy = fechaAlInicioDelDia(ahoraDate)
       const finManana = sumarDiasEnCaracas(inicioHoy, 2) // fin del día de mañana
 
-      // Ocupación real: reservas activas + retos pendientes/aceptados de AMBAS
+      // Ocupación real: reservas activas o en uso + retos pendientes/aceptados de AMBAS
       // canchas, hoy y mañana — una sola consulta por tabla, filtramos por
       // cancha en memoria al generar cada lista.
       const [{ data: reservasOcupadas, error: errReservas }, { data: retosOcupados, error: errRetos }] = await Promise.all([
@@ -95,7 +95,7 @@ export default function ReservasPage() {
           .from('reservas_cancha')
           .select('cancha, fecha_hora, duracion_min')
           .in('cancha', CANCHAS as unknown as string[])
-          .eq('estado', 'activa')
+          .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
           .gte('fecha_hora', inicioHoy.toISOString())
           .lt('fecha_hora', finManana.toISOString()),
         supabase
@@ -236,6 +236,13 @@ export default function ReservasPage() {
       setConfirmando(null)
     }
   }
+
+  // Las 'usada' (ya tocó "Ya llegué") se muestran solo mientras siguen en curso,
+  // como "✅ En cancha" — así el jugador puede mostrar su reserva si alguien
+  // reclama la cancha. Al terminar su franja desaparecen de la lista.
+  const misReservasVisibles = misReservas.filter((r) =>
+    r.estado !== 'usada' || ahora < new Date(r.fecha_hora).getTime() + (r.duracion_min || 60) * 60000
+  )
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 12px', borderRadius: '4px',
@@ -445,11 +452,11 @@ export default function ReservasPage() {
           </h2>
           {loadingMisReservas ? (
             <p className="loading-row" style={{ fontSize: '13px', color: 'var(--color-line)' }}><span className="spinner" /> Cargando…</p>
-          ) : misReservas.length === 0 ? (
+          ) : misReservasVisibles.length === 0 ? (
             <p style={{ fontSize: '13px', color: 'var(--color-line)' }}>No tienes reservas activas por ahora.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {misReservas.map((r) => {
+              {misReservasVisibles.map((r) => {
                 const duracion = r.duracion_min || 60
                 const inicio = new Date(r.fecha_hora)
                 const fin = new Date(inicio.getTime() + duracion * 60000)
@@ -477,7 +484,14 @@ export default function ReservasPage() {
                       </span>
                     </span>
                     <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {yaEmpezo ? (
+                      {r.estado === 'usada' ? (
+                        <span style={{
+                          background: '#dcfce7', color: '#166534', padding: '5px 12px',
+                          borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
+                        }}>
+                          ✅ En cancha
+                        </span>
+                      ) : yaEmpezo ? (
                         <button
                           onClick={() => confirmarUso(r.id)}
                           disabled={confirmando === r.id}

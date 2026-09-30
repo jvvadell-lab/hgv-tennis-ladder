@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 
 const DURACION_BASE_MIN = 60
 const DURACION_RETO_MIN = 90
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       .from('reservas_cancha')
       .select('id, fecha_hora, duracion_min')
       .eq('cancha', reserva.cancha)
-      .eq('estado', 'activa')
+      .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
       .neq('id', reservaId)
       .gte('fecha_hora', inicioDia.toISOString())
       .lte('fecha_hora', finDia.toISOString())
@@ -90,7 +91,13 @@ export async function POST(request: Request) {
       .from('reservas_cancha')
       .update({ duracion_min: DURACION_BASE_MIN + EXTENSION_MIN })
       .eq('id', reservaId)
-    if (errUpdate) throw errUpdate
+    if (errUpdate) {
+      // 23P01 = exclusion constraint reservas_cancha_sin_solapes (carrera con otra reserva)
+      if (errUpdate.code === '23P01') {
+        return NextResponse.json({ error: 'Otro jugador ya reservó esa cancha justo después — no se puede extender.' }, { status: 409 })
+      }
+      throw errUpdate
+    }
 
     return NextResponse.json({ ok: true, duracionMin: DURACION_BASE_MIN + EXTENSION_MIN })
   } catch (err: any) {

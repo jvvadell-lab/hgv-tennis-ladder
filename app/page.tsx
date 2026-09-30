@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -94,7 +95,7 @@ export default function Home() {
     supabase
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, jugadores:jugador_id(nombre)')
-      .eq('estado', 'activa')
+      .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
       .gte('fecha_hora', inicioHoy.toISOString())
       .lte('fecha_hora', finHoy.toISOString())
       .order('fecha_hora', { ascending: true })

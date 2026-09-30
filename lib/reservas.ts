@@ -15,6 +15,15 @@ export const DURACION_RETO_MIN = 90 // igual que DURACION_PARTIDO_MS (90 min) en
 export const PENALIDAD_NO_PRESENTADO_DIAS = 5 // si reservaste y no fuiste (ni cancelaste a tiempo)
 export const PASO_MIN = 15 // granularidad de los horarios que se ofrecen (cada 15 min)
 
+// Estados de reserva casual que OCUPAN la cancha. 'usada' = el jugador ya tocó
+// "Ya llegué" y está jugando — sigue ocupando su franja hasta que termine. Usar
+// siempre esta constante (con `.in('estado', ...)`) al calcular disponibilidad o
+// choques; nunca `.eq('estado', 'activa')`, que liberaba la franja al confirmar
+// llegada (caso real 13/09/2026). La BD lo refuerza con la exclusion constraint
+// reservas_cancha_sin_solapes. OJO: "una reserva a la vez" y la penalidad por no
+// presentarse SÍ miran solo 'activa' — ahí 'usada' significa que sí se presentó.
+export const ESTADOS_RESERVA_OCUPAN_CANCHA = ['activa', 'usada']
+
 // Ventanas en las que se abre cada tipo de reserva (en minutos desde medianoche)
 export const APERTURA_MISMO_DIA_MIN = 360  // 6:00am — desde aquí se puede reservar para HOY
 export const APERTURA_MANANA_MIN = 1080    // 6:00pm — desde aquí se puede reservar la mañana de MAÑANA (solo HGV2)

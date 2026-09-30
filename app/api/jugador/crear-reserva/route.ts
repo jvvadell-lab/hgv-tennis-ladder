@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import {
-  DURACION_SINGLE_MIN, DURACION_RETO_MIN, PENALIDAD_NO_PRESENTADO_DIAS,
+  DURACION_SINGLE_MIN, DURACION_RETO_MIN, PENALIDAD_NO_PRESENTADO_DIAS, ESTADOS_RESERVA_OCUPAN_CANCHA,
   seSolapan, horaValidaParaCancha, fechaAlInicioDelDia, duracionParaTipoJuego,
 } from '@/lib/reservas'
 import { sumarDiasEnCaracas, finDelDiaEnCaracas, formatearHora, formatearFechaCorta } from '@/lib/tiempo'
@@ -117,12 +117,13 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // No debe chocar con otras reservas casuales en esa cancha ese día
+    // No debe chocar con otras reservas casuales en esa cancha ese día (incluidas
+    // las 'usada': quien ya tocó "Ya llegué" sigue ocupando su franja)
     const { data: reservasDia, error: errReservas } = await db
       .from('reservas_cancha')
       .select('id, fecha_hora, duracion_min')
       .eq('cancha', cancha)
-      .eq('estado', 'activa')
+      .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
       .gte('fecha_hora', inicioDia.toISOString())
       .lte('fecha_hora', finDia.toISOString())
     if (errReservas) throw errReservas
@@ -146,7 +147,14 @@ export async function POST(request: Request) {
       tipo_juego: tipoJuego,
       duracion_min: duracionMin,
     }]).select('id').single()
-    if (errInsert) throw errInsert
+    if (errInsert) {
+      // 23P01 = exclusion constraint reservas_cancha_sin_solapes: otra reserva
+      // entró en esa franja entre nuestra validación y el insert (carrera).
+      if (errInsert.code === '23P01') {
+        return NextResponse.json({ error: 'Alguien acaba de reservar esa cancha en ese horario. Elige otro.' }, { status: 409 })
+      }
+      throw errInsert
+    }
 
     return NextResponse.json({ ok: true, id: nuevaReserva.id })
   } catch (err: any) {

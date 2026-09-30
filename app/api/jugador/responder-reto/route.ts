@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
 import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
+import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
 import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 
@@ -186,7 +187,7 @@ export async function POST(request: Request) {
         .from('reservas_cancha')
         .select('id, fecha_hora, duracion_min')
         .eq('cancha', reto.cancha)
-        .eq('estado', 'activa')
+        .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
         .gte('fecha_hora', inicioDia.toISOString())
         .lte('fecha_hora', finDia.toISOString())
 

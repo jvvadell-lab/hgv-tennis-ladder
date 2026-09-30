@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { fechaDespuesDelCierre, fechaCierreLegible } from '@/lib/cierreTemporada'
 
 // Misma ventana de solapamiento que app/api/jugador/crear-reto,
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
         .from('reservas_cancha')
         .select('id, fecha_hora, duracion_min, jugador:jugador_id(nombre)')
         .eq('cancha', canchaFinal)
-        .in('estado', ['activa', 'usada'])
+        .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
         .gte('fecha_hora', inicioDia.toISOString())
         .lte('fecha_hora', finDia.toISOString())
 

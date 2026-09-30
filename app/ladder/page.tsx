@@ -10,6 +10,7 @@ import {
   hoyEnCaracas, fechaISOEnCaracas, instanteEnCaracas, finDelDiaEnCaracas, diaDeLaSemanaEnCaracas,
   sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora,
 } from '@/lib/tiempo'
+import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { esEscaleraExpress, RANGO_RETO_EXPRESS, ventanaExpressAbierta, calcularCuposExpress } from '@/lib/escaleraExpress'
 import { cooldownPausado } from '@/lib/cooldownReto'
 import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada } from '@/lib/cierreTemporada'
@@ -699,7 +700,7 @@ export default function LadderPage() {
           .from('reservas_cancha')
           .select('fecha_hora, duracion_min')
           .eq('cancha', retoCancha)
-          .eq('estado', 'activa')
+          .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
           .gte('fecha_hora', inicioDia.toISOString())
           .lte('fecha_hora', finDia.toISOString()),
       ])
@@ -888,7 +889,7 @@ export default function LadderPage() {
           .from('reservas_cancha')
           .select('id, fecha_hora, duracion_min')
           .eq('cancha', retoCancha)
-          .eq('estado', 'activa')
+          .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
           .gte('fecha_hora', inicioDia.toISOString())
           .lte('fecha_hora', finDia.toISOString())
 
