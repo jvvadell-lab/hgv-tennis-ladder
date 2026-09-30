@@ -12,7 +12,7 @@ export async function GET() {
     }
 
     const db = supabaseServer()
-    const [torneosRes, pagosRes, lotesRes] = await Promise.all([
+    const [torneosRes, pagosRes, lotesRes, preciosRes] = await Promise.all([
       db.from('torneos_externos').select('*').order('created_at', { ascending: true }),
       db
         .from('pagos_delegacion')
@@ -26,12 +26,16 @@ export async function GET() {
         `)
         .order('numero_recibo', { ascending: false }),
       db.from('lotes_uniforme').select('*, enviador:enviado_por(nombre)').order('numero', { ascending: false }),
+      db.from('precios_prendas').select('tipo_prenda, precio_usd'),
     ])
     if (torneosRes.error) throw torneosRes.error
     if (pagosRes.error) throw pagosRes.error
     if (lotesRes.error) throw lotesRes.error
+    if (preciosRes.error) throw preciosRes.error
 
-    return NextResponse.json({ ok: true, torneos: torneosRes.data || [], pagos: pagosRes.data || [], lotes: lotesRes.data || [] })
+    return NextResponse.json({ ok: true, torneos: torneosRes.data || [], pagos: pagosRes.data || [], lotes: lotesRes.data || [],
+      precios: Object.fromEntries((preciosRes.data || []).map((p) => [p.tipo_prenda, Number(p.precio_usd)])),
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al listar pagos de delegación' }, { status: 500 })
   }

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import Delegacion from './Delegacion'
+import TasaBcv from '@/app/components/TasaBcv'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
   hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas,
@@ -1134,12 +1135,6 @@ export default function AdminPage() {
   const [agregandoManual, setAgregandoManual] = useState(false)
   const [agregarManualMsg, setAgregarManualMsg] = useState('')
   const [retirandoPosicionId, setRetirandoPosicionId] = useState<string | null>(null)
-  const [tasaBcvActual, setTasaBcvActual] = useState<{ valor: number; fecha: string } | null>(null)
-  const [editandoTasaBcv, setEditandoTasaBcv] = useState(false)
-  const [tasaBcvValorInput, setTasaBcvValorInput] = useState('')
-  const [tasaBcvFechaInput, setTasaBcvFechaInput] = useState('')
-  const [guardandoTasaBcv, setGuardandoTasaBcv] = useState(false)
-  const [tasaBcvMsg, setTasaBcvMsg] = useState('')
   const [jugadoresDisponibles, setJugadoresDisponibles] = useState<any[]>([])
 
   useEffect(() => {
@@ -1151,20 +1146,8 @@ export default function AdminPage() {
       fetchTemporadaActivaSimple()
       fetchJugadoresActivos()
       fetchPagos()
-      fetchTasaBcv()
     }
   }, [activeSection])
-
-  const fetchTasaBcv = async () => {
-    const { data } = await supabase.from('tasa_bcv').select('valor, fecha').eq('id', 1).maybeSingle()
-    if (data) {
-      setTasaBcvActual(data)
-      setTasaBcvValorInput(String(data.valor))
-      setTasaBcvFechaInput(data.fecha)
-    } else {
-      setTasaBcvFechaInput(hoyEnCaracas())
-    }
-  }
 
   const fetchTemporadaActivaSimple = async () => {
     const { data } = await supabase.from('temporadas').select('id, nombre').eq('estado', 'activa').maybeSingle()
@@ -1952,27 +1935,6 @@ export default function AdminPage() {
       setSorteoMsg('❌ ' + err.message)
     } finally {
       setRetirandoPosicionId(null)
-    }
-  }
-
-  const guardarTasaBcv = async () => {
-    setGuardandoTasaBcv(true)
-    setTasaBcvMsg('')
-    try {
-      const res = await fetch('/api/admin/guardar-tasa-bcv', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valor: tasaBcvValorInput, fecha: tasaBcvFechaInput }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al guardar')
-
-      setTasaBcvActual({ valor: Number(tasaBcvValorInput), fecha: tasaBcvFechaInput })
-      setEditandoTasaBcv(false)
-    } catch (err: any) {
-      setTasaBcvMsg('❌ ' + err.message)
-    } finally {
-      setGuardandoTasaBcv(false)
     }
   }
 
@@ -4829,6 +4791,9 @@ export default function AdminPage() {
           {/* PAGOS */}
           {activeSection === 'payments' && (
             <div>
+              <div style={{ marginBottom: '16px' }}>
+                <TasaBcv controlesAdmin={!esAdminLimitado} />
+              </div>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
                 {([['escalera', '🎾 Escalera'], ['delegacion', '🏟️ Delegación']] as const).map(([id, label]) => (
                   <button
@@ -4855,78 +4820,6 @@ export default function AdminPage() {
                   <div style={{ flex: '1 1 260px', background: '#f0f7fc', border: '1px solid rgba(28,126,196,0.2)', borderRadius: '8px', padding: '12px 16px', fontSize: '13px' }}>
                     <strong style={{ color: 'var(--color-ink)' }}>📱 Datos para Pago Móvil:</strong>{' '}
                     <span style={{ color: '#333' }}>YELITZA CONTRERAS · V-19.523.642 · 0412-7628281 · Banco BNC</span>
-                  </div>
-
-                  <div style={{ flex: '1 1 260px', background: 'white', border: '1px solid rgba(28,126,196,0.3)', borderLeft: '4px solid #1c7ec4', borderRadius: '8px', padding: '12px 16px' }}>
-                    {!editandoTasaBcv ? (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                        <div>
-                          {tasaBcvActual ? (
-                            <p style={{ margin: 0, fontSize: '13px', color: '#333' }}>
-                              💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
-                                {tasaBcvActual.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </strong> según BCV
-                              <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {formatearFechaCorta(instanteEnCaracas(tasaBcvActual.fecha), { conAnio: true })}</span>
-                            </p>
-                          ) : (
-                            <p style={{ margin: 0, fontSize: '13px', color: '#6b6b6b' }}>💶 Todavía no se ha registrado la tasa BCV de hoy.</p>
-                          )}
-                          <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#999' }}>
-                            Fuente: <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>bcv.org.ve</a>
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => { setEditandoTasaBcv(true); setTasaBcvMsg('') }}
-                          style={{ background: 'var(--color-court)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap' }}
-                        >
-                          {tasaBcvActual ? '✏️ Actualizar' : '➕ Registrar'}
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                          <div>
-                            <label style={{ fontSize: '11px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Tasa € (Bs.)</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={tasaBcvValorInput}
-                              onChange={(e) => setTasaBcvValorInput(e.target.value)}
-                              placeholder="Ej: 145.32"
-                              style={{ padding: '7px 9px', borderRadius: '6px', border: '1px solid #ddd', width: '110px', fontSize: '13px' }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: '11px', fontWeight: 600, color: '#555', display: 'block', marginBottom: '4px' }}>Fecha</label>
-                            <input
-                              type="date"
-                              value={tasaBcvFechaInput}
-                              onChange={(e) => setTasaBcvFechaInput(e.target.value)}
-                              style={{ padding: '7px 9px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }}
-                            />
-                          </div>
-                          <button
-                            onClick={guardarTasaBcv}
-                            disabled={guardandoTasaBcv}
-                            style={{ background: guardandoTasaBcv ? '#ccc' : '#28a745', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '6px', cursor: guardandoTasaBcv ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-                          >
-                            {guardandoTasaBcv ? 'Guardando...' : '✅ Guardar'}
-                          </button>
-                          <button
-                            onClick={() => setEditandoTasaBcv(false)}
-                            style={{ background: 'none', border: '1px solid #ccc', color: '#555', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                        {tasaBcvMsg && (
-                          <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '6px', background: '#f8d7da', color: '#721c24', fontSize: '12px' }}>
-                            {tasaBcvMsg}
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
                 {!temporadaActivaPagos ? (

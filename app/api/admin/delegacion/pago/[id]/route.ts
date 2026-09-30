@@ -143,6 +143,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
+    // La tasa congelada solo aplica a pagos en Bs.: si pasa a US$ se limpia;
+    // si una inscripción en Bs. cambia de monto, se recalcula su equivalente.
+    if (resultante.moneda !== 'BS') {
+      cambios.tasa_bcv = null
+      cambios.monto_usd_equivalente = null
+    } else if (resultante.concepto === 'inscripcion_torneo' && resultante.tasa_bcv && 'monto' in cambios) {
+      cambios.monto_usd_equivalente = Math.round((Number(resultante.monto) / Number(resultante.tasa_bcv)) * 100) / 100
+    }
+
     const { error } = await db.from('pagos_delegacion').update(cambios).eq('id', id).eq('anulado', false)
     if (error) {
       const status = error.code === '23505' ? 409 : 400

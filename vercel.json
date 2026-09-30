@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/procesar-retos",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/tasa-bcv",
+      "schedule": "0 23 * * *"
     }
   ]
 }

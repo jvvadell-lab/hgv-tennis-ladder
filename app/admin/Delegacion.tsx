@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabaseClient'
+import TasaBcv, { formatearBs, type TasaBcvVigente } from '@/app/components/TasaBcv'
 import { hoyEnCaracas, instanteEnCaracas, formatearFechaConAnio, formatearFechaHora } from '@/lib/tiempo'
 import {
   ETIQUETA_ESTADO_PRENDA,
@@ -14,6 +15,7 @@ import {
   formatearMontoDelegacion,
   monedaFijaDe,
   monedaPorDefectoDe,
+  tasaDosDecimales,
   validarDatosPago,
   type EstadoPrenda,
   type TipoPrenda,
@@ -74,6 +76,8 @@ type PagoDelegacion = {
   anulado: boolean
   anulado_at: string | null
   motivo_anulacion: string | null
+  tasa_bcv: number | null
+  monto_usd_equivalente: number | null
   created_at: string
   jugadores: { nombre: string } | null
   torneo: { nombre: string } | null
@@ -94,6 +98,7 @@ type FormPago = {
   notas: string
 }
 
+// precioCentavos: precio unitario en US$ (pre-llenado desde precios_prendas).
 type LineaPrenda = { tipo_prenda: TipoPrenda; talla: string; cantidad: string; precioCentavos: string }
 
 const formPagoInicial = (tipoPago = 'efectivo'): FormPago => ({
@@ -317,6 +322,12 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
   const [uniForm, setUniForm] = useState<FormPago>(() => formPagoInicial('efectivo'))
   const [uniLineas, setUniLineas] = useState<LineaPrenda[]>([lineaInicial()])
   const [uniMsg, setUniMsg] = useState('')
+  const [uniTasa, setUniTasa] = useState<TasaBcvVigente | null>(null)
+  const [uniMontoBsCentavos, setUniMontoBsCentavos] = useState('')
+  const [insTasa, setInsTasa] = useState<TasaBcvVigente | null>(null)
+  const [precios, setPrecios] = useState<Record<string, number>>({})
+  const [preciosForm, setPreciosForm] = useState<Record<string, string>>({})
+  const [preciosMsg, setPreciosMsg] = useState('')
   const [uniGuardando, setUniGuardando] = useState(false)
 
   // Torneos (solo admin completo)
@@ -332,6 +343,10 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
       setTorneos(data.torneos)
       setPagos(data.pagos)
       setLotes(data.lotes)
+      setPrecios(data.precios || {})
+      setPreciosForm(Object.fromEntries(Object.entries(data.precios || {}).map(([k, v]) => [k, numeroACentavos(v as number)])))
+      // Las prendas del formulario que aún no tienen precio toman el de referencia.
+      setUniLineas((ls) => ls.map((l) => (l.precioCentavos ? l : { ...l, precioCentavos: numeroACentavos(data.precios?.[l.tipo_prenda] ?? null) })))
       setErrorCarga('')
     } catch (err: any) {
       setErrorCarga(err.message)
@@ -434,7 +449,7 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setInsMsg(`✅ Inscripción registrada — recibo #${data.numeroRecibo}`)
+      setInsMsg(`✅ Inscripción registrada — recibo #${data.numeroRecibo}${data.sinTasa ? ' · ⚠️ sin tasa BCV para esa fecha: quedó sin equivalente en US$' : ''}`)
       // Se conservan torneo, método y fecha: lo normal es cargar varios seguidos.
       setInsForm({ ...formPagoInicial(insForm.tipoPago), moneda: insForm.moneda, fecha: insForm.fecha })
       await cargar()
@@ -445,7 +460,20 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
     }
   }
 
+  // Total en US$ (los precios de las prendas van en US$). Si el pago es en
+  // Bs., monto = total US$ × tasa BCV USD vigente en la fecha del pago,
+  // truncada a 2 decimales como la publica el BCV (la que se cobra); el monto queda editable por
+  // redondeos, y sin tasa se escribe a mano.
   const totalLineas = uniLineas.reduce((s, l) => s + (parseInt(l.cantidad, 10) || 0) * centavosANumero(l.precioCentavos), 0)
+  const cantidadPrendas = uniLineas.reduce((s, l) => s + (parseInt(l.cantidad, 10) || 0), 0)
+  const uniEnBs = uniForm.moneda === 'BS'
+  const tasaCalculo = uniTasa ? tasaDosDecimales(uniTasa.usd) : null
+  const bsCalculado = uniEnBs && tasaCalculo ? Math.round(totalLineas * tasaCalculo * 100) / 100 : null
+  useEffect(() => {
+    setUniMontoBsCentavos(bsCalculado ? String(Math.round(bsCalculado * 100)) : '')
+  }, [bsCalculado])
+  const montoUniforme = uniEnBs ? centavosANumero(uniMontoBsCentavos) : totalLineas
+  const precioDe = (tipo: string) => numeroACentavos(precios[tipo] ?? null)
 
   const registrarUniformes = async () => {
     setUniMsg('')
@@ -456,7 +484,8 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
       if (!cantidad || cantidad <= 0) return setUniMsg('❌ Cada prenda necesita una cantidad mayor a 0')
       if (!centavosANumero(l.precioCentavos)) return setUniMsg('❌ Cada prenda necesita su precio unitario')
     }
-    const errorDatos = validarDatosPago({ monto: totalLineas, moneda: uniForm.moneda, tipo_pago: uniForm.tipoPago, referencia: uniForm.referencia.trim() || null })
+    if (uniEnBs && !montoUniforme) return setUniMsg('❌ Escribe el monto en Bs.')
+    const errorDatos = validarDatosPago({ monto: montoUniforme, moneda: uniForm.moneda, tipo_pago: uniForm.tipoPago, referencia: uniForm.referencia.trim() || null })
     if (errorDatos) return setUniMsg(`❌ ${errorDatos}`)
 
     setUniGuardando(true)
@@ -468,7 +497,7 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
           concepto: 'uniforme',
           jugadorId: uniForm.externo ? null : uniForm.jugadorId,
           nombreExterno: uniForm.externo ? uniForm.nombreExterno : null,
-          monto: totalLineas,
+          monto: montoUniforme,
           moneda: uniForm.moneda,
           tipoPago: uniForm.tipoPago,
           referencia: uniForm.referencia,
@@ -478,15 +507,15 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
             tipo_prenda: l.tipo_prenda,
             talla: l.talla,
             cantidad: parseInt(l.cantidad, 10),
-            precio_unitario: centavosANumero(l.precioCentavos),
+            precio_usd: centavosANumero(l.precioCentavos),
           })),
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setUniMsg(`✅ Pedido registrado — recibo #${data.numeroRecibo}`)
+      setUniMsg(`✅ Pedido registrado — recibo #${data.numeroRecibo}${data.sinTasa ? ' · ⚠️ sin tasa BCV para esa fecha: quedó sin equivalente en US$' : ''}`)
       setUniForm({ ...formPagoInicial(uniForm.tipoPago), moneda: uniForm.moneda, fecha: uniForm.fecha })
-      setUniLineas([lineaInicial()])
+      setUniLineas([{ ...lineaInicial(), precioCentavos: precioDe(lineaInicial().tipo_prenda) }])
       await cargar()
     } catch (err: any) {
       setUniMsg(`❌ ${err.message || 'Error al registrar'}`)
@@ -588,6 +617,23 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
     }
   }
 
+  const guardarPrecios = async () => {
+    setPreciosMsg('')
+    try {
+      const res = await fetch('/api/admin/precios-prendas', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ precios: Object.fromEntries(Object.entries(preciosForm).map(([k, v]) => [k, centavosANumero(v)])) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setPreciosMsg('✅ Precios guardados')
+      await cargar()
+    } catch (err: any) {
+      setPreciosMsg(`❌ ${err.message || 'Error al guardar'}`)
+    }
+  }
+
   const abrirEdicionTorneo = (t: Torneo | null) => {
     setTorneoMsg('')
     setTorneoEditando(t ? t.id : 'nuevo')
@@ -641,6 +687,8 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
           'Método': ETIQUETA_TIPO_PAGO[p.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || p.tipo_pago,
           'Moneda': p.moneda === 'USD' ? '$' : 'Bs.',
           'Monto': Number(p.monto),
+          'Tasa BCV': p.tasa_bcv != null ? Number(p.tasa_bcv) : '',
+          'Equiv. US$': p.monto_usd_equivalente != null ? Number(p.monto_usd_equivalente) : '',
           'Referencia': p.referencia || '',
           'Fecha': p.fecha,
           'Notas': p.notas || '',
@@ -669,6 +717,8 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
           'Método': ETIQUETA_TIPO_PAGO[p.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || p.tipo_pago,
           'Referencia': p.referencia || '',
           'Fecha pago': p.fecha,
+          'Tasa BCV': p.tasa_bcv != null ? Number(p.tasa_bcv) : '',
+          'Equiv. US$ del pago': p.monto_usd_equivalente != null ? Number(p.monto_usd_equivalente) : '',
           'Estado prenda': ETIQUETA_ESTADO_PRENDA[estadoPrenda(i, i.lote_id ? estadoLote[i.lote_id] : undefined)],
           'Lote': i.lote_id ? `#${lotes.find((l) => l.id === i.lote_id)?.numero ?? ''}` : '',
           'Estado': estado(p),
@@ -911,7 +961,7 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
         {([
           ['inscripciones', '🏟️ Inscripciones'],
           ['uniformes', '👕 Uniformes'],
-          ...(esAdminCompleto ? [['torneos', '⚙️ Torneos']] : []),
+          ...(esAdminCompleto ? [['torneos', '⚙️ Torneos y precios']] : []),
         ] as [typeof vista, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -985,6 +1035,14 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
                     />
                   </div>
                   {camposPago(insForm, setInsForm)}
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <TasaBcv fecha={insForm.fecha} onTasa={setInsTasa} compacto />
+                    {insForm.moneda === 'BS' && insTasa && insMontoCentavos && (
+                      <p style={{ fontSize: '12px', color: '#6b6b6b', margin: '4px 0 0 0' }}>
+                        Equivale a {formatearMontoDelegacion(Math.round((centavosANumero(insMontoCentavos) / tasaDosDecimales(insTasa.usd)) * 100) / 100, 'USD')} a la tasa de esa fecha.
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <button onClick={registrarInscripcion} disabled={insGuardando} style={{ ...estiloBotonPrimario, opacity: insGuardando ? 0.6 : 1 }}>
                   {insGuardando ? 'Guardando…' : '💾 Registrar inscripción'}
@@ -1061,10 +1119,10 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
               {selectorPersona(uniForm, setUniForm)}
             </div>
 
-            <label style={estiloLabel}>Prendas</label>
+            <label style={estiloLabel}>Prendas (precio unitario en US$)</label>
             {uniLineas.map((l, idx) => (
               <div key={idx} style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 2fr) minmax(80px, 1fr) minmax(70px, 1fr) minmax(110px, 1.5fr) auto', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-                <select value={l.tipo_prenda} onChange={(e) => setUniLineas(uniLineas.map((x, k) => (k === idx ? { ...x, tipo_prenda: e.target.value as TipoPrenda } : x)))} style={estiloInput} aria-label="Tipo de prenda">
+                <select value={l.tipo_prenda} onChange={(e) => setUniLineas(uniLineas.map((x, k) => (k === idx ? { ...x, tipo_prenda: e.target.value as TipoPrenda, precioCentavos: precioDe(e.target.value) } : x)))} style={estiloInput} aria-label="Tipo de prenda">
                   {TIPOS_PRENDA.map((t) => <option key={t} value={t}>{ETIQUETA_PRENDA[t]}</option>)}
                 </select>
                 <select value={l.talla} onChange={(e) => setUniLineas(uniLineas.map((x, k) => (k === idx ? { ...x, talla: e.target.value } : x)))} style={estiloInput} aria-label="Talla">
@@ -1083,9 +1141,9 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
                   inputMode="numeric"
                   value={l.precioCentavos ? formatearCentavos(l.precioCentavos) : ''}
                   onChange={(e) => setUniLineas(uniLineas.map((x, k) => (k === idx ? { ...x, precioCentavos: e.target.value.replace(/\D/g, '').slice(0, 12) } : x)))}
-                  placeholder="Precio unit."
+                  placeholder="US$ unit."
                   style={estiloInput}
-                  aria-label="Precio unitario"
+                  aria-label="Precio unitario en US$"
                 />
                 <button
                   onClick={() => setUniLineas(uniLineas.filter((_, k) => k !== idx))}
@@ -1097,16 +1155,39 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
                 </button>
               </div>
             ))}
-            <button onClick={() => setUniLineas([...uniLineas, lineaInicial()])} style={{ ...estiloBotonChico, marginBottom: '14px' }}>+ Agregar prenda</button>
+            <button onClick={() => setUniLineas([...uniLineas, { ...lineaInicial(), precioCentavos: precioDe(lineaInicial().tipo_prenda) }])} style={{ ...estiloBotonChico, marginBottom: '14px' }}>+ Agregar prenda</button>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
               <div>
-                <label style={estiloLabel}>Total</label>
+                <label style={estiloLabel}>Total (US$)</label>
                 <div style={{ ...estiloInput, background: '#f0f0f0', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>
-                  {formatearMontoDelegacion(totalLineas, uniForm.moneda)}
+                  {formatearMontoDelegacion(totalLineas, 'USD')}
                 </div>
               </div>
+              {uniEnBs && (
+                <div>
+                  <label style={estiloLabel}>Monto a cobrar (Bs.)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={uniMontoBsCentavos ? formatearCentavos(uniMontoBsCentavos) : ''}
+                    onChange={(e) => setUniMontoBsCentavos(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                    placeholder="0,00"
+                    style={estiloInput}
+                  />
+                </div>
+              )}
               {camposPago(uniForm, setUniForm)}
+            </div>
+            <div style={{ marginBottom: '14px' }}>
+              <TasaBcv fecha={uniForm.fecha} onTasa={setUniTasa} compacto />
+              {uniEnBs && (
+                <p style={{ fontSize: '13px', margin: '6px 0 0 0', fontFamily: 'var(--font-mono)', color: bsCalculado ? '#333' : '#8a5a00' }}>
+                  {bsCalculado && tasaCalculo
+                    ? `${cantidadPrendas} prenda${cantidadPrendas === 1 ? '' : 's'} · ${formatearMontoDelegacion(totalLineas, 'USD')} × ${formatearBs(tasaCalculo)} = ${formatearBs(bsCalculado)}`
+                    : '⚠️ No hay tasa BCV para la fecha del pago: escribe el monto en Bs. a mano (el pago se registra sin equivalente en US$).'}
+                </p>
+              )}
             </div>
             <button onClick={registrarUniformes} disabled={uniGuardando} style={{ ...estiloBotonPrimario, opacity: uniGuardando ? 0.6 : 1 }}>
               {uniGuardando ? 'Guardando…' : '💾 Registrar pedido'}
@@ -1237,6 +1318,29 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
             )}
           </div>
         </>
+      )}
+
+      {vista === 'torneos' && esAdminCompleto && (
+        <div style={estiloCard}>
+          <h3 style={{ color: 'var(--color-ink)', margin: '0 0 12px 0' }}>👕 Precios de prendas (US$)</h3>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '8px' }}>
+            {TIPOS_PRENDA.map((t) => (
+              <div key={t}>
+                <label style={estiloLabel}>{ETIQUETA_PRENDA[t]}</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={preciosForm[t] ? formatearCentavos(preciosForm[t]) : ''}
+                  onChange={(e) => setPreciosForm({ ...preciosForm, [t]: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                  style={{ ...estiloInput, width: '130px' }}
+                />
+              </div>
+            ))}
+            <button onClick={guardarPrecios} style={estiloBotonPrimario}>💾 Guardar precios</button>
+          </div>
+          <p style={{ fontSize: '12px', color: '#6b6b6b', margin: 0 }}>Se pre-llenan en el formulario de Uniformes; no cambian los pedidos ya registrados.</p>
+          {preciosMsg && <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>{preciosMsg}</p>}
+        </div>
       )}
 
       {vista === 'torneos' && esAdminCompleto && (
@@ -1394,6 +1498,11 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
                 <span>Total</span>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>{formatearMontoDelegacion(recibo.monto, recibo.moneda)}</span>
               </div>
+              {recibo.tasa_bcv && (
+                <div style={{ fontSize: '12px', color: '#6b6b6b', marginTop: '8px', textAlign: 'right' }}>
+                  Tasa BCV aplicada: {formatearBs(recibo.tasa_bcv)} · equivale a {formatearMontoDelegacion(Number(recibo.monto_usd_equivalente), 'USD')}
+                </div>
+              )}
               {recibo.registrado?.nombre && (
                 <div style={{ fontSize: '11px', color: '#999', marginTop: '14px' }}>Registrado por {recibo.registrado.nombre}</div>
               )}

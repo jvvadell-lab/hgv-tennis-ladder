@@ -49,6 +49,15 @@ export function estadoPrenda(item: { entregado: boolean; lote_id: string | null 
   return estadoLote === 'recibido' ? 'recibido' : 'en_fabrica'
 }
 
+// Tasa BCV a 2 decimales como la publica el BCV y como se cobra: TRUNCADA,
+// no redondeada (857,8876 -> 857,88; 859,0629 -> 859,06). tasas_bcv guarda
+// la tasa completa; esto es lo que se muestra, se usa para calcular montos
+// y se congela en pagos_delegacion.tasa_bcv. El paso por 1e6 evita que un
+// error de coma flotante (p. ej. 859.06 * 100 = 85905.99999…) baje un centavo.
+export function tasaDosDecimales(tasa: number): number {
+  return Math.floor(Math.round(Number(tasa) * 1e6) / 1e4) / 100
+}
+
 export const SIMBOLO_MONEDA: Record<Moneda, string> = { USD: '$', BS: 'Bs.' }
 
 // Efectivo siempre en US$ y pago móvil siempre en Bs.; la transferencia la
@@ -94,11 +103,14 @@ export function validarDatosPago(p: DatosPago): string | null {
   return null
 }
 
+// precio_usd: precio de referencia de la prenda en US$ (precios_prendas).
+// El precio_unitario que se guarda va en la moneda del pago: el mismo en un
+// pago en US$, o convertido a Bs. con la tasa BCV en un pago en Bs.
 export type ItemUniforme = {
   tipo_prenda: string
   talla: string
   cantidad: number
-  precio_unitario: number | null
+  precio_usd: number | null
 }
 
 export function validarItemsUniforme(items: unknown): { items: ItemUniforme[] } | { error: string } {
@@ -109,9 +121,9 @@ export function validarItemsUniforme(items: unknown): { items: ItemUniforme[] } 
     if (!TALLAS.includes(i?.talla)) return { error: 'Talla no válida' }
     const cantidad = Number(i?.cantidad)
     if (!Number.isInteger(cantidad) || cantidad <= 0) return { error: 'La cantidad de cada prenda debe ser un entero mayor a 0' }
-    const precio = i?.precio_unitario === '' || i?.precio_unitario == null ? null : Number(i.precio_unitario)
+    const precio = i?.precio_usd === '' || i?.precio_usd == null ? null : Number(i.precio_usd)
     if (precio !== null && (!Number.isFinite(precio) || precio < 0)) return { error: 'El precio unitario no es válido' }
-    limpios.push({ tipo_prenda: i.tipo_prenda, talla: i.talla, cantidad, precio_unitario: precio })
+    limpios.push({ tipo_prenda: i.tipo_prenda, talla: i.talla, cantidad, precio_usd: precio })
   }
   return { items: limpios }
 }

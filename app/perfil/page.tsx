@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { comprimirImagen } from '@/lib/comprimirImagen'
+import TasaBcv from '@/app/components/TasaBcv'
 import { hoyEnCaracas, instanteEnCaracas, formatearFechaCorta } from '@/lib/tiempo'
 
 type Session = {
@@ -64,7 +65,6 @@ export default function PerfilPage() {
   const [loadingTrayectoria, setLoadingTrayectoria] = useState(true)
   const [panelAbierto, setPanelAbierto] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState('')
-  const [tasaBcv, setTasaBcv] = useState<{ valor: number; fecha: string } | null>(null)
   const [standbyActual, setStandbyActual] = useState<{ dias: number; fecha_inicio: string; fecha_fin: string } | null>(null)
   const [permisoMedico, setPermisoMedico] = useState<{ estado: string; dias: number | null; fecha_inicio: string | null; fecha_fin: string | null } | null>(null)
   const [loadingPermisoMedico, setLoadingPermisoMedico] = useState(true)
@@ -249,14 +249,6 @@ export default function PerfilPage() {
   useEffect(() => {
     if (!session || session.role !== 'jugador') return
     cargarMisPagos()
-    supabase
-      .from('tasa_bcv')
-      .select('valor, fecha')
-      .eq('id', 1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setTasaBcv(data)
-      })
   }, [session])
 
   useEffect(() => {
@@ -605,19 +597,10 @@ export default function PerfilPage() {
                 </p>
               </div>
 
-              {tasaBcv && (
-                <div style={{ flex: '1 1 200px', background: '#fff', border: '1px solid rgba(28,126,196,0.3)', borderLeft: '4px solid #1c7ec4', borderRadius: '4px', padding: '12px 14px' }}>
-                  <p style={{ fontSize: '13px', color: '#333', margin: 0 }}>
-                    💶 Tasa € del día <strong style={{ fontFamily: 'var(--font-mono)' }}>
-                      {tasaBcv.valor.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </strong> según BCV
-                    <span style={{ color: '#6b6b6b', fontSize: '11px' }}> — {formatearFechaCorta(instanteEnCaracas(tasaBcv.fecha))}</span>
-                  </p>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#999' }}>
-                    Fuente: <a href="https://www.bcv.org.ve" target="_blank" rel="noopener noreferrer" style={{ color: '#999', textDecoration: 'underline' }}>bcv.org.ve</a>
-                  </p>
-                </div>
-              )}
+              {/* Tasa BCV vigente (USD y EUR) desde /api/tasa-bcv */}
+              <div style={{ flex: '1 1 200px' }}>
+                <TasaBcv />
+              </div>
             </div>
           )}
 
