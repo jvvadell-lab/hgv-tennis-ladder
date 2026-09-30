@@ -52,6 +52,13 @@ export function ahora(): Date {
   return new Date()
 }
 
+// ¿El instante ya pasó? Para rechazar retos propuestos o reprogramados en el
+// pasado. Compara instantes absolutos (no depende de la zona horaria de quien
+// ejecuta); `referencia` existe solo para poder probarlo con fechas simuladas.
+export function yaPaso(instante: Date | string, referencia: Date = ahora()): boolean {
+  return aFecha(instante).getTime() < referencia.getTime()
+}
+
 // Fecha de HOY en Caracas, "YYYY-MM-DD". Reemplaza tanto
 // `new Date().toISOString().slice(0,10)` (bug: da la fecha en UTC, se
 // adelanta un día 4h antes de medianoche Caracas) como las copias de

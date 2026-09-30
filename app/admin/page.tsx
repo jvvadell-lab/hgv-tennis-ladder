@@ -986,7 +986,7 @@ export default function AdminPage() {
       // se interpreta como hora de pared en Caracas, no en la del navegador.
       const [fechaISO, horaHHMM] = reagendarFecha.split('T')
       const nuevaFechaPropuesta = instanteEnCaracas(fechaISO, horaHHMM).toISOString()
-      const enviar = (confirmarDespuesDelCierre: boolean) => fetch('/api/admin/reagendar-reto', {
+      const enviar = (confirmaciones: Record<string, boolean>) => fetch('/api/admin/reagendar-reto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -994,16 +994,19 @@ export default function AdminPage() {
           nuevaFechaPropuesta,
           nuevaCancha: reagendarCancha,
           nuevoNombreCanchaForanea: reagendarNombreForanea,
-          confirmarDespuesDelCierre,
+          ...confirmaciones,
         }),
       })
-      let res = await enviar(false)
+      // El servidor pide confirmación explícita (una por vez, cada una con su
+      // `flag`) si la nueva fecha ya pasó o queda después del cierre de temporada
+      // — solo el admin puede hacerlo. Se reenvía acumulando las confirmaciones.
+      const confirmaciones: Record<string, boolean> = {}
+      let res = await enviar(confirmaciones)
       let data = await res.json()
-      // El servidor pide confirmación explícita si la nueva fecha queda
-      // después del cierre de temporada (solo el admin puede hacerlo).
-      if (data.requiereConfirmacion) {
+      while (data.requiereConfirmacion && data.flag && !confirmaciones[data.flag]) {
         if (!confirm(data.mensaje)) return
-        res = await enviar(true)
+        confirmaciones[data.flag] = true
+        res = await enviar(confirmaciones)
         data = await res.json()
       }
       if (!res.ok) throw new Error(data.error || 'Error al reagendar')

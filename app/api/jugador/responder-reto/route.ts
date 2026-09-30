@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
-import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
+import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, hoyEnCaracas, yaPaso } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
 import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
@@ -142,8 +142,9 @@ export async function POST(request: Request) {
     }
 
     // Aceptar sin ajuste sigue valiendo después del cierre (el reto ya estaba
-    // agendado dentro de la temporada) — pero correr la fecha no puede dejar el
-    // partido después de temporadas.fecha_fin.
+    // agendado dentro de la temporada) y aunque su fecha ya haya pasado — pero
+    // correr la fecha no puede dejar el partido en el pasado ni después de
+    // temporadas.fecha_fin.
     if (nuevoEstado === 'aceptado' && ajusteDias !== undefined && ajusteDias !== null) {
       const { data: temporada, error: errTemp } = await db
         .from('temporadas')
@@ -152,6 +153,9 @@ export async function POST(request: Request) {
         .maybeSingle()
       if (errTemp) throw errTemp
       const fechaAjustada = sumarDiasEnCaracas(new Date(reto.fecha_propuesta), Number(ajusteDias))
+      if (yaPaso(fechaAjustada)) {
+        return NextResponse.json({ error: 'Con ese ajuste el partido quedaría en una fecha y hora que ya pasaron. Acepta la fecha original o elige otro ajuste.' }, { status: 400 })
+      }
       if (temporada?.fecha_fin && fechaDespuesDelCierre(temporada.fecha_fin, fechaAjustada)) {
         return NextResponse.json({ error: mensajeFechaDespuesDelCierre(temporada.fecha_fin) }, { status: 400 })
       }

@@ -8,7 +8,7 @@ import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador, type CampoSet } from '@/lib/resultados'
 import {
   hoyEnCaracas, fechaISOEnCaracas, instanteEnCaracas, finDelDiaEnCaracas, diaDeLaSemanaEnCaracas,
-  sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora,
+  sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora, yaPaso,
 } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { esEscaleraExpress, RANGO_RETO_EXPRESS, ventanaExpressAbierta, calcularCuposExpress } from '@/lib/escaleraExpress'
@@ -678,6 +678,7 @@ export default function LadderPage() {
   useEffect(() => {
     if (!retandoA || !retoFecha || !temporadaId || retoCancha === 'FORANEA') {
       setHorariosRetoDisponibles([])
+      setCargandoHorariosReto(false)
       return
     }
     let cancelado = false
@@ -770,6 +771,11 @@ export default function LadderPage() {
       }
     }
 
+    if (yaPaso(instanteEnCaracas(nuevaFechaReagendar, nuevaHoraReagendar))) {
+      setReagendoMsg('❌ Esa hora ya pasó. Elige un horario futuro.')
+      return
+    }
+
     setGuardandoReagendo(true)
     try {
       const nuevaFechaHora = instanteEnCaracas(nuevaFechaReagendar, nuevaHoraReagendar)
@@ -838,6 +844,11 @@ export default function LadderPage() {
       const horario = validarHorarioCancha(retoCancha, retoFecha, retoHora)
       if (!horario.valido) {
         setRetoFormMsg('❌ ' + horario.mensaje)
+        return
+      }
+
+      if (yaPaso(instanteEnCaracas(retoFecha, retoHora))) {
+        setRetoFormMsg('❌ Esa fecha y hora ya pasaron. Elige un horario futuro.')
         return
       }
 
@@ -1337,6 +1348,11 @@ export default function LadderPage() {
     return new Date() < new Date(fecha)
   }
 
+  // Mientras se recalculan las horas libres del día recién elegido, la hora
+  // seleccionada todavía es la del día anterior — no se puede enviar (así se coló
+  // el reto 562bc73f: 28/09 20:00 creado el 29/09 19:47).
+  const esperandoHorariosReto = !ventanaExpressAbiertaAhora && retoCancha !== 'FORANEA' && cargandoHorariosReto
+
   const puedoRetar = (p: Posicion) => {
     return (
       esElegible(p) &&
@@ -1833,7 +1849,7 @@ export default function LadderPage() {
                         type="date"
                         value={retoFecha}
                         onChange={(e) => setRetoFecha(e.target.value)}
-                        min={temporadaInicio || undefined}
+                        min={temporadaInicio && temporadaInicio > hoyEnCaracas() ? temporadaInicio : hoyEnCaracas()}
                         max={(() => {
                           const en6DiasStr = fechaISOEnCaracas(sumarDiasEnCaracas(new Date(), 6))
                           return temporadaFin ? (en6DiasStr < temporadaFin ? en6DiasStr : temporadaFin) : en6DiasStr
@@ -1942,10 +1958,10 @@ export default function LadderPage() {
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       onClick={ventanaExpressAbiertaAhora ? lanzarRetoExpress : lanzarReto}
-                      disabled={enviandoReto || (ventanaExpressAbiertaAhora && !horarioExpress)}
-                      style={btnPequeno(enviandoReto ? '#ccc' : 'var(--color-ball)')}
+                      disabled={enviandoReto || (ventanaExpressAbiertaAhora && !horarioExpress) || esperandoHorariosReto}
+                      style={btnPequeno(enviandoReto || esperandoHorariosReto ? '#ccc' : 'var(--color-ball)')}
                     >
-                      {enviandoReto ? 'Enviando…' : 'Enviar reto'}
+                      {enviandoReto ? 'Enviando…' : esperandoHorariosReto ? 'Cargando horarios…' : 'Enviar reto'}
                     </button>
                     <button onClick={() => { setRetandoA(null); setRetoFormMsg('') }} disabled={enviandoReto} style={btnPequeno('#6b6b6b')}>Cancelar</button>
                   </div>

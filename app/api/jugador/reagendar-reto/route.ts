@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { hoyEnCaracas, fechaISOEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { hoyEnCaracas, fechaISOEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, yaPaso } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 
@@ -51,6 +51,9 @@ export async function POST(request: Request) {
     const nuevaHoraMs = new Date(nuevaFechaHora).getTime()
     if (isNaN(nuevaHoraMs)) {
       return NextResponse.json({ error: 'Fecha/hora inválida' }, { status: 400 })
+    }
+    if (yaPaso(new Date(nuevaHoraMs))) {
+      return NextResponse.json({ error: 'Esa hora ya pasó. Elige un horario futuro.' }, { status: 400 })
     }
 
     const { data: temporada, error: errTemp } = await db

@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { ahora, sumarDiasEnCaracas, hoyEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
+import { ahora, sumarDiasEnCaracas, hoyEnCaracas, fechaISOEnCaracas, yaPaso, horaValidaParaCancha, formatearHora } from '@/lib/tiempo'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
 import { cooldownPausado } from '@/lib/cooldownReto'
 import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
+import { buscarChoqueCancha } from '@/lib/choquesCancha'
+import { DURACION_RETO_MIN } from '@/lib/reservas'
 
 const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
+const CANCHAS_VALIDAS = ['HGV1', 'HGV2', 'FORANEA']
 const MAX_DIAS_ANTICIPACION = 6 // la fecha propuesta no puede pasar de hoy + 6 días (Caracas) — debe coincidir con ladder/page.tsx
 
 export async function POST(request: Request) {
@@ -27,6 +30,9 @@ export async function POST(request: Request) {
     }
     if (retadoId === session.id) {
       return NextResponse.json({ error: 'No puedes retarte a ti mismo' }, { status: 400 })
+    }
+    if (!CANCHAS_VALIDAS.includes(cancha)) {
+      return NextResponse.json({ error: 'Cancha inválida' }, { status: 400 })
     }
 
     const db = supabaseServer()
@@ -55,11 +61,19 @@ export async function POST(request: Request) {
     if (fechaDespuesDelCierre(temporada.fecha_fin, fechaPropuesta)) {
       return NextResponse.json({ error: mensajeFechaDespuesDelCierre(temporada.fecha_fin) }, { status: 400 })
     }
+    if (yaPaso(fechaPropuesta)) {
+      return NextResponse.json({ error: 'Esa fecha y hora ya pasaron. Elige un horario futuro.' }, { status: 400 })
+    }
     // Mismo criterio que el cliente: se comparan días calendario en Caracas.
     if (fechaISOEnCaracas(fechaPropuesta) > fechaISOEnCaracas(sumarDiasEnCaracas(ahora(), MAX_DIAS_ANTICIPACION))) {
       return NextResponse.json({
         error: `No puedes proponer una fecha a más de ${MAX_DIAS_ANTICIPACION} días — dejarías al otro jugador esperando demasiado tiempo. Elige una fecha más cercana.`,
       }, { status: 400 })
+    }
+    // El partido completo (90 min) debe caber en el horario de apertura de la
+    // cancha — mismo criterio que la lista de horas del cliente. La foránea no aplica.
+    if (!horaValidaParaCancha(cancha, new Date(fechaPropuesta), DURACION_RETO_MIN)) {
+      return NextResponse.json({ error: 'Ese horario está fuera del horario de apertura de esta cancha.' }, { status: 400 })
     }
 
     // El retador siempre es quien tiene la sesión — nunca lo que mande el cliente,
@@ -159,6 +173,19 @@ export async function POST(request: Request) {
 
       if (rechazoReciente) {
         return NextResponse.json({ error: 'Este jugador rechazó tu reto recientemente — todavía no puedes retarlo de nuevo.' }, { status: 400 })
+      }
+    }
+
+    // Choques con otros retos (pendiente/aceptado) y reservas casuales (activa/usada)
+    // en esa cancha — antes solo lo validaba el cliente de ladder.
+    if (cancha !== 'FORANEA') {
+      const choque = await buscarChoqueCancha(db, cancha, new Date(fechaPropuesta))
+      if (choque) {
+        return NextResponse.json({
+          error: choque.tipo === 'reto'
+            ? `Esa cancha tiene otro partido de la escalera a las ${formatearHora(choque.inicio)} (ocupada hasta las ${formatearHora(choque.fin)}). Elige otro horario.`
+            : `Esa cancha tiene una reserva casual de ${formatearHora(choque.inicio)} a ${formatearHora(choque.fin)}. Elige otro horario.`,
+        }, { status: 400 })
       }
     }
 

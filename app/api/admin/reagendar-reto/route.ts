@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { inicioDelDiaEnCaracas, finDelDiaEnCaracas, yaPaso, formatearFechaHora } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { fechaDespuesDelCierre, fechaCierreLegible } from '@/lib/cierreTemporada'
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta acción requiere permisos de administrador completo.' }, { status: 403 })
     }
 
-    const { retoId, nuevaFechaPropuesta, nuevaCancha, nuevoNombreCanchaForanea, confirmarDespuesDelCierre } = await request.json()
+    const { retoId, nuevaFechaPropuesta, nuevaCancha, nuevoNombreCanchaForanea, confirmarDespuesDelCierre, confirmarFechaPasada } = await request.json()
     if (!retoId || !nuevaFechaPropuesta) {
       return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
     }
@@ -61,9 +61,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Fecha/hora inválida' }, { status: 400 })
     }
 
-    // A diferencia de los jugadores, el admin SÍ puede dejar un partido después
+    // A diferencia de los jugadores, el admin SÍ puede dejar un partido en una
+    // fecha ya pasada (p. ej. para registrar cuándo se jugó de verdad) o después
     // del cierre de temporada (lluvia / fuerza mayor) — pero solo confirmándolo
-    // explícitamente, y queda registrado en el log.
+    // explícitamente, y queda registrado en el log. Cada confirmación trae su
+    // propio flag (`flag` en la respuesta) para que el cliente pueda encadenarlas.
+    const enElPasado = yaPaso(new Date(nuevaHoraMs))
+    if (enElPasado && !confirmarFechaPasada) {
+      return NextResponse.json({
+        requiereConfirmacion: true,
+        flag: 'confirmarFechaPasada',
+        mensaje: `⚠️ La nueva fecha (${formatearFechaHora(new Date(nuevaHoraMs))}) ya PASÓ. Los jugadores no pueden agendar en el pasado — solo un administrador. ¿Confirmas el reagendamiento?`,
+      }, { status: 409 })
+    }
+
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')
       .select('fecha_fin')
@@ -74,6 +85,7 @@ export async function POST(request: Request) {
     if (despuesDelCierre && !confirmarDespuesDelCierre) {
       return NextResponse.json({
         requiereConfirmacion: true,
+        flag: 'confirmarDespuesDelCierre',
         mensaje: `⚠️ La nueva fecha queda DESPUÉS del cierre de la temporada (${fechaCierreLegible(temporada!.fecha_fin)}). Los jugadores no pueden agendar para esa fecha — solo un administrador. ¿Confirmas el reagendamiento?`,
       }, { status: 409 })
     }
@@ -137,6 +149,9 @@ export async function POST(request: Request) {
       .eq('id', retoId)
     if (errUpdate) throw errUpdate
 
+    if (enElPasado) {
+      console.warn(`[reagendar-reto] Admin ${session.id} (${session.nombre}) reagendó el reto ${retoId} para ${new Date(nuevaHoraMs).toISOString()}, una fecha ya pasada.`)
+    }
     if (despuesDelCierre) {
       console.warn(`[reagendar-reto] Admin ${session.id} (${session.nombre}) reagendó el reto ${retoId} para ${new Date(nuevaHoraMs).toISOString()}, después del cierre de temporada (${temporada!.fecha_fin}).`)
     }
