@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { ahora, sumarDiasEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
+import { ahora, sumarDiasEnCaracas, hoyEnCaracas, fechaISOEnCaracas } from '@/lib/tiempo'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
 import { cooldownPausado } from '@/lib/cooldownReto'
 import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 
 const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
+const MAX_DIAS_ANTICIPACION = 6 // la fecha propuesta no puede pasar de hoy + 6 días (Caracas) — debe coincidir con ladder/page.tsx
 
 export async function POST(request: Request) {
   try {
@@ -53,6 +54,12 @@ export async function POST(request: Request) {
     }
     if (fechaDespuesDelCierre(temporada.fecha_fin, fechaPropuesta)) {
       return NextResponse.json({ error: mensajeFechaDespuesDelCierre(temporada.fecha_fin) }, { status: 400 })
+    }
+    // Mismo criterio que el cliente: se comparan días calendario en Caracas.
+    if (fechaISOEnCaracas(fechaPropuesta) > fechaISOEnCaracas(sumarDiasEnCaracas(ahora(), MAX_DIAS_ANTICIPACION))) {
+      return NextResponse.json({
+        error: `No puedes proponer una fecha a más de ${MAX_DIAS_ANTICIPACION} días — dejarías al otro jugador esperando demasiado tiempo. Elige una fecha más cercana.`,
+      }, { status: 400 })
     }
 
     // El retador siempre es quien tiene la sesión — nunca lo que mande el cliente,
