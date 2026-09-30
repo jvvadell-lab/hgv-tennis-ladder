@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import Delegacion from './Delegacion'
+import ConfirmacionReserva, { type InfoConfirmacion } from './ConfirmacionReserva'
 import TasaBcv from '@/app/components/TasaBcv'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
@@ -127,6 +128,8 @@ export default function AdminPage() {
   const [cooldownPausadoInfo, setCooldownPausadoInfo] = useState<{ at: string | null; por: string | null } | null>(null)
   const [cargandoCooldownPausado, setCargandoCooldownPausado] = useState(false)
   const [historialReservas, setHistorialReservas] = useState<any[]>([])
+  // Cómo se confirmó cada reserva casual (📍/⚠️/👤) — no legible con la clave anónima, se pide al servidor.
+  const [confirmacionesReservas, setConfirmacionesReservas] = useState<Record<string, InfoConfirmacion>>({})
   const [loadingHistorialReservas, setLoadingHistorialReservas] = useState(false)
   const [historialReservasDesde, setHistorialReservasDesde] = useState('')
   const [historialReservasHasta, setHistorialReservasHasta] = useState('')
@@ -602,8 +605,30 @@ export default function AdminPage() {
       .lte('fecha_hora', fin.toISOString())
       .order('fecha_hora', { ascending: true })
     setReservasCasualesDelDia(casuales || [])
+    cargarConfirmacionesReservas((casuales || []).map((r: { id: string }) => r.id))
 
     setLoadingReservas(false)
+  }
+
+  const cargarConfirmacionesReservas = async (ids: string[]) => {
+    if (!ids.length) return
+    try {
+      const res = await fetch('/api/admin/reservas/confirmaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      const data = await res.json()
+      if (res.ok) setConfirmacionesReservas((prev) => ({ ...prev, ...data.confirmaciones }))
+    } catch {
+      // Sin esto solo se pierde el detalle de la confirmación; la lista se ve igual.
+    }
+  }
+
+  // Tras "Marcar usada" / "Quitar penalidad": recarga el día y el historial.
+  const recargarReservas = () => {
+    fetchReservasDelDia(fechaReservas)
+    if (historialReservas.length) fetchHistorialReservas()
   }
 
   const fetchHistorialReservas = async (desde?: string, hasta?: string) => {
@@ -620,6 +645,7 @@ export default function AdminPage() {
       .lte('fecha_hora', fin.toISOString())
       .order('fecha_hora', { ascending: false })
     setHistorialReservas(data || [])
+    cargarConfirmacionesReservas((data || []).map((r: { id: string }) => r.id))
     setLoadingHistorialReservas(false)
   }
 
@@ -3139,6 +3165,9 @@ export default function AdminPage() {
                                 <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#333' }}>
                                   {res.jugadores?.nombre || 'Socio'}
                                 </p>
+                                <div style={{ marginTop: '4px' }}>
+                                  <ConfirmacionReserva reserva={res} info={confirmacionesReservas[res.id]} onCambio={recargarReservas} />
+                                </div>
                               </div>
                             )
                           })}
@@ -3203,6 +3232,7 @@ export default function AdminPage() {
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Fecha</th>
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Hora</th>
                           <th style={{ padding: '10px 14px', textAlign: 'left' }}>Estado</th>
+                          <th style={{ padding: '10px 14px', textAlign: 'left' }}>Confirmación</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3234,6 +3264,9 @@ export default function AdminPage() {
                                 }}>
                                   {estadoInfo.label}
                                 </span>
+                              </td>
+                              <td style={{ padding: '10px 14px' }}>
+                                <ConfirmacionReserva reserva={r} info={confirmacionesReservas[r.id]} onCambio={recargarReservas} />
                               </td>
                             </tr>
                           )

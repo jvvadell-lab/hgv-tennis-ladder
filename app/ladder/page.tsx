@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
+import AvisoYaLlegue from '@/app/components/AvisoYaLlegue'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador, type CampoSet } from '@/lib/resultados'
@@ -1434,6 +1435,11 @@ export default function LadderPage() {
             <p style={{ color: '#cce5ff', marginTop: '14px' }}>
               <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Inicia sesión</a> para retar y registrar resultados.
             </p>
+          )}
+          {session?.role === 'jugador' && (
+            <div style={{ marginTop: '14px', textAlign: 'left' }}>
+              <AvisoYaLlegue jugadorId={session.id} />
+            </div>
           )}
           {session?.role === 'jugador' && (
             <p style={{ color: '#cce5ff', marginTop: '14px' }}>

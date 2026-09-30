@@ -61,15 +61,16 @@ export async function POST(request: Request) {
     const desdeVentana = new Date(ahoraMs - (PENALIDAD_NO_PRESENTADO_DIAS + 1) * 24 * 60 * 60 * 1000)
     const { data: misReservasRecientes, error: errMisReservas } = await db
       .from('reservas_cancha')
-      .select('id, cancha, fecha_hora, estado, duracion_min')
+      .select('id, cancha, fecha_hora, estado, duracion_min, penalidad_anulada_at')
       .eq('jugador_id', session.id)
-      .eq('estado', 'activa')
+      .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
       .gte('fecha_hora', desdeVentana.toISOString())
     if (errMisReservas) throw errMisReservas
 
     // 1) ¿Tiene una reserva sin resolver todavía (activa y su hora no ha pasado)?
+    // (Incluye una 'usada' que todavía no empieza: "Ya llegué" se puede tocar
+    // desde 15 min antes, y eso no debe abrir hueco para una segunda reserva.)
     const conReservaActiva = (misReservasRecientes || []).find((r: any) => {
-      if (r.estado !== 'activa') return false
       return new Date(r.fecha_hora).getTime() > ahoraMs
     })
     if (conReservaActiva) {
@@ -78,10 +79,12 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // 2) Penalidad por NO PRESENTARSE (quedó activa sin cancelar y ya pasó su hora) — 5 días
+    // 2) Penalidad por NO PRESENTARSE (quedó activa sin cancelar y ya pasó su hora) — 5 días.
+    // No cuentan las que un admin dispensó (penalidad_anulada_at): siguen
+    // "sin confirmar", pero no castigan.
     const noPresentados = (misReservasRecientes || []).filter((r: any) => {
       const yaPaso = new Date(r.fecha_hora).getTime() <= ahoraMs
-      return r.estado === 'activa' && yaPaso
+      return r.estado === 'activa' && yaPaso && !r.penalidad_anulada_at
     })
     if (noPresentados.length > 0) {
       const ultimaMs = Math.max(...noPresentados.map((r: any) => new Date(r.fecha_hora).getTime()))

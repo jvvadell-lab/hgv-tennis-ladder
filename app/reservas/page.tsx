@@ -7,6 +7,9 @@ import {
   seSolapan, horaValidaParaCancha, fechaAlInicioDelDia, duracionParaTipoJuego,
 } from '@/lib/reservas'
 import { minutosDesdeMedianocheEnCaracas, sumarDiasEnCaracas, formatearHora } from '@/lib/tiempo'
+import { dentroDeVentana, formatearDistancia } from '@/lib/geoClub'
+import { confirmarLlegada } from '@/lib/confirmarLlegada'
+import AvisoYaLlegue from '@/app/components/AvisoYaLlegue'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -219,22 +222,15 @@ export default function ReservasPage() {
     }
   }
 
+  // "Ya llegué": pide la ubicación (si se puede) y confirma; sin ubicación
+  // también confirma (Fase 1, ver lib/geoClub).
   const confirmarUso = async (reservaId: string) => {
     setConfirmando(reservaId)
-    try {
-      const res = await fetch('/api/jugador/confirmar-uso-reserva', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reservaId }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al confirmar')
-      cargarMisReservas()
-    } catch (err: any) {
-      alert('❌ ' + err.message)
-    } finally {
-      setConfirmando(null)
-    }
+    const r = await confirmarLlegada(reservaId)
+    setConfirmando(null)
+    if (!r.ok) return alert('❌ ' + r.error)
+    alert(r.distanciaM != null ? `✅ Llegada confirmada (📍 a ${formatearDistancia(r.distanciaM)} del club).` : '✅ Llegada confirmada.')
+    cargarMisReservas()
   }
 
   // Las 'usada' (ya tocó "Ya llegué") se muestran solo mientras siguen en curso,
@@ -300,6 +296,8 @@ export default function ReservasPage() {
             HGV Tennis Club
           </p>
         </div>
+
+        <AvisoYaLlegue jugadorId={session.id} onConfirmado={cargarMisReservas} />
 
         {/* Formulario de reserva */}
         <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '28px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
@@ -461,6 +459,9 @@ export default function ReservasPage() {
                 const inicio = new Date(r.fecha_hora)
                 const fin = new Date(inicio.getTime() + duracion * 60000)
                 const yaEmpezo = ahora >= inicio.getTime()
+                // Ventana de "Ya llegué": desde 15 min antes hasta el final.
+                const enVentana = dentroDeVentana(inicio, duracion, ahora)
+                const yaTermino = ahora > fin.getTime()
                 const esHoy = fechaAlInicioDelDia(inicio).getTime() === fechaAlInicioDelDia(new Date()).getTime()
                 return (
                   <div key={r.id} style={{
@@ -491,7 +492,27 @@ export default function ReservasPage() {
                         }}>
                           ✅ En cancha
                         </span>
-                      ) : yaEmpezo ? (
+                      ) : yaTermino ? (
+                        <span
+                          title="Tu reserva terminó sin que confirmaras la llegada"
+                          style={{ background: '#fee2e2', color: '#991b1b', padding: '5px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}
+                        >
+                          ⚠️ Sin confirmar
+                        </span>
+                      ) : enVentana ? (
+                        <>
+                        {!yaEmpezo && (
+                          <button
+                            onClick={() => cancelarReserva(r.id)}
+                            disabled={cancelando === r.id}
+                            style={{
+                              background: '#fee2e2', color: '#dc2626', border: 'none', padding: '5px 12px',
+                              borderRadius: '4px', cursor: cancelando === r.id ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 'bold',
+                            }}
+                          >
+                            {cancelando === r.id ? 'Cancelando…' : 'Cancelar'}
+                          </button>
+                        )}
                         <button
                           onClick={() => confirmarUso(r.id)}
                           disabled={confirmando === r.id}
@@ -503,6 +524,7 @@ export default function ReservasPage() {
                         >
                           {confirmando === r.id ? 'Confirmando…' : '✅ Ya llegué'}
                         </button>
+                        </>
                       ) : (
                         <button
                           onClick={() => cancelarReserva(r.id)}
