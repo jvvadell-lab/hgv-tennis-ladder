@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { hoyEnCaracas, fechaISOEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 
@@ -49,6 +50,16 @@ export async function POST(request: Request) {
     const nuevaHoraMs = new Date(nuevaFechaHora).getTime()
     if (isNaN(nuevaHoraMs)) {
       return NextResponse.json({ error: 'Fecha/hora inválida' }, { status: 400 })
+    }
+
+    const { data: temporada, error: errTemp } = await db
+      .from('temporadas')
+      .select('fecha_fin')
+      .eq('id', reto.temporada_id)
+      .maybeSingle()
+    if (errTemp) throw errTemp
+    if (temporada?.fecha_fin && fechaDespuesDelCierre(temporada.fecha_fin, new Date(nuevaHoraMs))) {
+      return NextResponse.json({ error: mensajeFechaDespuesDelCierre(temporada.fecha_fin) }, { status: 400 })
     }
 
     if (cancha !== 'FORANEA') {

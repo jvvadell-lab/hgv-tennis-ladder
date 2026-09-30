@@ -985,7 +985,7 @@ export default function AdminPage() {
       // se interpreta como hora de pared en Caracas, no en la del navegador.
       const [fechaISO, horaHHMM] = reagendarFecha.split('T')
       const nuevaFechaPropuesta = instanteEnCaracas(fechaISO, horaHHMM).toISOString()
-      const res = await fetch('/api/admin/reagendar-reto', {
+      const enviar = (confirmarDespuesDelCierre: boolean) => fetch('/api/admin/reagendar-reto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -993,9 +993,18 @@ export default function AdminPage() {
           nuevaFechaPropuesta,
           nuevaCancha: reagendarCancha,
           nuevoNombreCanchaForanea: reagendarNombreForanea,
+          confirmarDespuesDelCierre,
         }),
       })
-      const data = await res.json()
+      let res = await enviar(false)
+      let data = await res.json()
+      // El servidor pide confirmación explícita si la nueva fecha queda
+      // después del cierre de temporada (solo el admin puede hacerlo).
+      if (data.requiereConfirmacion) {
+        if (!confirm(data.mensaje)) return
+        res = await enviar(true)
+        data = await res.json()
+      }
       if (!res.ok) throw new Error(data.error || 'Error al reagendar')
       setReagendarModal(null)
       fetchRetos()

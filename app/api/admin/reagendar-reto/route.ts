@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
+import { fechaDespuesDelCierre, fechaCierreLegible } from '@/lib/cierreTemporada'
 
 // Misma ventana de solapamiento que app/api/jugador/crear-reto,
 // app/api/jugador/reagendar-reto y app/api/jugador/responder-reto.
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta acción requiere permisos de administrador completo.' }, { status: 403 })
     }
 
-    const { retoId, nuevaFechaPropuesta, nuevaCancha, nuevoNombreCanchaForanea } = await request.json()
+    const { retoId, nuevaFechaPropuesta, nuevaCancha, nuevoNombreCanchaForanea, confirmarDespuesDelCierre } = await request.json()
     if (!retoId || !nuevaFechaPropuesta) {
       return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
     }
@@ -57,6 +58,23 @@ export async function POST(request: Request) {
     const nuevaHoraMs = new Date(nuevaFechaPropuesta).getTime()
     if (isNaN(nuevaHoraMs)) {
       return NextResponse.json({ error: 'Fecha/hora inválida' }, { status: 400 })
+    }
+
+    // A diferencia de los jugadores, el admin SÍ puede dejar un partido después
+    // del cierre de temporada (lluvia / fuerza mayor) — pero solo confirmándolo
+    // explícitamente, y queda registrado en el log.
+    const { data: temporada, error: errTemp } = await db
+      .from('temporadas')
+      .select('fecha_fin')
+      .eq('id', reto.temporada_id)
+      .maybeSingle()
+    if (errTemp) throw errTemp
+    const despuesDelCierre = !!temporada?.fecha_fin && fechaDespuesDelCierre(temporada.fecha_fin, new Date(nuevaHoraMs))
+    if (despuesDelCierre && !confirmarDespuesDelCierre) {
+      return NextResponse.json({
+        requiereConfirmacion: true,
+        mensaje: `⚠️ La nueva fecha queda DESPUÉS del cierre de la temporada (${fechaCierreLegible(temporada!.fecha_fin)}). Los jugadores no pueden agendar para esa fecha — solo un administrador. ¿Confirmas el reagendamiento?`,
+      }, { status: 409 })
     }
 
     // FORANEA no es cancha del club, no hay nada contra qué chocar.
@@ -117,6 +135,10 @@ export async function POST(request: Request) {
       })
       .eq('id', retoId)
     if (errUpdate) throw errUpdate
+
+    if (despuesDelCierre) {
+      console.warn(`[reagendar-reto] Admin ${session.id} (${session.nombre}) reagendó el reto ${retoId} para ${new Date(nuevaHoraMs).toISOString()}, después del cierre de temporada (${temporada!.fecha_fin}).`)
+    }
 
     // No dejamos que un fallo al guardar el historial o notificar tumbe el
     // reagendamiento, que ya quedó guardado.

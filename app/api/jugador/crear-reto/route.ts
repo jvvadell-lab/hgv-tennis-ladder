@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { ahora, sumarDiasEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
 import { cooldownPausado } from '@/lib/cooldownReto'
+import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 
 const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
 
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')
-      .select('id, estado, sorteo_realizado, cooldown_pausado')
+      .select('id, estado, sorteo_realizado, cooldown_pausado, fecha_fin')
       .eq('id', temporadaId)
       .maybeSingle()
     if (errTemp) throw errTemp
@@ -40,6 +41,18 @@ export async function POST(request: Request) {
     }
     if (!temporada.sorteo_realizado) {
       return NextResponse.json({ error: 'El sorteo de esta temporada todavía no se ha realizado' }, { status: 400 })
+    }
+
+    // Cierre de agenda (temporadas.fecha_fin, día Caracas inclusive): después de
+    // esa fecha no se crean retos, y ninguno puede proponerse para más tarde.
+    if (isNaN(new Date(fechaPropuesta).getTime())) {
+      return NextResponse.json({ error: 'Fecha/hora inválida' }, { status: 400 })
+    }
+    if (temporadaCerradaParaRetos(temporada.fecha_fin)) {
+      return NextResponse.json({ error: mensajeTemporadaCerrada(temporada.fecha_fin) }, { status: 403 })
+    }
+    if (fechaDespuesDelCierre(temporada.fecha_fin, fechaPropuesta)) {
+      return NextResponse.json({ error: mensajeFechaDespuesDelCierre(temporada.fecha_fin) }, { status: 400 })
     }
 
     // El retador siempre es quien tiene la sesión — nunca lo que mande el cliente,

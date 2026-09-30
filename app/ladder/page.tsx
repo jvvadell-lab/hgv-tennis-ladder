@@ -12,6 +12,7 @@ import {
 } from '@/lib/tiempo'
 import { esEscaleraExpress, RANGO_RETO_EXPRESS, ventanaExpressAbierta, calcularCuposExpress } from '@/lib/escaleraExpress'
 import { cooldownPausado } from '@/lib/cooldownReto'
+import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada } from '@/lib/cierreTemporada'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -1240,6 +1241,10 @@ export default function LadderPage() {
   // bloquea la creación de CUALQUIER reto (normal o Express) — antes de que abra,
   // y de nuevo desde que se cierra (se llenan los 12 cupos, o llega el sábado).
   const creacionDeRetosBloqueada = escaleraExpressActiva && !ventanaExpressAbiertaAhora
+  // Cierre de agenda (temporadas.fecha_fin, día Caracas inclusive) — solo UX, el
+  // bloqueo real está en crear-reto/responder-reto/reagendar-reto del servidor.
+  // Se reevalúa con el tick de 15s de abajo, así que cambia sola a medianoche.
+  const temporadaCerrada = temporadaCerradaParaRetos(temporadaFin)
   const rangoRetoActivo = ventanaExpressAbiertaAhora ? RANGO_RETO_EXPRESS : RANGO_RETO
 
   // Tick cada 15s, sin condición, mientras la página de la Escalera esté montada
@@ -1338,6 +1343,7 @@ export default function LadderPage() {
       !bloqueado &&
       !retandoA &&
       !creacionDeRetosBloqueada &&
+      !temporadaCerrada &&
       !enEnfriamiento(p.jugador_id) &&
       !enEnfriamientoRechazo(p.jugador_id) &&
       !jugadoresOcupados.has(p.jugador_id) &&
@@ -1735,6 +1741,8 @@ export default function LadderPage() {
                                   title={
                                     !temporadaSorteada
                                       ? 'El sorteo de esta temporada todavía no se ha realizado'
+                                      : temporadaCerrada
+                                      ? mensajeTemporadaCerrada(temporadaFin!)
                                       : creacionDeRetosBloqueada
                                       ? '🚀 Escalera Express: la creación de retos está congelada en este momento'
                                       : yoEstoyCongelado
@@ -1960,6 +1968,11 @@ export default function LadderPage() {
                   🚀 Escalera Express: la creación de retos está congelada en este momento.
                 </p>
               )}
+              {session?.role === 'jugador' && temporadaSorteada && temporadaCerrada && (
+                <p style={{ fontSize: '13px', color: '#c0392b', marginTop: '8px', fontWeight: 'bold' }}>
+                  🏁 {mensajeTemporadaCerrada(temporadaFin!)}
+                </p>
+              )}
               {session?.role === 'jugador' && temporadaSorteada && bloqueado && (
                 <p style={{ fontSize: '13px', color: '#c0392b', marginTop: '8px', fontWeight: 'bold' }}>
                   {tengoPartidoEnCurso
@@ -1969,7 +1982,7 @@ export default function LadderPage() {
                     : 'Tienes un reto pendiente de respuesta — no puedes lanzar otro hasta que se resuelva.'}
                 </p>
               )}
-              {session?.role === 'jugador' && miPosicion && temporadaSorteada && !bloqueado && !creacionDeRetosBloqueada && (
+              {session?.role === 'jugador' && miPosicion && temporadaSorteada && !bloqueado && !creacionDeRetosBloqueada && !temporadaCerrada && (
                 <p style={{ fontSize: '13px', color: '#5c5c5c', marginTop: '12px' }}>
                   {ventanaExpressAbiertaAhora
                     ? `🚀 Escalera Express: puedes retar a jugadores hasta ${RANGO_RETO_EXPRESS} posiciones arriba de ti (en vez de las ${RANGO_RETO} normales), para jugar el sábado.`
@@ -2033,6 +2046,7 @@ export default function LadderPage() {
                                   value={nuevaFechaReagendar}
                                   onChange={(e) => setNuevaFechaReagendar(e.target.value)}
                                   min={hoyEnCaracas()}
+                                  max={temporadaFin || undefined}
                                   style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
                                 />
                                 {(() => {
@@ -2177,9 +2191,11 @@ export default function LadderPage() {
                               <button onClick={() => responderReto(r.id, 'aceptado', -1)} style={btnPequeno('#1c7ec4')}>
                                 Un día antes
                               </button>
-                              <button onClick={() => responderReto(r.id, 'aceptado', 2)} style={btnPequeno('#1c7ec4')}>
-                                Dos días después
-                              </button>
+                              {!(r.fecha_propuesta && fechaDespuesDelCierre(temporadaFin, sumarDiasEnCaracas(new Date(r.fecha_propuesta), 2))) && (
+                                <button onClick={() => responderReto(r.id, 'aceptado', 2)} style={btnPequeno('#1c7ec4')}>
+                                  Dos días después
+                                </button>
+                              )}
                               <button onClick={() => setAjustandoFechaRetoId(null)} style={btnPequeno('#6b6b6b')}>
                                 Cancelar
                               </button>

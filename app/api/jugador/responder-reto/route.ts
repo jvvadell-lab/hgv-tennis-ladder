@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { enviarCorreo } from '@/lib/email'
 import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, hoyEnCaracas } from '@/lib/tiempo'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
+import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 const AJUSTES_PERMITIDOS = [-1, 2] // solo "un día antes" o "dos días después"
@@ -137,6 +138,22 @@ export async function POST(request: Request) {
     const updateData: any = { estado: nuevoEstado }
     if (nuevoEstado === 'rechazado') {
       updateData.rechazado_at = new Date().toISOString()
+    }
+
+    // Aceptar sin ajuste sigue valiendo después del cierre (el reto ya estaba
+    // agendado dentro de la temporada) — pero correr la fecha no puede dejar el
+    // partido después de temporadas.fecha_fin.
+    if (nuevoEstado === 'aceptado' && ajusteDias !== undefined && ajusteDias !== null) {
+      const { data: temporada, error: errTemp } = await db
+        .from('temporadas')
+        .select('fecha_fin')
+        .eq('id', reto.temporada_id)
+        .maybeSingle()
+      if (errTemp) throw errTemp
+      const fechaAjustada = sumarDiasEnCaracas(new Date(reto.fecha_propuesta), Number(ajusteDias))
+      if (temporada?.fecha_fin && fechaDespuesDelCierre(temporada.fecha_fin, fechaAjustada)) {
+        return NextResponse.json({ error: mensajeFechaDespuesDelCierre(temporada.fecha_fin) }, { status: 400 })
+      }
     }
 
     // Si acepta con un ajuste de fecha, validamos que el nuevo horario no choque
