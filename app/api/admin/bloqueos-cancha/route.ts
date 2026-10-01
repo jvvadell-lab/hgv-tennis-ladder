@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { ahora } from '@/lib/tiempo'
+import { ahora, minutosDesdeMedianocheEnCaracas } from '@/lib/tiempo'
 import { DURACION_RETO_MIN, DURACION_SINGLE_MIN, ESTADOS_RESERVA_OCUPAN_CANCHA, seSolapan } from '@/lib/reservas'
 import { ESTADOS_RETO_OCUPAN_CANCHA } from '@/lib/choquesCancha'
 
@@ -16,6 +16,10 @@ import { ESTADOS_RETO_OCUPAN_CANCHA } from '@/lib/choquesCancha'
 
 const CANCHAS_VALIDAS = ['HGV1', 'HGV2']
 const MAX_MOTIVO = 120
+// Inicio y fin en múltiplos de 30 min (hora de Caracas), igual que el formulario.
+const PASO_BLOQUEO_MIN = 30
+const enPaso = (d: Date) =>
+  d.getTime() % 60000 === 0 && minutosDesdeMedianocheEnCaracas(d) % PASO_BLOQUEO_MIN === 0
 // La reserva casual más larga posible (doble, o single + media hora extra).
 const DURACION_MAX_RESERVA_MIN = 90
 
@@ -147,6 +151,9 @@ export async function POST(request: Request) {
       }
       if (isNaN(inicio.getTime()) || isNaN(fin.getTime())) {
         return NextResponse.json({ error: 'Fecha/hora inválida' }, { status: 400 })
+      }
+      if (!enPaso(inicio) || !enPaso(fin)) {
+        return NextResponse.json({ error: `Las horas de inicio y fin deben ir en bloques de ${PASO_BLOQUEO_MIN} minutos (:00 o :30)` }, { status: 400 })
       }
       if (fin.getTime() <= inicio.getTime()) {
         return NextResponse.json({ error: 'La hora de fin debe ser posterior a la de inicio' }, { status: 400 })

@@ -16,6 +16,13 @@ type BloqueAEnviar = { cancha: string; inicio: string; fin: string }
 
 const NOMBRE_CANCHA: Record<string, string> = { HGV1: 'HGV 1', HGV2: 'HGV 2' }
 
+// Los bloqueos van en múltiplos de 30 min (el servidor lo exige igual).
+const PASO_BLOQUEO_MIN = 30
+const HORAS_BLOQUEO = Array.from({ length: (24 * 60) / PASO_BLOQUEO_MIN }, (_, i) => {
+  const m = i * PASO_BLOQUEO_MIN
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+})
+
 const tarjeta: React.CSSProperties = {
   background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
   marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
@@ -81,7 +88,7 @@ export default function BloqueosCancha() {
     const inicio = instanteEnCaracas(fecha, horaInicio)
     let fin = instanteEnCaracas(fecha, horaFin)
     if (horaFin === '00:00') fin = new Date(fin.getTime() + 24 * 60 * 60000)
-    if (fin.getTime() <= inicio.getTime()) return 'La hora de fin debe ser posterior a la de inicio (usa 00:00 para medianoche)'
+    if (fin.getTime() <= inicio.getTime()) return 'La hora de fin debe ser posterior a la de inicio'
     return canchasElegidas.map((c) => ({ cancha: c, inicio: inicio.toISOString(), fin: fin.toISOString() }))
   }
 
@@ -163,11 +170,17 @@ export default function BloqueosCancha() {
           <>
             <div>
               <label style={etiqueta}>Desde</label>
-              <input type="time" step={900} value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} style={campo} />
+              <select value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} style={campo}>
+                {HORAS_BLOQUEO.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
             </div>
             <div>
               <label style={etiqueta}>Hasta</label>
-              <input type="time" step={900} value={horaFin} onChange={(e) => setHoraFin(e.target.value)} style={campo} />
+              <select value={horaFin} onChange={(e) => setHoraFin(e.target.value)} style={campo}>
+                {[...HORAS_BLOQUEO.slice(1), '00:00'].map((h) => (
+                  <option key={h} value={h}>{h === '00:00' ? '00:00 (medianoche)' : h}</option>
+                ))}
+              </select>
             </div>
           </>
         )}
