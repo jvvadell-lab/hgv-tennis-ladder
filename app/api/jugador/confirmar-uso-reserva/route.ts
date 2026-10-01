@@ -11,7 +11,8 @@ import { evaluarUbicacion, ubicacionValida, ventanaConfirmacion } from '@/lib/ge
 //
 // Geolocalización (ver lib/geoClub): el cliente manda { lat, lng, accuracy }
 // si pudo obtenerla. Se guarda solo la distancia al club y la precisión, en
-// metros, y el método. Fase 1 (GEO_ESTRICTO = false): confirma siempre.
+// metros, y el método. Fase 2 (GEO_ESTRICTO = true): rechaza fuera del radio
+// descontando la precisión; sin permiso o sin GPS confirma 'sin_ubicacion'.
 export async function POST(request: Request) {
   try {
     const session = await getSession()
@@ -48,8 +49,10 @@ export async function POST(request: Request) {
     }
 
     const evaluacion = evaluarUbicacion(ubicacionValida(ubicacion))
+    // Fase 2: lejos del club (rechazo) o ubicación demasiado imprecisa
+    // (reintentar). En ambos casos no se confirma.
     if (evaluacion.rechazo) {
-      return NextResponse.json({ error: evaluacion.rechazo }, { status: 400 })
+      return NextResponse.json({ error: evaluacion.rechazo, reintentar: evaluacion.reintentar }, { status: 400 })
     }
 
     // .eq('estado', 'activa'): si se tocó dos veces, la segunda no pisa la primera.

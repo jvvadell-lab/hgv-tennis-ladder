@@ -223,7 +223,7 @@ export default function ReservasPage() {
   }
 
   // "Ya llegué": pide la ubicación (si se puede) y confirma; sin ubicación
-  // también confirma (Fase 1, ver lib/geoClub).
+  // también confirma; lejos del club se rechaza (Fase 2, ver lib/geoClub).
   const confirmarUso = async (reservaId: string) => {
     setConfirmando(reservaId)
     const r = await confirmarLlegada(reservaId)

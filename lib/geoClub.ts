@@ -4,16 +4,17 @@
 //
 // Fase 1 (GEO_ESTRICTO = false): observación. Siempre confirma, con o sin
 // ubicación, cerca o lejos; solo registra distancia, precisión y método.
-// Fase 2 (GEO_ESTRICTO = true): rechaza si la ubicación es buena y aun
-// descontando la precisión queda fuera del radio. Sin permiso, sin GPS o con
-// precisión peor que PRECISION_MAX_M, confirma como 'sin_ubicacion' — nunca
-// bloquea por no poder ubicar.
+// Fase 2 (GEO_ESTRICTO = true, activa desde el 01/10/2026 tras la prueba en
+// el club: 4 m ±18 m): acepta si (distancia - precisión) <= RADIO_M; si no,
+// rechaza con la distancia. Si la precisión es peor que PRECISION_MAX_M no
+// decide: pide reintentar. Sin permiso o sin GPS sigue confirmando como
+// 'sin_ubicacion' — nunca bloquea por no poder ubicar.
 
 // Un solo punto cubre HGV1 y HGV2.
 export const CLUB_COORDS = { lat: 10.21886, lng: -68.006486 }
 export const RADIO_M = 200
 export const PRECISION_MAX_M = 100
-export const GEO_ESTRICTO = false
+export const GEO_ESTRICTO = true
 
 // Ventana para confirmar: desde MINUTOS_ANTES_CONFIRMAR antes del inicio
 // hasta el final de la reserva (inicio + duración).
@@ -59,24 +60,36 @@ export type EvaluacionUbicacion = {
   metodo: 'ubicacion' | 'sin_ubicacion'
   distanciaM: number | null
   precisionM: number | null
-  rechazo: string | null // solo con GEO_ESTRICTO
+  // Solo en modo estricto: si viene, NO se confirma y se le muestra al jugador.
+  rechazo: string | null
+  // true = la ubicación era demasiado imprecisa para decidir: puede reintentar.
+  reintentar: boolean
 }
 
 export function evaluarUbicacion(u: Ubicacion | null, estricto: boolean = GEO_ESTRICTO): EvaluacionUbicacion {
-  if (!u) return { metodo: 'sin_ubicacion', distanciaM: null, precisionM: null, rechazo: null }
+  // Sin permiso / sin GPS / timeout: confirma igual (nunca bloquea por esto).
+  if (!u) return { metodo: 'sin_ubicacion', distanciaM: null, precisionM: null, rechazo: null, reintentar: false }
   const distanciaM = Math.round(haversineMetros(u, CLUB_COORDS))
   const precisionM = Math.round(u.accuracy)
-  let rechazo: string | null = null
-  if (estricto && precisionM <= PRECISION_MAX_M && distanciaM - precisionM > RADIO_M) {
-    rechazo = `Tu ubicación aparece a unos ${formatearDistancia(distanciaM)} del club. Para confirmar tienes que estar en la cancha; si ya estás, espera unos segundos a que el GPS se ajuste e intenta de nuevo.`
+  const base = { metodo: 'ubicacion' as const, distanciaM, precisionM }
+  if (!estricto) return { ...base, rechazo: null, reintentar: false }
+
+  if (precisionM > PRECISION_MAX_M) {
+    return {
+      ...base,
+      rechazo: `Tu ubicación todavía no es precisa (±${formatearDistancia(precisionM)}). Espera unos segundos, al aire libre si puedes, y vuelve a intentar.`,
+      reintentar: true,
+    }
   }
-  // En modo estricto, una ubicación muy imprecisa no sirve para decidir: se
-  // trata como "sin ubicación" (confirma igual). En observación se guarda tal
-  // cual, para analizar la semana.
-  if (estricto && precisionM > PRECISION_MAX_M) {
-    return { metodo: 'sin_ubicacion', distanciaM: null, precisionM, rechazo: null }
+  // Tolerancia: se descuenta la precisión del GPS antes de comparar con el radio.
+  if (distanciaM - precisionM > RADIO_M) {
+    return {
+      ...base,
+      rechazo: `Estás a ${formatearDistancia(distanciaM)} del club. Debes estar en la cancha para confirmar tu llegada.`,
+      reintentar: false,
+    }
   }
-  return { metodo: 'ubicacion', distanciaM, precisionM, rechazo }
+  return { ...base, rechazo: null, reintentar: false }
 }
 
 export function formatearDistancia(m: number): string {

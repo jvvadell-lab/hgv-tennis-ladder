@@ -26,7 +26,9 @@ export function obtenerUbicacion(): Promise<Ubicacion | null> {
         clearTimeout(respaldo)
         terminar(null)
       },
-      { enableHighAccuracy: true, timeout: TIMEOUT_GPS_MS, maximumAge: 60_000 }
+      // maximumAge 0: posición fresca en cada intento — con Fase 2 activa, un
+      // reintento por mala precisión no debe reusar la misma lectura imprecisa.
+      { enableHighAccuracy: true, timeout: TIMEOUT_GPS_MS, maximumAge: 0 }
     )
   })
 }

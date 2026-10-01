@@ -65,7 +65,7 @@ export default function AvisoYaLlegue({ jugadorId, onConfirmado }: { jugadorId: 
       <div style={{ color: 'var(--color-ink)' }}>
         <div style={{ fontWeight: 900, fontSize: '16px' }}>📍 ¿Ya llegaste a tu cancha {cancha} de las {formatearHora(reserva.fecha_hora)}?</div>
         <div style={{ fontSize: '12px', color: '#6b6b6b', marginTop: '2px' }}>
-          Confírmalo para no recibir la penalidad por no presentarte. Te pediremos tu ubicación (no se guarda: solo la distancia al club).
+          Confírmalo estando en la cancha para no recibir la penalidad por no presentarte. Te pediremos tu ubicación para verificarlo (no se guarda: solo la distancia al club).
         </div>
         {msg && <div style={{ fontSize: '13px', marginTop: '6px' }}>{msg}</div>}
       </div>
