@@ -14,11 +14,24 @@ export type TipoPago = (typeof TIPOS_PAGO)[number]
 export const MONEDAS = ['USD', 'BS'] as const
 export type Moneda = (typeof MONEDAS)[number]
 
-export const TIPOS_PRENDA = ['franela_dama', 'franela_caballero', 'chaqueta'] as const
+export const TIPOS_PRENDA = ['franela_dama', 'franela_caballero', 'chaqueta', 'franela_nino'] as const
 export type TipoPrenda = (typeof TIPOS_PRENDA)[number]
 
-export const TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const
-export type Talla = (typeof TALLAS)[number]
+// Tallas válidas por prenda — la base las valida igual (check talla_segun_prenda).
+export const TALLAS_ADULTO = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const
+export const TALLAS_NINO = ['2', '4', '6', '8', '10', '12', '14', '16'] as const
+export const TALLAS_POR_PRENDA: Record<TipoPrenda, readonly string[]> = {
+  franela_dama: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+  franela_caballero: TALLAS_ADULTO,
+  chaqueta: TALLAS_ADULTO,
+  franela_nino: TALLAS_NINO,
+}
+
+// Manga: solo la franela dama, y en ella es obligatoria (check manga_* en la base).
+export const MANGAS = ['corta', 'sin_mangas'] as const
+export type Manga = (typeof MANGAS)[number]
+export const ETIQUETA_MANGA: Record<Manga, string> = { corta: 'Manga corta', sin_mangas: 'Sin mangas' }
+export const llevaManga = (tipo: string) => tipo === 'franela_dama'
 
 export const ETIQUETA_TIPO_PAGO: Record<TipoPago, string> = {
   pago_movil: 'Pago móvil',
@@ -30,6 +43,53 @@ export const ETIQUETA_PRENDA: Record<TipoPrenda, string> = {
   franela_dama: 'Franela dama',
   franela_caballero: 'Franela caballero',
   chaqueta: 'Chaqueta',
+  franela_nino: 'Franela niño',
+}
+
+// Valida tipo/talla/manga de una prenda; devuelve el error o la prenda
+// normalizada (manga null si la prenda no la lleva).
+export function validarPrenda(p: { tipo_prenda?: unknown; talla?: unknown; manga?: unknown }):
+  { error: string } | { tipo_prenda: TipoPrenda; talla: string; manga: Manga | null } {
+  const tipo = p.tipo_prenda as TipoPrenda
+  if (!TIPOS_PRENDA.includes(tipo)) return { error: 'Tipo de prenda no válido' }
+  const talla = String(p.talla ?? '')
+  if (!TALLAS_POR_PRENDA[tipo].includes(talla)) return { error: `La talla ${talla || '(vacía)'} no existe para ${ETIQUETA_PRENDA[tipo].toLowerCase()}` }
+  const manga = p.manga === '' || p.manga == null ? null : (p.manga as Manga)
+  if (llevaManga(tipo)) {
+    if (!manga || !MANGAS.includes(manga)) return { error: 'Elige la manga de la franela dama (manga corta o sin mangas)' }
+    return { tipo_prenda: tipo, talla, manga }
+  }
+  if (manga) return { error: `${ETIQUETA_PRENDA[tipo]} no lleva manga` }
+  return { tipo_prenda: tipo, talla, manga: null }
+}
+
+// Variantes para resúmenes y PDFs: la franela dama se separa por manga, y
+// las de antes de existir la manga quedan en "falta definir manga".
+export type VariantePrenda = { clave: string; etiqueta: string; tallas: readonly string[]; nino: boolean }
+export const VARIANTES_PRENDA: VariantePrenda[] = [
+  { clave: 'franela_dama:corta', etiqueta: 'Franela dama · manga corta', tallas: TALLAS_POR_PRENDA.franela_dama, nino: false },
+  { clave: 'franela_dama:sin_mangas', etiqueta: 'Franela dama · sin mangas', tallas: TALLAS_POR_PRENDA.franela_dama, nino: false },
+  { clave: 'franela_dama:sin_definir', etiqueta: 'Franela dama · falta definir manga', tallas: TALLAS_POR_PRENDA.franela_dama, nino: false },
+  { clave: 'franela_caballero', etiqueta: 'Franela caballero', tallas: TALLAS_ADULTO, nino: false },
+  { clave: 'chaqueta', etiqueta: 'Chaqueta', tallas: TALLAS_ADULTO, nino: false },
+  { clave: 'franela_nino', etiqueta: 'Franela niño', tallas: TALLAS_NINO, nino: true },
+]
+export function varianteDe(item: { tipo_prenda: string; manga?: string | null }): string {
+  if (item.tipo_prenda !== 'franela_dama') return item.tipo_prenda
+  return `franela_dama:${item.manga || 'sin_definir'}`
+}
+export function etiquetaPrenda(item: { tipo_prenda: string; manga?: string | null }): string {
+  const base = ETIQUETA_PRENDA[item.tipo_prenda as TipoPrenda] || item.tipo_prenda
+  if (!llevaManga(item.tipo_prenda)) return base
+  return item.manga ? `${base} · ${ETIQUETA_MANGA[item.manga as Manga].toLowerCase()}` : base
+}
+
+// Diferencia acumulada por cambios de prenda: positiva = el jugador debe.
+export function etiquetaDiferencia(diferenciaUsd: number | string | null | undefined): string | null {
+  const d = Number(diferenciaUsd || 0)
+  if (!d) return null
+  const monto = Math.abs(d).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return d > 0 ? `Debe $${monto}` : `A favor $${monto}`
 }
 
 // Estado de una prenda en el ciclo de fabricación: sin lote = pendiente por
@@ -109,6 +169,7 @@ export function validarDatosPago(p: DatosPago): string | null {
 export type ItemUniforme = {
   tipo_prenda: string
   talla: string
+  manga: Manga | null
   cantidad: number
   precio_usd: number | null
 }
@@ -117,13 +178,13 @@ export function validarItemsUniforme(items: unknown): { items: ItemUniforme[] } 
   if (!Array.isArray(items) || items.length === 0) return { error: 'El pedido debe tener al menos una prenda' }
   const limpios: ItemUniforme[] = []
   for (const i of items as any[]) {
-    if (!TIPOS_PRENDA.includes(i?.tipo_prenda)) return { error: 'Tipo de prenda no válido' }
-    if (!TALLAS.includes(i?.talla)) return { error: 'Talla no válida' }
+    const prenda = validarPrenda(i ?? {})
+    if ('error' in prenda) return { error: prenda.error }
     const cantidad = Number(i?.cantidad)
     if (!Number.isInteger(cantidad) || cantidad <= 0) return { error: 'La cantidad de cada prenda debe ser un entero mayor a 0' }
     const precio = i?.precio_usd === '' || i?.precio_usd == null ? null : Number(i.precio_usd)
     if (precio !== null && (!Number.isFinite(precio) || precio < 0)) return { error: 'El precio unitario no es válido' }
-    limpios.push({ tipo_prenda: i.tipo_prenda, talla: i.talla, cantidad, precio_usd: precio })
+    limpios.push({ ...prenda, cantidad, precio_usd: precio })
   }
   return { items: limpios }
 }
@@ -153,7 +214,9 @@ export function mensajeErrorPostgres(err: { code?: string; message?: string; det
       if (texto.includes('moneda_check')) return 'La moneda no es válida'
       if (texto.includes('torneo_si_inscripcion')) return 'Una inscripción necesita torneo, y un pedido de uniformes no lleva torneo'
       if (texto.includes('jugador_o_externo')) return 'Elige un jugador o escribe el nombre de la persona'
-      if (texto.includes('talla_check')) return 'Talla no válida'
+      if (texto.includes('talla_segun_prenda')) return 'Esa talla no existe para esa prenda'
+      if (texto.includes('manga_obligatoria_dama')) return 'Elige la manga de la franela dama (manga corta o sin mangas)'
+      if (texto.includes('manga_solo_dama')) return 'Solo la franela dama lleva manga'
       if (texto.includes('tipo_prenda_check')) return 'Tipo de prenda no válido'
       if (texto.includes('cantidad_check')) return 'La cantidad de cada prenda debe ser mayor a 0'
       return 'Algún dato del pago no es válido'

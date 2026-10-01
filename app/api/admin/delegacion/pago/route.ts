@@ -130,6 +130,7 @@ export async function POST(request: Request) {
     const items = itemsRes.items.map((i) => ({
       tipo_prenda: i.tipo_prenda,
       talla: i.talla,
+      manga: i.manga,
       cantidad: i.cantidad,
       precio_unitario: i.precio_usd == null ? null : datos.moneda === 'USD' ? i.precio_usd : tasa ? redondear(i.precio_usd * tasa) : null,
     }))
