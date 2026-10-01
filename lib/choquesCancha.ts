@@ -7,6 +7,7 @@
 
 import type { supabaseServer } from '@/lib/supabaseServer'
 import { DURACION_RETO_MIN, DURACION_SINGLE_MIN, ESTADOS_RESERVA_OCUPAN_CANCHA, seSolapan } from '@/lib/reservas'
+import { fechaISOEnCaracas, formatearHora, formatearFechaHora } from '@/lib/tiempo'
 
 // Retos que ocupan cancha. 'jugado' NO: un reto solo pasa a 'jugado' cuando el
 // admin aprueba el resultado, así que si su fecha todavía no llegó es porque se
@@ -72,4 +73,62 @@ export async function buscarChoqueCancha(
   if (errReservas) throw errReservas
 
   return detectarChoque(inicioMs, (retos || []) as RetoOcupando[], (reservas || []) as ReservaOcupando[])
+}
+
+// --- Bloqueos del club (tabla bloqueos_cancha) ---
+//
+// Un bloqueo cierra la cancha para TODO lo nuevo (retos y reservas casuales)
+// en su franja [inicio, fin). Lo que ya estaba agendado no se toca: el admin
+// lo resuelve a mano. detectarBloqueo es pura para poder usarla también en el
+// cliente (selectores de horario de /ladder y /reservas).
+
+export type BloqueoCancha = { id: string; cancha: string; inicio: string; fin: string; motivo: string }
+
+// ¿Algo que empieza en `inicioMs` y dura `duracionMin` se solapa con alguno de
+// estos bloqueos? (Se asume que ya vienen filtrados por cancha.)
+export function detectarBloqueo(inicioMs: number, duracionMin: number, bloqueos: BloqueoCancha[]): BloqueoCancha | null {
+  const finMs = inicioMs + duracionMin * 60000
+  for (const b of bloqueos) {
+    if (inicioMs < new Date(b.fin).getTime() && new Date(b.inicio).getTime() < finMs) return b
+  }
+  return null
+}
+
+// Franja legible de un bloqueo: "19:00 a 23:00", o con fecha si dura más de un día.
+export function franjaBloqueo(b: Pick<BloqueoCancha, 'inicio' | 'fin'>): string {
+  // `fin` es exclusivo: un bloqueo "todo el día" termina a las 00:00 del día
+  // siguiente, que sigue siendo el mismo día para quien lo lee.
+  const finInclusivo = new Date(new Date(b.fin).getTime() - 1)
+  const mismoDia = fechaISOEnCaracas(b.inicio) === fechaISOEnCaracas(finInclusivo)
+  if (mismoDia && new Date(b.fin).getTime() - new Date(b.inicio).getTime() === 24 * 60 * 60000) return 'todo el día'
+  return mismoDia
+    ? `${formatearHora(b.inicio)} a ${formatearHora(b.fin)}`
+    : `${formatearFechaHora(b.inicio)} a ${formatearFechaHora(b.fin)}`
+}
+
+export function mensajeBloqueo(b: BloqueoCancha): string {
+  const franja = franjaBloqueo(b)
+  return `Esa cancha está reservada por el club (${b.motivo}) ${franja === 'todo el día' ? franja : `de ${franja}`}. Elige otro horario.`
+}
+
+// Validación SERVER-SIDE: primer bloqueo de `cancha` que se solapa con
+// [inicio, inicio + duracionMin), o null. FORANEA nunca se bloquea.
+export async function buscarBloqueoCancha(
+  db: ReturnType<typeof supabaseServer>,
+  cancha: string,
+  inicio: Date,
+  duracionMin: number,
+): Promise<BloqueoCancha | null> {
+  if (cancha !== 'HGV1' && cancha !== 'HGV2') return null
+  const inicioMs = inicio.getTime()
+  const { data, error } = await db
+    .from('bloqueos_cancha')
+    .select('id, cancha, inicio, fin, motivo')
+    .eq('cancha', cancha)
+    .lt('inicio', new Date(inicioMs + duracionMin * 60000).toISOString())
+    .gt('fin', inicio.toISOString())
+    .order('inicio', { ascending: true })
+    .limit(1)
+  if (error) throw error
+  return (data?.[0] as BloqueoCancha | undefined) ?? null
 }

@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import Delegacion from './Delegacion'
 import ConfirmacionReserva, { type InfoConfirmacion } from './ConfirmacionReserva'
+import BloqueosCancha from './BloqueosCancha'
 import TasaBcv from '@/app/components/TasaBcv'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
@@ -3061,6 +3062,7 @@ export default function AdminPage() {
           {/* RESERVAS */}
           {activeSection === 'reservas' && (
             <div>
+              {!esAdminLimitado && <BloqueosCancha />}
               <div style={{
                 background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px',
                 marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)',

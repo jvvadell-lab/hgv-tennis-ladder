@@ -6,6 +6,7 @@ import {
   seSolapan, horaValidaParaCancha, fechaAlInicioDelDia, duracionParaTipoJuego,
 } from '@/lib/reservas'
 import { sumarDiasEnCaracas, finDelDiaEnCaracas, formatearHora, formatearFechaCorta } from '@/lib/tiempo'
+import { buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
 
 const CANCHAS_VALIDAS = ['HGV1', 'HGV2']
 
@@ -141,6 +142,9 @@ export async function POST(request: Request) {
         error: `Esa cancha ya está reservada a las ${formatearHora(inicioOcupado)} — ocupada hasta las ${formatearHora(finOcupado)}. Elige otro horario.`,
       }, { status: 400 })
     }
+
+    const bloqueo = await buscarBloqueoCancha(db, cancha, nuevaHora, duracionMin)
+    if (bloqueo) return NextResponse.json({ error: mensajeBloqueo(bloqueo) }, { status: 400 })
 
     const { data: nuevaReserva, error: errInsert } = await db.from('reservas_cancha').insert([{
       jugador_id: session.id,

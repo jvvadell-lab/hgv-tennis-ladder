@@ -6,6 +6,7 @@ import { sumarDiasEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, hoyEnCar
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
 import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
+import { buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 const AJUSTES_PERMITIDOS = [-1, 2] // solo "un día antes" o "dos días después"
@@ -204,6 +205,9 @@ export async function POST(request: Request) {
       if (conflictoReserva) {
         return NextResponse.json({ error: 'Esa cancha ya tiene una reserva casual cerca de esa nueva hora. No se pudo ajustar la fecha.' }, { status: 400 })
       }
+
+      const bloqueo = await buscarBloqueoCancha(db, reto.cancha, nuevaFecha, DURACION_PARTIDO_MS / 60000)
+      if (bloqueo) return NextResponse.json({ error: mensajeBloqueo(bloqueo) }, { status: 400 })
 
       updateData.fecha_propuesta = nuevaFecha.toISOString()
     }

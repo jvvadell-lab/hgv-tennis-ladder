@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { hoyEnCaracas, fechaISOEnCaracas, inicioDelDiaEnCaracas, finDelDiaEnCaracas, yaPaso } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { fechaDespuesDelCierre, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
+import { buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
 
 const DURACION_PARTIDO_MS = 90 * 60 * 1000
 
@@ -104,6 +105,9 @@ export async function POST(request: Request) {
       if (conflictoReserva) {
         return NextResponse.json({ error: 'Esa cancha ya tiene una reserva casual cerca de esa hora. Elige otro horario.' }, { status: 400 })
       }
+
+      const bloqueo = await buscarBloqueoCancha(db, cancha, new Date(nuevaHoraMs), DURACION_PARTIDO_MS / 60000)
+      if (bloqueo) return NextResponse.json({ error: mensajeBloqueo(bloqueo) }, { status: 400 })
     }
 
     const { error: errUpdate } = await db

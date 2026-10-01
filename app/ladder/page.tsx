@@ -12,6 +12,7 @@ import {
   sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora, yaPaso,
 } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
+import { detectarBloqueo, franjaBloqueo, type BloqueoCancha } from '@/lib/choquesCancha'
 import { esEscaleraExpress, RANGO_RETO_EXPRESS, ventanaExpressAbierta, calcularCuposExpress } from '@/lib/escaleraExpress'
 import { cooldownPausado } from '@/lib/cooldownReto'
 import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada } from '@/lib/cierreTemporada'
@@ -172,7 +173,8 @@ export default function LadderPage() {
   const [enviandoReto, setEnviandoReto] = useState(false)
   const [retoCreado, setRetoCreado] = useState<{ retadoNombre: string; retadoTelefono: string | null; fechaPropuesta: string } | null>(null)
   const retoFormRef = useRef<HTMLDivElement>(null)
-  const [horariosRetoDisponibles, setHorariosRetoDisponibles] = useState<{ value: string; label: string }[]>([])
+  // `bloqueado`: franja reservada por el club (bloqueos_cancha) — se lista deshabilitada.
+  const [horariosRetoDisponibles, setHorariosRetoDisponibles] = useState<{ value: string; label: string; bloqueado?: boolean }[]>([])
   const [cargandoHorariosReto, setCargandoHorariosReto] = useState(false)
 
   // Escalera Express: retos activos (pendiente/aceptado) del evento, para saber
@@ -689,7 +691,7 @@ export default function LadderPage() {
       const inicioDia = instanteEnCaracas(retoFecha)
       const finDia = finDelDiaEnCaracas(inicioDia)
 
-      const [{ data: retosDia }, { data: reservasDia }] = await Promise.all([
+      const [{ data: retosDia }, { data: reservasDia }, { data: bloqueosDia, error: errBloqueos }] = await Promise.all([
         supabase
           .from('retos')
           .select('fecha_propuesta')
@@ -705,17 +707,42 @@ export default function LadderPage() {
           .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
           .gte('fecha_hora', inicioDia.toISOString())
           .lte('fecha_hora', finDia.toISOString()),
+        supabase
+          .from('bloqueos_cancha')
+          .select('id, cancha, inicio, fin, motivo')
+          .eq('cancha', retoCancha)
+          .lt('inicio', new Date(finDia.getTime() + DURACION_RETO_MIN * 60000).toISOString())
+          .gt('fin', inicioDia.toISOString())
+          .order('inicio', { ascending: true }),
       ])
       if (cancelado) return
+      // Si fallan los bloqueos del club, seguimos sin ellos: el servidor
+      // (crear-reto) igual rechaza lo que caiga en un bloqueo.
+      if (errBloqueos) console.error('[ladder] No se pudieron cargar los bloqueos de cancha:', errBloqueos)
+      const bloqueosCancha = (errBloqueos ? [] : bloqueosDia || []) as BloqueoCancha[]
 
       const ahoraMs = Date.now()
-      const opciones: { value: string; label: string }[] = []
+      const opciones: { value: string; label: string; bloqueado?: boolean }[] = []
+      const bloqueosMostrados = new Set<string>()
 
       for (let minutosDesdeMedianoche = 0; minutosDesdeMedianoche < 24 * 60; minutosDesdeMedianoche += 15) {
         const cursorMs = inicioDia.getTime() + minutosDesdeMedianoche * 60000
         const horaStr = `${String(Math.floor(minutosDesdeMedianoche / 60)).padStart(2, '0')}:${String(minutosDesdeMedianoche % 60).padStart(2, '0')}`
 
         if (cursorMs > ahoraMs && cabeElPartido(retoCancha, retoFecha, horaStr)) {
+          // Un solo renglón por bloqueo del club, en el lugar del primer horario que pisa.
+          const bloqueo = detectarBloqueo(cursorMs, DURACION_RETO_MIN, bloqueosCancha)
+          if (bloqueo) {
+            if (!bloqueosMostrados.has(bloqueo.id)) {
+              bloqueosMostrados.add(bloqueo.id)
+              opciones.push({
+                value: `bloqueo:${bloqueo.id}`,
+                label: `🚫 ${franjaBloqueo(bloqueo)} · Reservada por el club: ${bloqueo.motivo}`,
+                bloqueado: true,
+              })
+            }
+            continue
+          }
           const chocaReto = (retosDia || []).some((r: any) =>
             Math.abs(new Date(r.fecha_propuesta).getTime() - cursorMs) < DURACION_RETO_MIN * 60000
           )
@@ -737,7 +764,8 @@ export default function LadderPage() {
       if (!cancelado) {
         setHorariosRetoDisponibles(opciones)
         setCargandoHorariosReto(false)
-        setRetoHora((actual) => (opciones.some((o) => o.value === actual) ? actual : (opciones[0]?.value || '')))
+        const libres = opciones.filter((o) => !o.bloqueado)
+        setRetoHora((actual) => (libres.some((o) => o.value === actual) ? actual : (libres[0]?.value || '')))
       }
     })()
 
@@ -1901,14 +1929,19 @@ export default function LadderPage() {
                         })()
                       ) : cargandoHorariosReto ? (
                         <p className="loading-row" style={{ fontSize: '12px', color: '#6b6b6b', margin: 0 }}><span className="spinner" /> Buscando horarios libres…</p>
-                      ) : horariosRetoDisponibles.length === 0 ? (
-                        <p style={{ fontSize: '12px', color: '#a83226', margin: 0 }}>
-                          No hay horarios libres para {retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ese día — prueba otra fecha o cancha.
-                        </p>
+                      ) : !horariosRetoDisponibles.some((h) => !h.bloqueado) ? (
+                        <div>
+                          <p style={{ fontSize: '12px', color: '#a83226', margin: 0 }}>
+                            No hay horarios libres para {retoCancha === 'HGV1' ? 'HGV 1' : 'HGV 2'} ese día — prueba otra fecha o cancha.
+                          </p>
+                          {horariosRetoDisponibles.map((h) => (
+                            <p key={h.value} style={{ fontSize: '12px', color: '#a83226', margin: '4px 0 0 0' }}>{h.label}</p>
+                          ))}
+                        </div>
                       ) : (
                         <select value={retoHora} onChange={(e) => setRetoHora(e.target.value)} style={inputPequeno}>
                           {horariosRetoDisponibles.map((h) => (
-                            <option key={h.value} value={h.value}>{h.label}</option>
+                            <option key={h.value} value={h.value} disabled={h.bloqueado}>{h.label}</option>
                           ))}
                         </select>
                       )}

@@ -5,7 +5,7 @@ import { ahora, sumarDiasEnCaracas, hoyEnCaracas, fechaISOEnCaracas, yaPaso, hor
 import { esEscaleraExpress } from '@/lib/escaleraExpress'
 import { cooldownPausado } from '@/lib/cooldownReto'
 import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
-import { buscarChoqueCancha } from '@/lib/choquesCancha'
+import { buscarChoqueCancha, buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
 import { DURACION_RETO_MIN } from '@/lib/reservas'
 
 const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
@@ -187,6 +187,8 @@ export async function POST(request: Request) {
             : `Esa cancha tiene una reserva casual de ${formatearHora(choque.inicio)} a ${formatearHora(choque.fin)}. Elige otro horario.`,
         }, { status: 400 })
       }
+      const bloqueo = await buscarBloqueoCancha(db, cancha, new Date(fechaPropuesta), DURACION_RETO_MIN)
+      if (bloqueo) return NextResponse.json({ error: mensajeBloqueo(bloqueo) }, { status: 400 })
     }
 
     const { data: nuevoReto, error: errInsert } = await db.from('retos').insert([{

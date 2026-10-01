@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
+import { buscarBloqueoCancha, franjaBloqueo } from '@/lib/choquesCancha'
 
 const DURACION_BASE_MIN = 60
 const DURACION_RETO_MIN = 90
@@ -85,6 +86,11 @@ export async function POST(request: Request) {
     )
     if (conflictoReserva) {
       return NextResponse.json({ error: 'Otro jugador ya reservó esa cancha justo después — no se puede extender.' }, { status: 400 })
+    }
+
+    const bloqueo = await buscarBloqueoCancha(db, reserva.cancha, new Date(inicioMs), DURACION_BASE_MIN + EXTENSION_MIN)
+    if (bloqueo) {
+      return NextResponse.json({ error: `El club reservó esa cancha justo después (${bloqueo.motivo}, ${franjaBloqueo(bloqueo)}) — no se puede extender.` }, { status: 400 })
     }
 
     const { error: errUpdate } = await db

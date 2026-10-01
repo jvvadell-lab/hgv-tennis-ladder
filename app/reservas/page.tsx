@@ -7,6 +7,7 @@ import {
   seSolapan, horaValidaParaCancha, fechaAlInicioDelDia, duracionParaTipoJuego,
 } from '@/lib/reservas'
 import { minutosDesdeMedianocheEnCaracas, sumarDiasEnCaracas, formatearHora } from '@/lib/tiempo'
+import { detectarBloqueo, franjaBloqueo, type BloqueoCancha } from '@/lib/choquesCancha'
 import { dentroDeVentana, formatearDistancia } from '@/lib/geoClub'
 import { confirmarLlegada } from '@/lib/confirmarLlegada'
 import AvisoYaLlegue from '@/app/components/AvisoYaLlegue'
@@ -18,6 +19,9 @@ const supabase = createClient(
 
 const CANCHAS = ['HGV1', 'HGV2'] as const
 const NOMBRE_CANCHA: Record<string, string> = { HGV1: 'HGV 1', HGV2: 'HGV 2' }
+
+// `bloqueado`: franja reservada por el club (bloqueos_cancha) — se muestra, pero no se puede elegir.
+type OpcionHorario = { value: string; label: string; bloqueado?: boolean }
 
 export default function ReservasPage() {
   const [session, setSession] = useState<any>(null)
@@ -75,7 +79,7 @@ export default function ReservasPage() {
   // MISMO — combinando las dos ventanas (hoy, y solo para HGV2 la mañana de
   // mañana) con lo que ya está ocupado por reservas activas o retos de la
   // escalera, para no mostrar nunca un bloque que el jugador no podría tomar.
-  const [horariosPorCancha, setHorariosPorCancha] = useState<Record<string, { value: string; label: string }[]>>({ HGV1: [], HGV2: [] })
+  const [horariosPorCancha, setHorariosPorCancha] = useState<Record<string, OpcionHorario[]>>({ HGV1: [], HGV2: [] })
   const [cargandoHorarios, setCargandoHorarios] = useState(true)
 
   useEffect(() => {
@@ -93,7 +97,11 @@ export default function ReservasPage() {
       // Ocupación real: reservas activas o en uso + retos pendientes/aceptados de AMBAS
       // canchas, hoy y mañana — una sola consulta por tabla, filtramos por
       // cancha en memoria al generar cada lista.
-      const [{ data: reservasOcupadas, error: errReservas }, { data: retosOcupados, error: errRetos }] = await Promise.all([
+      const [
+        { data: reservasOcupadas, error: errReservas },
+        { data: retosOcupados, error: errRetos },
+        { data: bloqueos, error: errBloqueos },
+      ] = await Promise.all([
         supabase
           .from('reservas_cancha')
           .select('cancha, fecha_hora, duracion_min')
@@ -108,15 +116,24 @@ export default function ReservasPage() {
           .in('estado', ['pendiente', 'aceptado'])
           .gte('fecha_propuesta', inicioHoy.toISOString())
           .lt('fecha_propuesta', finManana.toISOString()),
+        supabase
+          .from('bloqueos_cancha')
+          .select('id, cancha, inicio, fin, motivo')
+          .lt('inicio', finManana.toISOString())
+          .gt('fin', inicioHoy.toISOString())
+          .order('inicio', { ascending: true }),
       ])
       if (cancelado) return
+      // Si fallan los bloqueos del club, seguimos sin ellos: el servidor
+      // (crear-reserva) igual rechaza lo que caiga en un bloqueo.
+      if (errBloqueos) console.error('[reservas] No se pudieron cargar los bloqueos de cancha:', errBloqueos)
       if (errReservas || errRetos) {
         setHorariosPorCancha({ HGV1: [], HGV2: [] })
         setCargandoHorarios(false)
         return
       }
 
-      const resultado: Record<string, { value: string; label: string }[]> = { HGV1: [], HGV2: [] }
+      const resultado: Record<string, OpcionHorario[]> = { HGV1: [], HGV2: [] }
 
       for (const c of CANCHAS) {
         const ocupacion = [
@@ -128,10 +145,25 @@ export default function ReservasPage() {
           })),
         ]
 
+        const bloqueosCancha = ((errBloqueos ? [] : bloqueos || []) as BloqueoCancha[]).filter((b) => b.cancha === c)
+        const bloqueosMostrados = new Set<string>()
+
         const libre = (fecha: Date) => !ocupacion.some((o) => seSolapan(fecha.getTime(), duracionMin, o.inicioMs, o.duracionMin))
 
         const agregarSiValido = (fecha: Date, etiquetaDia: string) => {
           if (!horaValidaParaCancha(c, fecha, duracionMin)) return
+          // Un solo chip por bloqueo, en el lugar del primer horario que pisa.
+          const bloqueo = detectarBloqueo(fecha.getTime(), duracionMin, bloqueosCancha)
+          if (bloqueo) {
+            if (bloqueosMostrados.has(bloqueo.id)) return
+            bloqueosMostrados.add(bloqueo.id)
+            resultado[c].push({
+              value: `bloqueo:${bloqueo.id}`,
+              label: `${etiquetaDia} ${franjaBloqueo(bloqueo)} · Reservada por el club: ${bloqueo.motivo}`,
+              bloqueado: true,
+            })
+            return
+          }
           if (!libre(fecha)) return
           resultado[c].push({
             value: fecha.toISOString(),
@@ -158,7 +190,8 @@ export default function ReservasPage() {
 
       setHorariosPorCancha(resultado)
       setCargandoHorarios(false)
-      setCancha((c) => (resultado[c]?.length > 0 ? c : (resultado.HGV1.length > 0 ? 'HGV1' : 'HGV2')))
+      const hayLibres = (c: string) => resultado[c].some((o) => !o.bloqueado)
+      setCancha((c) => (hayLibres(c) ? c : (hayLibres('HGV1') ? 'HGV1' : 'HGV2')))
       setHoraSeleccionada((actual) => {
         const todas = [...resultado.HGV1, ...resultado.HGV2]
         return todas.some((o) => o.value === actual) ? actual : ''
@@ -361,7 +394,8 @@ export default function ReservasPage() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                 {CANCHAS.map((c) => {
-                  const libres = horariosPorCancha[c] || []
+                  const opciones = horariosPorCancha[c] || []
+                  const libres = opciones.filter((o) => !o.bloqueado)
                   return (
                     <div key={c} style={{ border: '1px solid rgba(15,27,38,0.15)', borderRadius: '6px', padding: '12px' }}>
                       <p style={{ margin: '0 0 2px 0', fontSize: '13px', fontWeight: 700, color: 'var(--color-ink)' }}>
@@ -379,9 +413,23 @@ export default function ReservasPage() {
                             return 'Sin horarios libres por ahora.'
                           })()}
                         </p>
-                      ) : (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {libres.map((h) => {
+                      ) : null}
+                      {opciones.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: libres.length === 0 ? '8px' : 0 }}>
+                          {opciones.map((h) => {
+                            if (h.bloqueado) {
+                              return (
+                                <span
+                                  key={h.value}
+                                  style={{
+                                    padding: '6px 10px', borderRadius: '14px', fontSize: '12px', fontWeight: 700,
+                                    border: '1px dashed rgba(168,50,38,0.5)', background: 'rgba(168,50,38,0.08)', color: '#a83226',
+                                  }}
+                                >
+                                  🚫 {h.label}
+                                </span>
+                              )
+                            }
                             const elegido = cancha === c && horaSeleccionada === h.value
                             return (
                               <button

@@ -7,6 +7,8 @@ import {
   RANGO_RETO_EXPRESS, ESCALERA_EXPRESS_HORARIOS, ESCALERA_EXPRESS_CANCHAS,
   ventanaExpressAbierta, instanteCupoExpress,
 } from '@/lib/escaleraExpress'
+import { buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
+import { DURACION_RETO_MIN } from '@/lib/reservas'
 
 // Crea un reto de Escalera Express: horario y cancha fijos (elegidos de una lista
 // cerrada, no un datetime libre), rango ampliado a 5 posiciones, y siempre para
@@ -73,6 +75,8 @@ export async function POST(request: Request) {
     if (cupoTomado) {
       return NextResponse.json({ error: 'Ese horario y cancha ya fue tomado por otro jugador — elige otro cupo.' }, { status: 400 })
     }
+    const bloqueo = await buscarBloqueoCancha(db, cancha, fechaPropuesta, DURACION_RETO_MIN)
+    if (bloqueo) return NextResponse.json({ error: mensajeBloqueo(bloqueo) }, { status: 400 })
 
     // El retador siempre es quien tiene la sesión — nunca lo que mande el cliente.
     const { data: posiciones, error: errPos } = await db

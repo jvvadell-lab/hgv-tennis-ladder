@@ -166,6 +166,23 @@ export function horaValidaParaCancha(cancha: string, fecha: Date, duracionMin: n
   return true
 }
 
+// Franja que abarca TODO el horario de esa cancha en el día `fechaISO`
+// ("YYYY-MM-DD" en Caracas), desde la primera apertura hasta el cierre —
+// para el "todo el día" de los bloqueos del club. Mismas reglas que
+// horaValidaParaCancha (fin de semana: el día completo). En HGV 2 entre
+// semana incluye el hueco 2pm–7pm, que igual está cerrado.
+export function horarioDelDiaCancha(cancha: string, fechaISO: string): { inicio: Date; fin: Date } {
+  const medianoche = instanteEnCaracas(fechaISO)
+  const dia = diaDeLaSemanaEnCaracas(medianoche)
+  const fin = new Date(medianoche.getTime() + 24 * 60 * 60000)
+  let aperturaMin = 0
+  if (dia >= 1 && dia <= 5) {
+    if (cancha === 'HGV1') aperturaMin = dia === 5 ? 1080 : 1200
+    else if (cancha === 'HGV2') aperturaMin = 360
+  }
+  return { inicio: new Date(medianoche.getTime() + aperturaMin * 60000), fin }
+}
+
 // --- Formato para mostrar al usuario (siempre Caracas, sin importar su
 // navegador — y siempre en es-VE, no es-ES, por ser una app venezolana) ---
 

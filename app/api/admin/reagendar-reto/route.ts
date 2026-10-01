@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { inicioDelDiaEnCaracas, finDelDiaEnCaracas, yaPaso, formatearFechaHora } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { fechaDespuesDelCierre, fechaCierreLegible } from '@/lib/cierreTemporada'
+import { buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
 
 // Misma ventana de solapamiento que app/api/jugador/crear-reto,
 // app/api/jugador/reagendar-reto y app/api/jugador/responder-reto.
@@ -134,6 +135,11 @@ export async function POST(request: Request) {
           error: `Esa cancha ya tiene una reserva casual cerca de esa hora (${conflictoReserva.jugador?.nombre || '?'}). Elige otro horario.`,
         }, { status: 409 })
       }
+
+      // Si el club bloqueó esa franja, primero hay que eliminar el bloqueo
+      // (pestaña Reservas) — el reagendo no lo salta.
+      const bloqueo = await buscarBloqueoCancha(db, canchaFinal, new Date(nuevaHoraMs), DURACION_PARTIDO_MS / 60000)
+      if (bloqueo) return NextResponse.json({ error: mensajeBloqueo(bloqueo) }, { status: 409 })
     }
 
     const fechaAnterior = reto.fecha_propuesta
