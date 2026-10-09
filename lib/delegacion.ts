@@ -14,16 +14,20 @@ export type TipoPago = (typeof TIPOS_PAGO)[number]
 export const MONEDAS = ['USD', 'BS'] as const
 export type Moneda = (typeof MONEDAS)[number]
 
-export const TIPOS_PRENDA = ['franela_dama', 'franela_caballero', 'chaqueta', 'franela_nino'] as const
+// 'chaqueta' es la de caballero: el valor se conserva porque ya hay prendas
+// registradas (y en lotes) con él; solo cambió la etiqueta.
+export const TIPOS_PRENDA = ['franela_dama', 'franela_caballero', 'chaqueta', 'chaqueta_dama', 'franela_nino'] as const
 export type TipoPrenda = (typeof TIPOS_PRENDA)[number]
 
 // Tallas válidas por prenda — la base las valida igual (check talla_segun_prenda).
 export const TALLAS_ADULTO = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'] as const
 export const TALLAS_NINO = ['2', '4', '6', '8', '10', '12', '14', '16'] as const
+export const TALLAS_DAMA = ['XS', 'S', 'M', 'L', 'XL', 'XXL'] as const
 export const TALLAS_POR_PRENDA: Record<TipoPrenda, readonly string[]> = {
-  franela_dama: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+  franela_dama: TALLAS_DAMA,
   franela_caballero: TALLAS_ADULTO,
   chaqueta: TALLAS_ADULTO,
+  chaqueta_dama: TALLAS_DAMA,
   franela_nino: TALLAS_NINO,
 }
 
@@ -42,7 +46,8 @@ export const ETIQUETA_TIPO_PAGO: Record<TipoPago, string> = {
 export const ETIQUETA_PRENDA: Record<TipoPrenda, string> = {
   franela_dama: 'Franela dama',
   franela_caballero: 'Franela caballero',
-  chaqueta: 'Chaqueta',
+  chaqueta: 'Chaqueta caballero',
+  chaqueta_dama: 'Chaqueta dama',
   franela_nino: 'Franela niño',
 }
 
@@ -71,7 +76,8 @@ export const VARIANTES_PRENDA: VariantePrenda[] = [
   { clave: 'franela_dama:sin_mangas', etiqueta: 'Franela dama · sin mangas', tallas: TALLAS_POR_PRENDA.franela_dama, nino: false },
   { clave: 'franela_dama:sin_definir', etiqueta: 'Franela dama · falta definir manga', tallas: TALLAS_POR_PRENDA.franela_dama, nino: false },
   { clave: 'franela_caballero', etiqueta: 'Franela caballero', tallas: TALLAS_ADULTO, nino: false },
-  { clave: 'chaqueta', etiqueta: 'Chaqueta', tallas: TALLAS_ADULTO, nino: false },
+  { clave: 'chaqueta', etiqueta: 'Chaqueta caballero', tallas: TALLAS_ADULTO, nino: false },
+  { clave: 'chaqueta_dama', etiqueta: 'Chaqueta dama', tallas: TALLAS_POR_PRENDA.chaqueta_dama, nino: false },
   { clave: 'franela_nino', etiqueta: 'Franela niño', tallas: TALLAS_NINO, nino: true },
 ]
 export function varianteDe(item: { tipo_prenda: string; manga?: string | null }): string {

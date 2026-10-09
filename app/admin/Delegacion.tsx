@@ -172,9 +172,9 @@ const sumarAMatriz = (m: Matriz, i: { tipo_prenda: string; manga?: string | null
 }
 const totalVariante = (m: Matriz, clave: string) => Object.values(m[clave] || {}).reduce((a, b) => a + b, 0)
 
-// Resumen de tallas en dos grupos: adultos (XS–XXXL; la dama separada por
-// manga y sin XXXL) y niño (2–16). "Falta definir manga" solo aparece si
-// tiene prendas. Celda null = esa talla no existe para esa prenda.
+// Resumen de tallas en dos grupos: adultos (XS–XXXL; las prendas dama sin
+// XXXL y la franela dama separada por manga) y niño (2–16). "Falta definir
+// manga" solo aparece si tiene prendas. Celda null = esa talla no existe para esa prenda.
 type GrupoMatriz = { titulo: string; tallas: readonly string[]; filas: { etiqueta: string; valores: (number | null)[]; total: number }[]; totales: number[] }
 function gruposMatriz(m: Matriz): GrupoMatriz[] {
   return [

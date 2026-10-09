@@ -3,7 +3,7 @@ import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { TIPOS_PRENDA } from '@/lib/delegacion'
 
-// PATCH { precios: { franela_dama?: number, franela_caballero?: number, chaqueta?: number } }
+// PATCH { precios: { franela_dama?: number, franela_caballero?: number, chaqueta?: number, chaqueta_dama?: number, franela_nino?: number } }
 // Precios de referencia de las prendas en US$ — solo admin completo. (La
 // lectura va junto con /api/admin/delegacion/listar.)
 export async function PATCH(request: Request) {
