@@ -18,7 +18,7 @@ export async function GET() {
         .from('pagos_delegacion')
         .select(`
           *,
-          jugadores:jugador_id(nombre),
+          jugadores:jugador_id(nombre, telefono),
           torneo:torneo_id(nombre),
           registrado:registrado_por(nombre),
           anulador:anulado_por(nombre),

@@ -82,6 +82,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       cambios.jugador_id = jugadorId
       cambios.nombre_externo = nombreExterno
+      if (jugadorId) cambios.telefono_externo = null
+    }
+    // El teléfono solo se guarda para invitados; el de un jugador está en su ficha.
+    if ('telefonoExterno' in body && !('jugador_id' in cambios ? cambios.jugador_id : actual.jugador_id)) {
+      cambios.telefono_externo = textoOpcional(body.telefonoExterno)
     }
     if ('torneoId' in body) {
       if (actual.concepto !== 'inscripcion_torneo') {

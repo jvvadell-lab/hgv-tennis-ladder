@@ -4846,7 +4846,7 @@ export default function AdminPage() {
                 ))}
               </div>
               {subPagos === 'delegacion' ? (
-                <Delegacion esAdminCompleto={!esAdminLimitado} />
+                <Delegacion esAdminCompleto={!esAdminLimitado} adminNombre={session?.nombre || 'Administrador'} />
               ) : (
               <>
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>

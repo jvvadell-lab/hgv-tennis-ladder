@@ -37,6 +37,8 @@ export async function POST(request: Request) {
 
     const jugadorId = textoOpcional(body.jugadorId)
     const nombreExterno = jugadorId ? null : textoOpcional(body.nombreExterno)
+    // Teléfono solo para invitados: el de los jugadores está en su ficha.
+    const telefonoExterno = jugadorId ? null : textoOpcional(body.telefonoExterno)
     if (!jugadorId && !nombreExterno) {
       return NextResponse.json({ error: 'Elige un jugador o escribe el nombre de la persona' }, { status: 400 })
     }
@@ -104,6 +106,7 @@ export async function POST(request: Request) {
           torneo_id: torneoId,
           jugador_id: jugadorId,
           nombre_externo: nombreExterno,
+          telefono_externo: telefonoExterno,
           ...datos,
           fecha,
           notas,

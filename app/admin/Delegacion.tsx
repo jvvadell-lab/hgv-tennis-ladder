@@ -30,6 +30,7 @@ import {
   type EstadoPrenda,
   type TipoPrenda,
 } from '@/lib/delegacion'
+import { generarPdfInscritos, nombreArchivoInscritos } from '@/lib/reporteInscritos'
 
 // Pagos → Delegación: cobros de la delegación HGV en torneos inter-clubes
 // (inscripciones) y compra de uniformes. Separado de los pagos de la
@@ -78,6 +79,7 @@ type PagoDelegacion = {
   torneo_id: string | null
   jugador_id: string | null
   nombre_externo: string | null
+  telefono_externo: string | null
   monto: number
   moneda: 'USD' | 'BS'
   tipo_pago: string
@@ -92,7 +94,7 @@ type PagoDelegacion = {
   monto_usd_equivalente: number | null
   diferencia_usd: number
   created_at: string
-  jugadores: { nombre: string } | null
+  jugadores: { nombre: string; telefono: string | null } | null
   torneo: { nombre: string } | null
   registrado: { nombre: string } | null
   anulador: { nombre: string } | null
@@ -103,6 +105,7 @@ type FormPago = {
   jugadorId: string
   externo: boolean
   nombreExterno: string
+  telefonoExterno: string
   busqueda: string
   tipoPago: string
   moneda: string
@@ -119,6 +122,7 @@ const formPagoInicial = (tipoPago = 'efectivo'): FormPago => ({
   jugadorId: '',
   externo: false,
   nombreExterno: '',
+  telefonoExterno: '',
   busqueda: '',
   tipoPago,
   moneda: monedaPorDefectoDe(tipoPago),
@@ -347,7 +351,26 @@ const estiloTd: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'to
 const estiloBotonPrimario: React.CSSProperties = { background: 'var(--color-court)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }
 const estiloBotonChico: React.CSSProperties = { background: 'white', border: '1px solid #ddd', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }
 
-export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boolean }) {
+// Logo de la Comisión para el reporte de inscritos, como data URL con sus
+// medidas (jspdf necesita la proporción para no deformarlo).
+async function cargarLogo(): Promise<{ dataUrl: string; ancho: number; alto: number } | null> {
+  try {
+    const blob = await (await fetch('/logo-comision-tenis.png')).blob()
+    const dataUrl = await new Promise<string>((ok, mal) => {
+      const r = new FileReader()
+      r.onload = () => ok(r.result as string)
+      r.onerror = mal
+      r.readAsDataURL(blob)
+    })
+    const img = new Image()
+    await new Promise((ok, mal) => { img.onload = ok; img.onerror = mal; img.src = dataUrl })
+    return { dataUrl, ancho: img.naturalWidth, alto: img.naturalHeight }
+  } catch {
+    return null // sin logo el reporte igual sale
+  }
+}
+
+export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCompleto: boolean; adminNombre: string }) {
   const [torneos, setTorneos] = useState<Torneo[]>([])
   const [pagos, setPagos] = useState<PagoDelegacion[]>([])
   const [lotes, setLotes] = useState<Lote[]>([])
@@ -358,6 +381,7 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
   const [vista, setVista] = useState<'inscripciones' | 'uniformes' | 'torneos'>('inscripciones')
   const [mostrarAnulados, setMostrarAnulados] = useState(false)
   const [filtroTorneo, setFiltroTorneo] = useState('')
+  const [generandoReporte, setGenerandoReporte] = useState(false)
   const [recibo, setRecibo] = useState<PagoDelegacion | null>(null)
   const [ocupado, setOcupado] = useState<string | null>(null) // id del pago/prenda con acción en curso
   // "Modificar prenda": la prenda que se está editando y sus valores nuevos.
@@ -477,6 +501,26 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
 
   // --- Acciones ---
 
+  const descargarReporteInscritos = async () => {
+    const torneo = torneos.find((t) => t.id === filtroTorneo)
+    if (!torneo) return alert('Elige un torneo en el filtro para generar su reporte de inscritos.')
+    setGenerandoReporte(true)
+    try {
+      const doc = await generarPdfInscritos({
+        torneo: torneo.nombre,
+        admin: adminNombre,
+        // Siempre sin anulados, aunque la tabla los esté mostrando.
+        inscripciones: pagos.filter((p) => p.concepto === 'inscripcion_torneo' && p.torneo_id === torneo.id && !p.anulado),
+        logo: await cargarLogo(),
+      })
+      doc.save(nombreArchivoInscritos(torneo.nombre, hoyEnCaracas()))
+    } catch (err: any) {
+      alert(err?.message || 'Error al generar el PDF')
+    } finally {
+      setGenerandoReporte(false)
+    }
+  }
+
   const registrarInscripcion = async () => {
     setInsMsg('')
     const torneo = torneos.find((t) => t.id === insTorneoId)
@@ -497,6 +541,7 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
           torneoId: insTorneoId,
           jugadorId: insForm.externo ? null : insForm.jugadorId,
           nombreExterno: insForm.externo ? insForm.nombreExterno : null,
+          telefonoExterno: insForm.externo ? insForm.telefonoExterno : null,
           monto,
           moneda: insForm.moneda,
           tipoPago: insForm.tipoPago,
@@ -871,7 +916,7 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
 
   // --- Piezas de UI reutilizadas por ambos formularios ---
 
-  const selectorPersona = (form: FormPago, setForm: (f: FormPago) => void) => {
+  const selectorPersona = (form: FormPago, setForm: (f: FormPago) => void, conTelefono = false) => {
     const filtrados = form.busqueda
       ? jugadores.filter((j) => j.nombre.toLowerCase().includes(form.busqueda.toLowerCase()))
       : jugadores
@@ -911,11 +956,23 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
             />
           </div>
         )}
+        {form.externo && conTelefono && (
+          <div>
+            <label style={estiloLabel}>Teléfono (invitado)</label>
+            <input
+              type="tel"
+              value={form.telefonoExterno}
+              onChange={(e) => setForm({ ...form, telefonoExterno: e.target.value })}
+              placeholder="+58 (412)-000-0000"
+              style={estiloInput}
+            />
+          </div>
+        )}
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555', alignSelf: 'end', paddingBottom: '10px' }}>
           <input
             type="checkbox"
             checked={form.externo}
-            onChange={(e) => setForm({ ...form, externo: e.target.checked, jugadorId: '', nombreExterno: '' })}
+            onChange={(e) => setForm({ ...form, externo: e.target.checked, jugadorId: '', nombreExterno: '', telefonoExterno: '' })}
           />
           No está en la lista (nombre libre)
         </label>
@@ -1117,7 +1174,7 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
                       </p>
                     ) : null}
                   </div>
-                  {selectorPersona(insForm, setInsForm)}
+                  {selectorPersona(insForm, setInsForm, true)}
                   <div>
                     <label style={estiloLabel}>Monto ({insForm.moneda === 'USD' ? 'US$' : 'Bs.'})</label>
                     <input
@@ -1161,10 +1218,15 @@ export default function Delegacion({ esAdminCompleto }: { esAdminCompleto: boole
           <div style={{ ...estiloCard, padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>📋 Inscripciones</h3>
-              <select value={filtroTorneo} onChange={(e) => setFiltroTorneo(e.target.value)} style={{ ...estiloInput, width: 'auto' }}>
-                <option value="">Todos los torneos</option>
-                {torneos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <select value={filtroTorneo} onChange={(e) => setFiltroTorneo(e.target.value)} style={{ ...estiloInput, width: 'auto' }}>
+                  <option value="">Todos los torneos</option>
+                  {torneos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                </select>
+                <button onClick={descargarReporteInscritos} disabled={generandoReporte} style={{ ...estiloBotonChico, padding: '9px 12px', fontSize: '13px' }}>
+                  {generandoReporte ? 'Generando…' : '📄 Reporte de inscritos (PDF)'}
+                </button>
+              </div>
             </div>
             {inscripciones.length === 0 ? (
               <p style={{ padding: '0 24px 24px', color: '#6b6b6b', margin: 0 }}>Todavía no hay inscripciones registradas.</p>
