@@ -81,7 +81,10 @@ async function main() {
     let bufferNuevo: Buffer
     try {
       bufferNuevo = await sharp(bufferOriginal)
+        .rotate() // auto-orienta según EXIF — DEBE ir antes de .resize(), si no el límite de
+        // ancho se aplica al eje crudo del sensor en vez del eje ya corregido
         .resize({ width: maxAncho, withoutEnlargement: true })
+        .withMetadata()
         .jpeg({ quality: CALIDAD })
         .toBuffer()
     } catch (err: any) {
