@@ -7,6 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { mkdir, writeFile } from 'fs/promises'
 import path from 'path'
+import { hoyEnCaracas } from '../lib/tiempo'
 
 const BUCKET = 'fotos-partidos'
 const CARPETAS_EXCLUIDAS = ['Sponsors'] // logos estáticos, no se recomprimen ni se respaldan
@@ -36,7 +37,7 @@ async function listarRecursivo(prefijo: string): Promise<Archivo[]> {
 }
 
 async function main() {
-  const fecha = new Date().toISOString().slice(0, 10)
+  const fecha = hoyEnCaracas()
   const destino = path.join(process.cwd(), 'backups', `fotos-partidos-original-${fecha}`)
 
   const todos = await listarRecursivo('')
