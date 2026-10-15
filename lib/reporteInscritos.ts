@@ -4,12 +4,17 @@
 // jspdf se carga recién al generarlo, para no sumarle peso al panel admin.
 
 import { ahora, formatearFechaConAnio, formatearHora, instanteEnCaracas } from '@/lib/tiempo'
-import { ETIQUETA_TIPO_PAGO, formatearMontoDelegacion } from '@/lib/delegacion'
+import {
+  ETIQUETA_TIPO_PAGO,
+  etiquetaExterno,
+  formatearMontoDelegacion,
+  numeroAccionDe,
+  telefonoDe,
+  type PersonaDelegacion,
+} from '@/lib/delegacion'
 
-export type InscripcionReporte = {
+export type InscripcionReporte = PersonaDelegacion & {
   numero_recibo: number
-  nombre_externo: string | null
-  telefono_externo: string | null
   monto: number | string
   moneda: 'USD' | 'BS'
   tipo_pago: string
@@ -17,7 +22,6 @@ export type InscripcionReporte = {
   fecha: string
   monto_usd_equivalente: number | string | null
   anulado: boolean
-  jugadores: { nombre: string; telefono?: string | null } | null
 }
 
 export type DatosReporteInscritos = {
@@ -67,11 +71,13 @@ export async function generarPdfInscritos(d: DatosReporteInscritos) {
   autoTable(doc, {
     startY: 47,
     margin: { left: margen, right: margen, bottom: 20 },
-    head: [['N.º', 'Nombre', 'Teléfono', 'Método', 'Referencia', 'Fecha de pago', 'Recibo', 'Monto']],
+    head: [['N.º', 'Nombre', 'N.º de acción', 'Teléfono', 'Método', 'Referencia', 'Fecha de pago', 'Recibo', 'Monto']],
     body: validos.map((p, i) => [
       String(i + 1),
-      p.jugadores ? p.jugadores.nombre : `${p.nombre_externo || '—'} (invitado)`,
-      (p.jugadores ? p.jugadores.telefono : p.telefono_externo) || '—',
+      // Los de nombre libre con su etiqueta debajo ("Socio (no registrado en la app)" o "Invitado").
+      etiquetaExterno(p) ? `${nombreDe(p)}\n${etiquetaExterno(p)}` : nombreDe(p),
+      numeroAccionDe(p) || (etiquetaExterno(p) ? 'Falta' : '—'),
+      telefonoDe(p) || '—',
       ETIQUETA_TIPO_PAGO[p.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || p.tipo_pago,
       p.referencia || '—',
       formatearFechaConAnio(instanteEnCaracas(p.fecha)),
@@ -79,13 +85,23 @@ export async function generarPdfInscritos(d: DatosReporteInscritos) {
       formatearMontoDelegacion(Number(p.monto), p.moneda),
     ]),
     theme: 'grid',
-    styles: { fontSize: 8.5, cellPadding: 1.8, textColor: TINTA, lineColor: [210, 215, 220] },
+    styles: { fontSize: 8, cellPadding: 1.6, textColor: TINTA, lineColor: [210, 215, 220] },
     headStyles: { fillColor: AZUL, textColor: [255, 255, 255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [240, 246, 251] },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 9 },
-      6: { halign: 'center' },
-      7: { halign: 'right', cellWidth: 26 },
+      0: { halign: 'center', cellWidth: 8 },
+      2: { halign: 'center', cellWidth: 15 },
+      3: { cellWidth: 31 }, // "+58 (414)-582-4497" en una sola línea
+      6: { cellWidth: 21 },
+      7: { halign: 'center', cellWidth: 13 },
+      8: { halign: 'right', cellWidth: 19 },
+    },
+    // "Falta" (socio sin N.º de acción) en ámbar, para que se note.
+    didParseCell: (c) => {
+      if (c.section === 'body' && c.column.index === 2 && c.cell.raw === 'Falta') {
+        c.cell.styles.textColor = [160, 100, 0]
+        c.cell.styles.fontStyle = 'bold'
+      }
     },
   })
 

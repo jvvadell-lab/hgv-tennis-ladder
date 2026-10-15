@@ -3,7 +3,7 @@ import { getSession, esAdminCompleto } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { mensajeErrorPostgres, textoOpcional, validarDatosPago } from '@/lib/delegacion'
 
-// PATCH { accion: 'editar' | 'validar' | 'anular', ... } — admin completo o "solo pagos".
+// PATCH { accion: 'editar' | 'validar' | 'anular' | 'datos_externo', ... } — admin completo o "solo pagos".
 // Un pago anulado ya no se puede editar, validar ni volver a anular.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -67,6 +67,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ ok: true })
     }
 
+    // Completar N.º de acción y teléfono de una persona con nombre libre (los
+    // registros de antes de pedirlos). Solo esos dos campos.
+    if (body.accion === 'datos_externo') {
+      if (actual.jugador_id) {
+        return NextResponse.json({ error: 'Es un jugador registrado: su teléfono y N.º de acción están en su ficha' }, { status: 400 })
+      }
+      const cambiosExterno: Record<string, string | null> = {}
+      if ('numeroAccionExterno' in body) cambiosExterno.numero_accion_externo = textoOpcional(body.numeroAccionExterno)
+      if ('telefonoExterno' in body) cambiosExterno.telefono_externo = textoOpcional(body.telefonoExterno)
+      if (!Object.keys(cambiosExterno).length) return NextResponse.json({ error: 'No hay cambios' }, { status: 400 })
+      const { error } = await db.from('pagos_delegacion').update(cambiosExterno).eq('id', id).eq('anulado', false)
+      if (error) return NextResponse.json({ error: mensajeErrorPostgres(error) }, { status: 400 })
+      return NextResponse.json({ ok: true })
+    }
+
     if (body.accion !== 'editar') {
       return NextResponse.json({ error: 'Acción no válida' }, { status: 400 })
     }
@@ -82,11 +97,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       cambios.jugador_id = jugadorId
       cambios.nombre_externo = nombreExterno
-      if (jugadorId) cambios.telefono_externo = null
+      if (jugadorId) Object.assign(cambios, { telefono_externo: null, numero_accion_externo: null, es_socio: true })
     }
-    // El teléfono solo se guarda para invitados; el de un jugador está en su ficha.
-    if ('telefonoExterno' in body && !('jugador_id' in cambios ? cambios.jugador_id : actual.jugador_id)) {
-      cambios.telefono_externo = textoOpcional(body.telefonoExterno)
+    // Teléfono, N.º de acción y si es socio: solo con nombre libre; los de un
+    // jugador están en su ficha.
+    if (!('jugador_id' in cambios ? cambios.jugador_id : actual.jugador_id)) {
+      if ('telefonoExterno' in body) cambios.telefono_externo = textoOpcional(body.telefonoExterno)
+      if ('numeroAccionExterno' in body) cambios.numero_accion_externo = textoOpcional(body.numeroAccionExterno)
+      if ('esSocio' in body) cambios.es_socio = body.esSocio !== false
     }
     if ('torneoId' in body) {
       if (actual.concepto !== 'inscripcion_torneo') {

@@ -18,7 +18,11 @@ import {
   VARIANTES_PRENDA,
   estadoPrenda,
   etiquetaDiferencia,
+  etiquetaExterno,
   etiquetaPrenda,
+  faltaNumeroAccion,
+  nombrePersonaDelegacion,
+  numeroAccionDe,
   llevaManga,
   validarPrenda,
   varianteDe,
@@ -80,6 +84,8 @@ type PagoDelegacion = {
   jugador_id: string | null
   nombre_externo: string | null
   telefono_externo: string | null
+  numero_accion_externo: string | null
+  es_socio: boolean
   monto: number
   moneda: 'USD' | 'BS'
   tipo_pago: string
@@ -94,7 +100,7 @@ type PagoDelegacion = {
   monto_usd_equivalente: number | null
   diferencia_usd: number
   created_at: string
-  jugadores: { nombre: string; telefono: string | null } | null
+  jugadores: { nombre: string; telefono: string | null; numero_accion: string | null } | null
   torneo: { nombre: string } | null
   registrado: { nombre: string } | null
   anulador: { nombre: string } | null
@@ -106,6 +112,8 @@ type FormPago = {
   externo: boolean
   nombreExterno: string
   telefonoExterno: string
+  numeroAccionExterno: string
+  esSocio: boolean
   busqueda: string
   tipoPago: string
   moneda: string
@@ -123,6 +131,8 @@ const formPagoInicial = (tipoPago = 'efectivo'): FormPago => ({
   externo: false,
   nombreExterno: '',
   telefonoExterno: '',
+  numeroAccionExterno: '',
+  esSocio: true,
   busqueda: '',
   tipoPago,
   moneda: monedaPorDefectoDe(tipoPago),
@@ -148,7 +158,22 @@ const formatearCentavos = (digitos: string) =>
 const centavosANumero = (digitos: string) => parseInt(digitos || '0', 10) / 100
 const numeroACentavos = (n: number | null) => (n ? String(Math.round(Number(n) * 100)) : '')
 
-const nombrePersona = (p: PagoDelegacion) => p.jugadores?.nombre || (p.nombre_externo ? `${p.nombre_externo} (invitado)` : '—')
+const nombrePersona = (p: PagoDelegacion) => nombrePersonaDelegacion(p)
+
+// Datos de la persona con nombre libre para el body del POST (con jugador
+// registrado no van: sus datos salen de su ficha).
+const camposPersonaExterna = (f: FormPago) =>
+  f.externo
+    ? { nombreExterno: f.nombreExterno, telefonoExterno: f.telefonoExterno, numeroAccionExterno: f.numeroAccionExterno, esSocio: f.esSocio }
+    : { nombreExterno: null }
+
+// Validación de la persona en el cliente (la API repite la del N.º de acción).
+function errorPersona(f: FormPago): string | null {
+  if (!f.externo && !f.jugadorId) return 'Elige el jugador'
+  if (f.externo && !f.nombreExterno.trim()) return 'Escribe el nombre de la persona'
+  if (f.externo && f.esSocio && !f.numeroAccionExterno.trim()) return 'Escribe el N.º de acción del socio (o marca "No es socio (invitado)")'
+  return null
+}
 const fechaTabla = (fechaISO: string) => formatearFechaConAnio(instanteEnCaracas(fechaISO))
 
 // Nombre corto para la hoja de Excel: "Abierto Guataparo Country Club 2026"
@@ -244,6 +269,7 @@ async function descargarPdfLote(lote: Lote, m: Matriz) {
 
 type FilaListaInterna = {
   persona: string
+  accion: string
   prenda: string
   talla: string
   manga: string
@@ -276,6 +302,7 @@ function armarListaInterna(lote: Lote, pagos: PagoDelegacion[], estadoLote: Reco
       .flatMap(({ p, items }) =>
         items.map((i, k) => ({
           persona: nombrePersona(p),
+          accion: numeroAccionDe(p) || '',
           prenda: ETIQUETA_PRENDA[i.tipo_prenda],
           talla: i.talla,
           manga: i.manga ? ETIQUETA_MANGA[i.manga] : llevaManga(i.tipo_prenda) ? 'Falta definir' : '',
@@ -302,7 +329,7 @@ function armarListaInterna(lote: Lote, pagos: PagoDelegacion[], estadoLote: Reco
   }
 }
 
-const COLUMNAS_LISTA_INTERNA = ['Jugador', 'Prenda', 'Manga', 'Talla', 'Cant.', 'Monto', 'Moneda', 'Diferencia', 'Método', 'Referencia', 'Recibo', 'Estado', 'Entregado / firma']
+const COLUMNAS_LISTA_INTERNA = ['Jugador', 'N.º acción', 'Prenda', 'Manga', 'Talla', 'Cant.', 'Monto', 'Moneda', 'Diferencia', 'Método', 'Referencia', 'Recibo', 'Estado', 'Entregado / firma']
 
 async function descargarPdfListaInterna(lote: Lote, lista: ListaInterna) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
@@ -313,7 +340,7 @@ async function descargarPdfListaInterna(lote: Lote, lista: ListaInterna) {
   doc.text(`Lista interna · Fecha: ${formatearFechaConAnio(lote.enviado_at)}`, 14, 23)
 
   const aCeldas = (f: FilaListaInterna) => [
-    f.persona, f.prenda, f.manga, f.talla, String(f.cantidad),
+    f.persona, f.accion, f.prenda, f.manga, f.talla, String(f.cantidad),
     f.monto != null ? formatearMontoDelegacion(f.monto, f.moneda === '$' ? 'USD' : 'BS') : '',
     f.moneda, f.diferencia, f.metodo, f.referencia, `#${f.recibo}`, f.estado, '',
   ]
@@ -321,7 +348,7 @@ async function descargarPdfListaInterna(lote: Lote, lista: ListaInterna) {
     theme: 'grid' as const,
     styles: { fontSize: 8, cellPadding: 1.5 },
     headStyles: { fillColor: [15, 27, 38] as [number, number, number] },
-    columnStyles: { 4: { halign: 'center' as const }, 5: { halign: 'right' as const }, 12: { cellWidth: 34 } },
+    columnStyles: { 5: { halign: 'center' as const }, 6: { halign: 'right' as const }, 13: { cellWidth: 30 } },
   }
   autoTable(doc, { ...estilo, startY: 28, head: [COLUMNAS_LISTA_INTERNA], body: lista.filas.map(aCeldas) })
   let y = (doc as any).lastAutoTable.finalY + 8
@@ -501,6 +528,30 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
   // --- Acciones ---
 
+  // N.º de acción y teléfono de una persona con nombre libre (ambos niveles
+  // de admin; solo esos dos campos).
+  const completarDatosExterno = async (p: PagoDelegacion) => {
+    const accion = prompt(`N.º de acción / carnet de ${p.nombre_externo} (recibo #${p.numero_recibo}):`, p.numero_accion_externo || '')
+    if (accion === null) return
+    const telefono = prompt(`Teléfono de ${p.nombre_externo}:`, p.telefono_externo || '')
+    if (telefono === null) return
+    setOcupado(p.id)
+    try {
+      const res = await fetch(`/api/admin/delegacion/pago/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'datos_externo', numeroAccionExterno: accion, telefonoExterno: telefono }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      await cargar()
+    } catch (err: any) {
+      alert(err.message || 'Error al guardar')
+    } finally {
+      setOcupado(null)
+    }
+  }
+
   const descargarReporteInscritos = async () => {
     const torneo = torneos.find((t) => t.id === filtroTorneo)
     if (!torneo) return alert('Elige un torneo en el filtro para generar su reporte de inscritos.')
@@ -525,8 +576,8 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
     setInsMsg('')
     const torneo = torneos.find((t) => t.id === insTorneoId)
     if (!torneo) return setInsMsg('❌ Elige el torneo')
-    if (!insForm.externo && !insForm.jugadorId) return setInsMsg('❌ Elige el jugador')
-    if (insForm.externo && !insForm.nombreExterno.trim()) return setInsMsg('❌ Escribe el nombre de la persona')
+    const errorIns = errorPersona(insForm)
+    if (errorIns) return setInsMsg(`❌ ${errorIns}`)
     const monto = centavosANumero(insMontoCentavos)
     const errorDatos = validarDatosPago({ monto, moneda: insForm.moneda, tipo_pago: insForm.tipoPago, referencia: insForm.referencia.trim() || null })
     if (errorDatos) return setInsMsg(`❌ ${errorDatos}`)
@@ -540,8 +591,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
           concepto: 'inscripcion_torneo',
           torneoId: insTorneoId,
           jugadorId: insForm.externo ? null : insForm.jugadorId,
-          nombreExterno: insForm.externo ? insForm.nombreExterno : null,
-          telefonoExterno: insForm.externo ? insForm.telefonoExterno : null,
+          ...camposPersonaExterna(insForm),
           monto,
           moneda: insForm.moneda,
           tipoPago: insForm.tipoPago,
@@ -580,8 +630,8 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
   const registrarUniformes = async () => {
     setUniMsg('')
-    if (!uniForm.externo && !uniForm.jugadorId) return setUniMsg('❌ Elige el jugador')
-    if (uniForm.externo && !uniForm.nombreExterno.trim()) return setUniMsg('❌ Escribe el nombre de la persona')
+    const errorUni = errorPersona(uniForm)
+    if (errorUni) return setUniMsg(`❌ ${errorUni}`)
     for (const l of uniLineas) {
       const prenda = validarPrenda(l)
       if ('error' in prenda) return setUniMsg(`❌ ${prenda.error}`)
@@ -601,7 +651,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
         body: JSON.stringify({
           concepto: 'uniforme',
           jugadorId: uniForm.externo ? null : uniForm.jugadorId,
-          nombreExterno: uniForm.externo ? uniForm.nombreExterno : null,
+          ...camposPersonaExterna(uniForm),
           monto: montoUniforme,
           moneda: uniForm.moneda,
           tipoPago: uniForm.tipoPago,
@@ -825,6 +875,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
         .map((p) => ({
           'N° Recibo': p.numero_recibo,
           'Jugador': nombrePersona(p),
+          'N.º de acción': numeroAccionDe(p) || '',
           'Método': ETIQUETA_TIPO_PAGO[p.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || p.tipo_pago,
           'Moneda': p.moneda === 'USD' ? '$' : 'Bs.',
           'Monto': Number(p.monto),
@@ -849,6 +900,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
         filasUniformes.push({
           'N° Recibo': p.numero_recibo,
           'Jugador': nombrePersona(p),
+          'N.º de acción': numeroAccionDe(p) || '',
           'Prenda': ETIQUETA_PRENDA[i.tipo_prenda],
           'Manga': i.manga ? ETIQUETA_MANGA[i.manga] : llevaManga(i.tipo_prenda) ? 'Falta definir' : '',
           'Talla': i.talla,
@@ -893,7 +945,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
     lotes.slice().reverse().forEach((l) => {
       const lista = armarListaInterna(l, pagos, estadoLote)
-      const aFila = (f: FilaListaInterna) => [f.persona, f.prenda, f.manga, f.talla, f.cantidad, f.monto ?? '', f.moneda, f.diferencia, f.metodo, f.referencia, f.recibo, f.estado, '']
+      const aFila = (f: FilaListaInterna) => [f.persona, f.accion, f.prenda, f.manga, f.talla, f.cantidad, f.monto ?? '', f.moneda, f.diferencia, f.metodo, f.referencia, f.recibo, f.estado, '']
       const aoa: (string | number)[][] = [
         [`HGV Tennis Club — Lote #${l.numero}`],
         [`Lista interna · Fecha: ${formatearFechaConAnio(l.enviado_at)}`],
@@ -901,9 +953,9 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
         COLUMNAS_LISTA_INTERNA,
         ...lista.filas.map(aFila),
         [],
-        ['Total prendas', '', '', '', lista.totalPrendas],
-        ['Recaudado US$', '', '', '', '', lista.usd, '$'],
-        ['Recaudado Bs.', '', '', '', '', lista.bs, 'Bs.'],
+        ['Total prendas', '', '', '', '', lista.totalPrendas],
+        ['Recaudado US$', '', '', '', '', '', lista.usd, '$'],
+        ['Recaudado Bs.', '', '', '', '', '', lista.bs, 'Bs.'],
         ...(lista.anuladas.length
           ? [[], ['Anulados con prendas ya en fábrica'], COLUMNAS_LISTA_INTERNA, ...lista.anuladas.map(aFila)]
           : []),
@@ -916,7 +968,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
   // --- Piezas de UI reutilizadas por ambos formularios ---
 
-  const selectorPersona = (form: FormPago, setForm: (f: FormPago) => void, conTelefono = false) => {
+  const selectorPersona = (form: FormPago, setForm: (f: FormPago) => void) => {
     const filtrados = form.busqueda
       ? jugadores.filter((j) => j.nombre.toLowerCase().includes(form.busqueda.toLowerCase()))
       : jugadores
@@ -945,37 +997,54 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
             </div>
           </>
         ) : (
-          <div>
-            <label style={estiloLabel}>Nombre (invitado)</label>
-            <input
-              type="text"
-              value={form.nombreExterno}
-              onChange={(e) => setForm({ ...form, nombreExterno: e.target.value })}
-              placeholder="Nombre y apellido"
-              style={estiloInput}
-            />
-          </div>
+          <>
+            <div>
+              <label style={estiloLabel}>Nombre</label>
+              <input
+                type="text"
+                value={form.nombreExterno}
+                onChange={(e) => setForm({ ...form, nombreExterno: e.target.value })}
+                placeholder="Nombre y apellido"
+                style={estiloInput}
+              />
+            </div>
+            <div>
+              <label style={estiloLabel}>Teléfono</label>
+              <input
+                type="tel"
+                value={form.telefonoExterno}
+                onChange={(e) => setForm({ ...form, telefonoExterno: e.target.value })}
+                placeholder="+58 (412)-000-0000"
+                style={estiloInput}
+              />
+            </div>
+            <div>
+              <label style={estiloLabel}>N.º de acción / carnet{form.esSocio ? '' : ' (opcional)'}</label>
+              <input
+                type="text"
+                value={form.numeroAccionExterno}
+                onChange={(e) => setForm({ ...form, numeroAccionExterno: e.target.value })}
+                style={estiloInput}
+              />
+            </div>
+          </>
         )}
-        {form.externo && conTelefono && (
-          <div>
-            <label style={estiloLabel}>Teléfono (invitado)</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignSelf: 'end', paddingBottom: '10px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555' }}>
             <input
-              type="tel"
-              value={form.telefonoExterno}
-              onChange={(e) => setForm({ ...form, telefonoExterno: e.target.value })}
-              placeholder="+58 (412)-000-0000"
-              style={estiloInput}
+              type="checkbox"
+              checked={form.externo}
+              onChange={(e) => setForm({ ...form, externo: e.target.checked, jugadorId: '', nombreExterno: '', telefonoExterno: '', numeroAccionExterno: '', esSocio: true })}
             />
-          </div>
-        )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555', alignSelf: 'end', paddingBottom: '10px' }}>
-          <input
-            type="checkbox"
-            checked={form.externo}
-            onChange={(e) => setForm({ ...form, externo: e.target.checked, jugadorId: '', nombreExterno: '', telefonoExterno: '' })}
-          />
-          No está en la lista (nombre libre)
-        </label>
+            No está en la lista (socio no registrado en la app)
+          </label>
+          {form.externo && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#555' }}>
+              <input type="checkbox" checked={!form.esSocio} onChange={(e) => setForm({ ...form, esSocio: !e.target.checked })} />
+              No es socio (invitado)
+            </label>
+          )}
+        </div>
       </div>
     )
   }
@@ -1052,6 +1121,27 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
     background: i % 2 === 0 ? 'white' : '#fafafa',
     ...(p.anulado ? { opacity: 0.5 } : {}),
   })
+
+  // Nombre + N.º de acción; los de nombre libre llevan su etiqueta, y si a
+  // un socio le falta el N.º de acción, el aviso y el botón para completarlo.
+  const celdaPersona = (p: PagoDelegacion) => {
+    const accion = numeroAccionDe(p)
+    return (
+      <>
+        {p.jugadores?.nombre || p.nombre_externo || '—'}
+        {etiquetaExterno(p) && <div style={{ fontSize: '11px', color: '#6b6b6b' }}>{etiquetaExterno(p)}</div>}
+        {accion && <div style={{ fontSize: '11px', color: '#6b6b6b' }}>Acción {accion}</div>}
+        {!p.jugadores && !p.anulado && (
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap', marginTop: '2px' }}>
+            {faltaNumeroAccion(p) && <span style={{ fontSize: '11px', color: '#8a5a00', fontWeight: 'bold' }}>⚠️ Falta N.º de acción</span>}
+            <button onClick={() => completarDatosExterno(p)} disabled={ocupado === p.id} style={{ ...estiloBotonChico, fontSize: '11px', padding: '2px 6px' }}>
+              {faltaNumeroAccion(p) ? 'Completar' : '✏️ Acción / teléfono'}
+            </button>
+          </div>
+        )}
+      </>
+    )
+  }
 
   const marcaAnulado = (p: PagoDelegacion) =>
     p.anulado ? (
@@ -1174,7 +1264,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                       </p>
                     ) : null}
                   </div>
-                  {selectorPersona(insForm, setInsForm, true)}
+                  {selectorPersona(insForm, setInsForm)}
                   <div>
                     <label style={estiloLabel}>Monto ({insForm.moneda === 'USD' ? 'US$' : 'Bs.'})</label>
                     <input
@@ -1250,7 +1340,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                     {inscripciones.map((p, i) => (
                       <tr key={p.id} style={estiloFila(p, i)}>
                         <td style={{ ...estiloTd, fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>#{p.numero_recibo}</td>
-                        <td style={estiloTd}>{nombrePersona(p)}{marcaAnulado(p)}</td>
+                        <td style={estiloTd}>{celdaPersona(p)}{marcaAnulado(p)}</td>
                         <td style={estiloTd}>{p.torneo?.nombre || '—'}</td>
                         <td style={{ ...estiloTd, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', textDecoration: p.anulado ? 'line-through' : 'none' }}>{formatearMontoDelegacion(p.monto, p.moneda)}</td>
                         <td style={estiloTd}>{ETIQUETA_TIPO_PAGO[p.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || p.tipo_pago}</td>
@@ -1449,7 +1539,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                     {pedidosUniforme.map((p, i) => (
                       <tr key={p.id} style={estiloFila(p, i)}>
                         <td style={{ ...estiloTd, fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>#{p.numero_recibo}</td>
-                        <td style={estiloTd}>{nombrePersona(p)}{marcaAnulado(p)}</td>
+                        <td style={estiloTd}>{celdaPersona(p)}{marcaAnulado(p)}</td>
                         <td style={estiloTd}>
                           {p.items.map((it) => {
                             const estado = estadoPrenda(it, it.lote_id ? estadoLote[it.lote_id] : undefined)
@@ -1676,6 +1766,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                   {([
                     ['Fecha', fechaTabla(recibo.fecha)],
                     ['Recibido de', nombrePersona(recibo)],
+                    ...(numeroAccionDe(recibo) ? [['N.º de acción', numeroAccionDe(recibo)]] : []),
                     ['Concepto', recibo.concepto === 'inscripcion_torneo' ? `Inscripción — ${recibo.torneo?.nombre || ''}` : 'Compra de uniformes'],
                     ['Método', ETIQUETA_TIPO_PAGO[recibo.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || recibo.tipo_pago],
                     ['Referencia', recibo.referencia || '—'],

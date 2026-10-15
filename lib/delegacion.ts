@@ -90,6 +90,53 @@ export function etiquetaPrenda(item: { tipo_prenda: string; manga?: string | nul
   return item.manga ? `${base} · ${ETIQUETA_MANGA[item.manga as Manga].toLowerCase()}` : base
 }
 
+// --- Persona del pago: jugador registrado o nombre libre ---
+
+// Nombre libre = no está en la lista de jugadores de la app. Casi siempre es
+// un socio que no se registró en la escalera; "invitado" solo si se marcó
+// que no es socio (es_socio = false).
+export const ETIQUETA_SOCIO_NO_REGISTRADO = 'Socio (no registrado en la app)'
+export const ETIQUETA_INVITADO = 'Invitado'
+
+export type PersonaDelegacion = {
+  jugadores: { nombre: string; telefono?: string | null; numero_accion?: string | null } | null
+  nombre_externo: string | null
+  telefono_externo?: string | null
+  numero_accion_externo?: string | null
+  es_socio?: boolean | null
+}
+
+// null si es un jugador registrado.
+export function etiquetaExterno(p: PersonaDelegacion): string | null {
+  if (p.jugadores) return null
+  return p.es_socio === false ? ETIQUETA_INVITADO : ETIQUETA_SOCIO_NO_REGISTRADO
+}
+
+// "Ana Pérez" (jugador) o "Ana Pérez — Socio (no registrado en la app)".
+export function nombrePersonaDelegacion(p: PersonaDelegacion): string {
+  if (p.jugadores) return p.jugadores.nombre
+  return p.nombre_externo ? `${p.nombre_externo} — ${etiquetaExterno(p)}` : '—'
+}
+
+// Teléfono y N.º de acción: de la ficha del jugador, o los cargados a mano.
+export const telefonoDe = (p: PersonaDelegacion) => (p.jugadores ? p.jugadores.telefono : p.telefono_externo) || null
+export const numeroAccionDe = (p: PersonaDelegacion) => (p.jugadores ? p.jugadores.numero_accion : p.numero_accion_externo) || null
+
+// Socio con nombre libre sin N.º de acción (los registros de antes de pedirlo).
+export const faltaNumeroAccion = (p: PersonaDelegacion) => !p.jugadores && p.es_socio !== false && !p.numero_accion_externo
+
+// Lee del body los datos de una persona con nombre libre (POST de pagos).
+// Con jugador registrado todo va vacío: sus datos salen de su ficha. El
+// N.º de acción es obligatorio para socios y opcional para invitados.
+export function datosPersonaExterna(body: any, jugadorId: string | null):
+  { error: string } | { telefono_externo: string | null; numero_accion_externo: string | null; es_socio: boolean } {
+  if (jugadorId) return { telefono_externo: null, numero_accion_externo: null, es_socio: true }
+  const esSocio = body.esSocio !== false
+  const numeroAccion = textoOpcional(body.numeroAccionExterno)
+  if (esSocio && !numeroAccion) return { error: 'Escribe el N.º de acción del socio (o marca "No es socio (invitado)")' }
+  return { telefono_externo: textoOpcional(body.telefonoExterno), numero_accion_externo: numeroAccion, es_socio: esSocio }
+}
+
 // Diferencia acumulada por cambios de prenda: positiva = el jugador debe.
 export function etiquetaDiferencia(diferenciaUsd: number | string | null | undefined): string | null {
   const d = Number(diferenciaUsd || 0)
@@ -220,6 +267,7 @@ export function mensajeErrorPostgres(err: { code?: string; message?: string; det
       if (texto.includes('moneda_check')) return 'La moneda no es válida'
       if (texto.includes('torneo_si_inscripcion')) return 'Una inscripción necesita torneo, y un pedido de uniformes no lleva torneo'
       if (texto.includes('jugador_o_externo')) return 'Elige un jugador o escribe el nombre de la persona'
+      if (texto.includes('datos_externo_solo_sin_jugador')) return 'El teléfono y el N.º de acción a mano son solo para personas que no están en la lista'
       if (texto.includes('talla_segun_prenda')) return 'Esa talla no existe para esa prenda'
       if (texto.includes('manga_obligatoria_dama')) return 'Elige la manga de la franela dama (manga corta o sin mangas)'
       if (texto.includes('manga_solo_dama')) return 'Solo la franela dama lleva manga'

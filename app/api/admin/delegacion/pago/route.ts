@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { hoyEnCaracas } from '@/lib/tiempo'
 import { obtenerTasaVigente, tasaParaCalculo } from '@/lib/tasaBcv'
 import {
+  datosPersonaExterna,
   mensajeErrorPostgres,
   monedaPorDefectoDe,
   textoOpcional,
@@ -37,11 +38,12 @@ export async function POST(request: Request) {
 
     const jugadorId = textoOpcional(body.jugadorId)
     const nombreExterno = jugadorId ? null : textoOpcional(body.nombreExterno)
-    // Teléfono solo para invitados: el de los jugadores está en su ficha.
-    const telefonoExterno = jugadorId ? null : textoOpcional(body.telefonoExterno)
     if (!jugadorId && !nombreExterno) {
       return NextResponse.json({ error: 'Elige un jugador o escribe el nombre de la persona' }, { status: 400 })
     }
+    // Teléfono, N.º de acción y si es socio: solo con nombre libre.
+    const persona = datosPersonaExterna(body, jugadorId)
+    if ('error' in persona) return NextResponse.json({ error: persona.error }, { status: 400 })
 
     const tipoPago = String(body.tipoPago || '')
     const datos = {
@@ -106,7 +108,7 @@ export async function POST(request: Request) {
           torneo_id: torneoId,
           jugador_id: jugadorId,
           nombre_externo: nombreExterno,
-          telefono_externo: telefonoExterno,
+          ...persona,
           ...datos,
           fecha,
           notas,
@@ -145,6 +147,7 @@ export async function POST(request: Request) {
       p_pago: {
         jugador_id: jugadorId,
         nombre_externo: nombreExterno,
+        ...persona,
         ...datos,
         fecha,
         notas,
