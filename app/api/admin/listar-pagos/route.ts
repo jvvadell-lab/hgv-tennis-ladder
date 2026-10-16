@@ -15,6 +15,8 @@ export async function POST(request: Request) {
     let query = db
       .from('pagos')
       .select('id, numero_recibo, jugador_id, temporada_id, tipo_pago, monto, fecha, referencia, validado, jugadores:jugador_id(nombre)')
+      // Los pagos de inscripción a torneos internos van en su propia pestaña.
+      .is('torneo_inscripcion_id', null)
       .order('numero_recibo', { ascending: false })
 
     if (temporadaId) query = query.eq('temporada_id', temporadaId)
