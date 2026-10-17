@@ -182,7 +182,16 @@ export function estadoInscripcionCalculado(d: DatosEstadoInscripcion): EstadoIns
   return pendientesInscripcion(d).length === 0 ? 'confirmada' : 'pendiente_pago'
 }
 
-export function textoPendiente(p: Pendiente, nombre: string): string {
+// `nombre` null = el propio jugador que lo lee ("tu pago").
+export function textoPendiente(p: Pendiente, nombre: string | null): string {
+  if (nombre === null) {
+    switch (p.tipo) {
+      case 'pago': return 'Falta tu pago'
+      case 'pago_por_validar': return 'Tu pago está por validar'
+      case 'categoria': return 'Falta que el admin confirme tu categoría'
+      case 'categoria_incompatible': return 'Tu categoría oficial no corresponde a esta categoría'
+    }
+  }
   switch (p.tipo) {
     case 'pago': return `Falta el pago de ${nombre}`
     case 'pago_por_validar': return `Pago de ${nombre} por validar`
