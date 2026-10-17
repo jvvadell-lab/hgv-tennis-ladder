@@ -23,6 +23,6 @@ begin
     (v_torneo, 'Doble Masculino Sexta',   'doble',  'caballeros', 'sexta',  12, 4, 3, 2, 'cuartos', 90, 1),
     (v_torneo, 'Doble Femenino Sexta',    'doble',  'damas',      'sexta',  12, 4, 3, 2, 'cuartos', 90, 2),
     (v_torneo, 'Mixto con handicap',      'doble',  'mixto',      null,     12, 4, 3, 2, 'cuartos', 90, 3),
-    (v_torneo, 'Single Caballeros Quinta','single', 'caballeros', 'quinta',  8, 2, 4, 2, 'semis',   60, 4);
+    (v_torneo, 'Single Caballeros Quinta','single', 'caballeros', 'quinta',  8, 2, 4, 2, 'semis',   90, 4);
 end;
 $$;

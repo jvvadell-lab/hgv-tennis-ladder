@@ -18,7 +18,7 @@ Los puntos marcados **[CONFIRMAR]** son supuestos razonables que la Comisión a�
 | No presentación | Se declara WO a favor del rival |
 | Inscripción | 15 € por jugador por categoría, pagadero en Bs. a tasa BCV del euro del día |
 | Un jugador puede jugar | Hasta 2 categorías |
-| Duración del turno | Dobles 90 min · Single 60 min |
+| Duración del turno | 90 min (dobles y single) |
 
 ## 1. Modelo de datos (migraciones nuevas)
 
@@ -38,7 +38,7 @@ torneo_categorias
   cupo int,                                               -- 12 parejas / 8 jugadores
   num_grupos int, tamano_grupo int, clasifican_por_grupo int default 2,
   llave_desde text check in ('cuartos','semis'),
-  duracion_min int,                                       -- 90 / 60
+  duracion_min int,                                       -- 90
   orden int
 
 torneo_inscripciones           -- una fila = una pareja (doble) o un jugador (single)
