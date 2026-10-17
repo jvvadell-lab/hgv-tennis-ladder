@@ -114,6 +114,7 @@ export type TorneoInscripcion = {
   jugador2_id: string | null    // null en single
   siembra: number | null
   estado: EstadoInscripcion
+  inscrita_por: string | null
   created_at: string
 }
 
