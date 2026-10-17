@@ -129,7 +129,7 @@ export default function CampanaNotificaciones({ jugadorId }: { jugadorId: string
             notificaciones.map((n) => (
               <a
                 key={n.id}
-                href="/ladder"
+                href={n.tipo?.startsWith('torneo_') ? '/torneo/inscripcion' : '/ladder'}
                 onClick={() => marcarLeida(n)}
                 style={{
                   display: 'block', padding: '10px 14px', textDecoration: 'none',

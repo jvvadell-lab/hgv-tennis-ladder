@@ -375,6 +375,13 @@ export default function PerfilPage() {
           }}>
             🎾 Reservar cancha
           </a>
+          <a href="/torneo/inscripcion" style={{
+            display: 'inline-block', marginTop: '16px', marginLeft: '8px', color: 'var(--color-ink)', fontSize: '14px', fontWeight: 700,
+            fontFamily: 'var(--font-body)', textDecoration: 'none', border: '1px solid var(--color-court)',
+            borderRadius: '4px', padding: '9px 20px',
+          }}>
+            🎄 Torneo Navidad
+          </a>
         </div>
 
         <form onSubmit={guardar}>
