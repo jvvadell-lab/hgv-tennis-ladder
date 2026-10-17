@@ -6,6 +6,7 @@ import { comprimirImagen } from '@/lib/comprimirImagen'
 import Delegacion from './Delegacion'
 import ConfirmacionReserva, { type InfoConfirmacion } from './ConfirmacionReserva'
 import BloqueosCancha from './BloqueosCancha'
+import TorneoAdmin from './TorneoAdmin'
 import TasaBcv from '@/app/components/TasaBcv'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
@@ -2194,10 +2195,11 @@ export default function AdminPage() {
     { id: 'reservas', icon: '📅', label: 'Reservas' },
     { id: 'galeria', icon: '🖼️', label: 'Galería' },
     { id: 'payments', icon: '💳', label: 'Pagos' },
+    { id: 'torneo', icon: '🎄', label: 'Torneo' },
   ]
 
   const menuItems = esAdminLimitado
-    ? menuItemsCompletos.filter((m) => m.id === 'players' || m.id === 'payments')
+    ? menuItemsCompletos.filter((m) => m.id === 'players' || m.id === 'payments' || m.id === 'torneo')
     : menuItemsCompletos
 
   const categoriaLabel = (value: string) => CATEGORIAS.find(c => c.value === value)?.label || value
@@ -4821,6 +4823,11 @@ export default function AdminPage() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* TORNEO NAVIDAD */}
+          {activeSection === 'torneo' && (
+            <TorneoAdmin esAdminCompleto={!esAdminLimitado} />
           )}
 
           {/* PAGOS */}
