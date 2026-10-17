@@ -159,12 +159,13 @@ Implementar como función pura `ordenarGrupo(partidos, inscripciones)` en `lib/t
 - Al validar un partido de llave: poner al ganador en el partido cuyo `origen` sea 'G:<orden>'.
 - Notificar a los jugadores (tabla `notificaciones` + correo) cuando se conoce su rival y cuando se programa su partido.
 - Si el admin corrige un resultado ya validado, recalcular la tabla y los partidos dependientes que aún no se hayan jugado; si ya se jugaron, bloquear la corrección y avisar.
+- Para incidencias que el avance automático no resuelve (puestos vacantes), ver "Ajustar llave" en la sección 13.
 
 ## 9. Pantallas
 
 **Públicas (/torneo):** grupos con tabla en vivo, llaves por categoría, calendario por día (con cancha y hora), resultados.
 **Jugador:** mis partidos, reportar resultado, pedir cambio de horario, estado de pago.
-**Admin (pestaña Torneo):** categorías y cupos, inscripciones y pagos, siembra y sorteo, programación (asistente + ajuste manual), validación de resultados, WO, reprogramación, exportar calendario a Excel.
+**Admin (pestaña Torneo):** categorías y cupos, inscripciones y pagos, siembra y sorteo, programación (asistente + ajuste manual), validación de resultados, WO, reprogramación, exportar calendario a Excel. En una fase posterior, "Ajustar llave" (sección 13).
 
 ## 10. Orden de implementación sugerido
 
@@ -176,6 +177,7 @@ Implementar como función pura `ordenarGrupo(partidos, inscripciones)` en `lib/t
 6. Resultados, WO, tabla y avance automático.
 7. Vistas públicas y del jugador.
 8. Notificaciones y exportación.
+9. (Fase posterior) "Ajustar llave" para incidencias (sección 13).
 
 ## 11. Estadísticas (se calculan de `torneo_partidos` validados; sin tablas nuevas)
 
@@ -199,3 +201,25 @@ Vista en /perfil (o /torneo/jugador/[id], pública) con:
 - **Contra rivales (opcional):** récord cara a cara contra cada pareja/jugador rival.
 
 Datos: consulta sobre `torneo_inscripciones` (donde jugador1_id o jugador2_id = jugador) + `torneo_partidos` validados de esas inscripciones. El compañero es el otro jugador de la inscripción; en single no hay compañero.
+
+## 13. "Ajustar llave" del admin (fase posterior, solo incidencias)
+
+Botón en la vista de llave del admin para resolver incidencias que el avance automático (sección 8) no cubre. No es una herramienta para rehacer la llave.
+
+**Cuándo se permite:**
+- Solo sobre un **puesto vacante** de la llave, es decir, que quedó libre por retiro, descalificación o doble WO.
+- Solo **antes de que empiece** el partido de llave de ese puesto.
+
+**Qué está prohibido:**
+- Mover un 2º de grupo a un puesto de 1º.
+- Cambiar de línea de la llave a un 1º de grupo.
+- Tocar un puesto ya ocupado por resultado (ganador de grupo o de un partido validado).
+- Usar la siembra para ordenar la llave: la siembra del admin solo influye en el armado de grupos (sección 3), nunca en la llave.
+
+**Errores de marcador:** no se corrigen con "Ajustar llave". Se corrigen en el partido, con el flujo de corrección de resultados, y la llave se recalcula sola (sección 8).
+
+**Registro y transparencia:**
+- Motivo obligatorio (texto libre) en cada ajuste.
+- Se guarda qué admin lo hizo y cuándo, junto con el puesto ajustado y la inscripción anterior y la nueva, por ejemplo en una tabla `torneo_ajustes_llave` (partido_id, posición, inscripción anterior, inscripción nueva, motivo, admin_id, created_at).
+- Las validaciones anteriores van en el servidor (endpoint o función Postgres), no solo en la UI.
+- La vista pública de la llave muestra una nota en el puesto ajustado (p. ej. "Ajustado por la organización: <motivo>").
