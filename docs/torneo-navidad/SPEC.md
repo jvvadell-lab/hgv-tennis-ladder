@@ -7,7 +7,7 @@ Los puntos marcados **[CONFIRMAR]** son supuestos razonables que la Comisión a�
 
 | Regla | Valor |
 |---|---|
-| Fechas | Lunes 2-nov-2026 a viernes 4-dic-2026. Cierre y premiación sábado 5-dic |
+| Fechas | Lunes 2-nov-2026 a viernes 11-dic-2026. Cierre y premiación **[CONFIRMAR fecha, ¿sábado 12-dic?]** |
 | Categorías | Doble Masculino Sexta (12 parejas), Doble Femenino Sexta (12), Mixto con handicap (12), Single Caballeros Quinta (8 jugadores) |
 | Dobles | 4 grupos de 3, todos contra todos. Pasan 1º y 2º → cuartos, semis, final |
 | Single | 2 grupos de 4, todos contra todos. Pasan 1º y 2º → semis cruzadas, final |
@@ -117,7 +117,7 @@ Plantilla de turnos por día (hora Caracas, usar `lib/tiempo.ts`):
 - Al programar un partido se crea su fila en `bloqueos_cancha` (motivo "Torneo Navidad – <categoría> – <fase>") para que no se pueda reservar; al reprogramar se mueve el bloqueo; al cancelar se borra.
 - Regla: un jugador no puede tener dos partidos que se solapen ni dos partidos la misma noche (revisar ambos jugadores de cada inscripción, en todas las categorías).
 - Regla: un partido de llave no se puede programar antes que los partidos de los que depende.
-- Asistente de programación (admin): propone automáticamente llenar los turnos libres en orden de fase (grupos → cuartos → semis → final) respetando las reglas; el admin ajusta a mano. Las 4 finales van fijas el viernes 4-dic.
+- Asistente de programación (admin): propone automáticamente llenar los turnos libres en orden de fase (grupos → cuartos → semis → final) respetando las reglas; el admin ajusta a mano. Las 4 finales van fijas el viernes 11-dic (último día del torneo).
 - Cambio de horario: el jugador lo solicita; el admin reprograma (reutilizar el patrón de `reagendar-reto` y `retos_historial_reagendado`).
 
 ## 5. Resultados
