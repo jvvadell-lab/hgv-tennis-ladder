@@ -35,6 +35,7 @@ import {
   type TipoPrenda,
 } from '@/lib/delegacion'
 import { generarPdfInscritos, nombreArchivoInscritos } from '@/lib/reporteInscritos'
+import { generarPdfEtiquetas, generarPdfListaEntrega } from '@/lib/documentosLote'
 
 // Pagos → Delegación: cobros de la delegación HGV en torneos inter-clubes
 // (inscripciones) y compra de uniformes. Separado de los pagos de la
@@ -378,7 +379,7 @@ const estiloTd: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'to
 const estiloBotonPrimario: React.CSSProperties = { background: 'var(--color-court)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }
 const estiloBotonChico: React.CSSProperties = { background: 'white', border: '1px solid #ddd', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }
 
-// Logo de la Comisión para el reporte de inscritos, como data URL con sus
+// Logo de la Comisión para el reporte de inscritos y los documentos de entrega del lote, como data URL con sus
 // medidas (jspdf necesita la proporción para no deformarlo).
 async function cargarLogo(): Promise<{ dataUrl: string; ancho: number; alto: number } | null> {
   try {
@@ -1503,6 +1504,8 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                             <button onClick={() => descargarPdfLote(l, matrices.porLote[l.id]).catch((e) => alert(e?.message || 'Error al generar el PDF'))} style={estiloBotonChico}>📄 PDF proveedor</button>
                             <button onClick={() => descargarPdfListaInterna(l, armarListaInterna(l, pagos, estadoLote)).catch((e) => alert(e?.message || 'Error al generar el PDF'))} style={estiloBotonChico}>📋 Lista interna</button>
+                            <button onClick={async () => { try { (await generarPdfListaEntrega(l, pagos, await cargarLogo())).doc.save(`hgv-uniformes-lote-${l.numero}-entrega.pdf`) } catch (e: any) { alert(e?.message || 'Error al generar el PDF') } }} style={estiloBotonChico}>✍️ Lista de entrega</button>
+                            <button onClick={async () => { try { (await generarPdfEtiquetas(l, pagos, await cargarLogo())).doc.save(`hgv-uniformes-lote-${l.numero}-etiquetas.pdf`) } catch (e: any) { alert(e?.message || 'Error al generar el PDF') } }} style={estiloBotonChico}>🏷️ Etiquetas</button>
                             {l.estado === 'en_fabrica' && (
                               <button onClick={() => marcarLoteRecibido(l)} disabled={ocupado === l.id} style={estiloBotonChico}>📥 Marcar recibido</button>
                             )}
