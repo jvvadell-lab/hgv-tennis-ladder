@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       .from('torneo_categorias')
       .select('id, nombre, modalidad, genero, categoria_nivel, cupo')
       .eq('torneo_id', torneo.id)
+      .eq('es_infantil', false) // a un menor lo inscribe su representante (/api/jugador/torneo/infantil)
     if (errCat) throw errCat
     const categoria = (categorias || []).find((c) => c.id === categoriaId) as
       (Pick<TorneoCategoria, 'id' | 'nombre' | 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo'>) | undefined

@@ -136,6 +136,20 @@ export function minutosDesdeMedianocheEnCaracas(instante: Date): number {
   return descomponerEnCaracas(aFecha(instante)).minutos
 }
 
+// --- Edad ---
+
+// Edad cumplida (años enteros) a una fecha calendario, ambas "YYYY-MM-DD".
+// Compara fechas de calendario, no instantes: no depende de la zona horaria
+// (el 29-feb cumple el 1-mar en años no bisiestos, como age() de Postgres).
+// Para "hoy" en Caracas: edadEnFecha(nacimiento, hoyEnCaracas()).
+export function edadEnFecha(nacimientoISO: string, referenciaISO: string): number {
+  const [an, mn, dn] = nacimientoISO.split('-').map(Number)
+  const [ar, mr, dr] = referenciaISO.split('-').map(Number)
+  let edad = ar - an
+  if (mr < mn || (mr === mn && dr < dn)) edad--
+  return edad
+}
+
 // --- Reglas de horario de cancha (mismo comportamiento que
 // lib/reservas.ts, construida sobre descomponerEnCaracas de este módulo) ---
 

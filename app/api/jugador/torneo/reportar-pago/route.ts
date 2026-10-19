@@ -7,7 +7,8 @@ import { torneoVigente } from '@/lib/torneoServidor'
 import { TIPOS_PAGO_TORNEO, montoInscripcionBs } from '@/lib/torneoInscripcion'
 
 // El jugador reporta el pago de su inscripción (y, en dobles, opcionalmente
-// también el de su pareja). Mismo flujo que los pagos de la escalera: queda
+// también el de su pareja), o el de la inscripción de un menor que representa
+// (el pago queda a su nombre, SPEC §14.2). Mismo flujo que los pagos de la escalera: queda
 // sin validar hasta que el admin lo confirme. El monto lo calcula el
 // servidor: monto en € del torneo × tasa BCV del euro vigente el día del
 // pago, y la tasa usada queda en pagos.tasa_bcv_eur.
@@ -43,17 +44,18 @@ export async function POST(request: Request) {
 
     const { data: ins, error: errIns } = await db
       .from('torneo_inscripciones')
-      .select('id, estado, jugador1_id, jugador2_id, torneo_categorias:categoria_id(torneo_id)')
+      .select('id, estado, jugador1_id, jugador2_id, torneo_categorias:categoria_id(torneo_id), torneo_menores:menor_id(representante_jugador_id)')
       .eq('id', inscripcionId)
       .maybeSingle()
     if (errIns) throw errIns
-    const esMia = ins && (ins.jugador1_id === session.id || ins.jugador2_id === session.id)
+    const representaAlMenor = (ins?.torneo_menores as any)?.representante_jugador_id === session.id
+    const esMia = ins && (ins.jugador1_id === session.id || ins.jugador2_id === session.id || representaAlMenor)
     if (!ins || !esMia || (ins.torneo_categorias as any)?.torneo_id !== torneo.id) {
       return NextResponse.json({ error: 'Esa inscripción no es tuya' }, { status: 403 })
     }
     if (ins.estado === 'retirada') return NextResponse.json({ error: 'Esa inscripción está retirada' }, { status: 400 })
 
-    const parejaId = ins.jugador1_id === session.id ? ins.jugador2_id : ins.jugador1_id
+    const parejaId = representaAlMenor ? null : ins.jugador1_id === session.id ? ins.jugador2_id : ins.jugador1_id
     if (incluyePareja && !parejaId) return NextResponse.json({ error: 'Esta inscripción no tiene pareja' }, { status: 400 })
     const cubiertos = [session.id, ...(incluyePareja && parejaId ? [parejaId] : [])]
 

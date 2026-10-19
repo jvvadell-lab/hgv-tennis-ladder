@@ -18,7 +18,8 @@ export type EstadoTorneo = (typeof ESTADOS_TORNEO)[number]
 export const MODALIDADES = ['single', 'doble'] as const
 export type Modalidad = (typeof MODALIDADES)[number]
 
-export const GENEROS_CATEGORIA = ['caballeros', 'damas', 'mixto'] as const
+// 'abierto' = niños y niñas juntos (solo categorías infantiles, SPEC §14).
+export const GENEROS_CATEGORIA = ['caballeros', 'damas', 'mixto', 'abierto'] as const
 export type GeneroCategoria = (typeof GENEROS_CATEGORIA)[number]
 
 // Mismos valores que jugadores.categoria
@@ -27,6 +28,10 @@ export type Nivel = (typeof NIVELES)[number]
 
 export const LLAVE_DESDE = ['cuartos', 'semis'] as const
 export type LlaveDesde = (typeof LLAVE_DESDE)[number]
+
+// Formato de partido de la categoría (SPEC §14.1). Adultos: dos_sets_stb.
+export const FORMATOS_PARTIDO = ['dos_sets_stb', 'un_set_6_tb', 'festival_4games'] as const
+export type FormatoPartido = (typeof FORMATOS_PARTIDO)[number]
 
 export const ESTADOS_INSCRIPCION = ['pendiente_pago', 'confirmada', 'retirada'] as const
 export type EstadoInscripcion = (typeof ESTADOS_INSCRIPCION)[number]
@@ -87,6 +92,8 @@ export type Torneo = {
   fecha_fin: string
   estado: EstadoTorneo
   monto_inscripcion_eur: number
+  fecha_corte_edad: string | null  // edad de los menores; null = 31-dic del año de fecha_inicio
+  solo_socios: boolean
   created_at: string
 }
 
@@ -101,17 +108,28 @@ export type TorneoCategoria = {
   num_grupos: number
   tamano_grupo: number
   clasifican_por_grupo: number
-  llave_desde: LlaveDesde
+  llave_desde: LlaveDesde | 'sin_llave'   // sin_llave = festival infantil
   duracion_min: number
   orden: number
+  es_infantil: boolean
+  edad_min: number | null
+  edad_max: number | null
+  formato_partido: FormatoPartido
+  plantilla_turnos: unknown | null         // ver PlantillaTurnosInfantil en lib/torneoInfantil.ts
+  partidos_minimos: number | null
   created_at: string
 }
 
 export type TorneoInscripcion = {
   id: string
   categoria_id: string
-  jugador1_id: string
+  jugador1_id: string | null    // null si es de un menor
   jugador2_id: string | null    // null en single
+  menor_id: string | null       // inscripción infantil (SPEC §14)
+  menor_nombre_publico: string | null
+  categoria_certificada_por: string | null
+  categoria_certificada_at: string | null
+  inscrita_por_admin: string | null
   siembra: number | null
   estado: EstadoInscripcion
   inscrita_por: string | null
