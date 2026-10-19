@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { enviarCorreo } from '@/lib/email'
 import type { EstadoInscripcion, Nivel, Torneo } from '@/lib/torneo'
 import { estadoInscripcionCalculado, pendientesInscripcion, type Pendiente } from '@/lib/torneoInscripcion'
+import { estadoInscripcionMenorCalculado, pendientesInscripcionMenor } from '@/lib/torneoInfantil'
 
 // El torneo que se está organizando o jugando: el más próximo que no esté
 // finalizado. null si no hay ninguno.
@@ -29,6 +30,15 @@ export type ResultadoRecalculo = {
   antes: EstadoInscripcion
   despues: EstadoInscripcion
   pendientes: Pendiente[]
+  // Inscripción infantil: el menor y su representante (jugadorIds = [representante con cuenta]).
+  menor: MenorConRepresentante | null
+}
+
+export type MenorConRepresentante = {
+  id: string
+  nombre: string
+  apellido: string
+  representante_jugador_id: string
 }
 
 // Recalcula y guarda el estado de una inscripción (pendiente_pago ↔
@@ -37,12 +47,13 @@ export type ResultadoRecalculo = {
 export async function recalcularInscripcion(db: SupabaseClient, inscripcionId: string): Promise<ResultadoRecalculo> {
   const { data: ins, error } = await db
     .from('torneo_inscripciones')
-    .select('id, estado, jugador1_id, jugador2_id, torneo_categorias:categoria_id(nombre, categoria_nivel, torneos:torneo_id(nombre))')
+    .select('id, estado, jugador1_id, jugador2_id, menor_id, categoria_certificada_at, torneo_categorias:categoria_id(nombre, categoria_nivel, torneos:torneo_id(nombre))')
     .eq('id', inscripcionId)
     .single()
   if (error) throw error
 
   const categoria = ins.torneo_categorias as unknown as { nombre: string; categoria_nivel: Nivel | null; torneos: { nombre: string } }
+  if (ins.menor_id) return recalcularInscripcionMenor(db, ins, categoria)
   const jugadorIds = [ins.jugador1_id, ins.jugador2_id].filter(Boolean) as string[]
 
   const [{ data: jugadores, error: errJ }, { data: pagos, error: errP }] = await Promise.all([
@@ -71,6 +82,45 @@ export async function recalcularInscripcion(db: SupabaseClient, inscripcionId: s
     antes: ins.estado as EstadoInscripcion,
     despues,
     pendientes: pendientesInscripcion(datos),
+    menor: null,
+  }
+}
+
+// Inscripción infantil: confirmada con el pago del representante validado
+// y la categoría certificada por el admin (SPEC §14.2).
+async function recalcularInscripcionMenor(
+  db: SupabaseClient,
+  ins: { id: string; estado: string; menor_id: string; categoria_certificada_at: string | null },
+  categoria: { nombre: string; torneos: { nombre: string } }
+): Promise<ResultadoRecalculo> {
+  const [{ data: menor, error: errM }, { data: pagos, error: errP }] = await Promise.all([
+    db.from('torneo_menores').select('id, nombre, apellido, representante_jugador_id').eq('id', ins.menor_id).single(),
+    db.from('pagos').select('jugador_id, validado').eq('torneo_inscripcion_id', ins.id),
+  ])
+  if (errM) throw errM
+  if (errP) throw errP
+
+  const datos = {
+    estado: ins.estado as EstadoInscripcion,
+    menorId: menor.id,
+    representanteJugadorId: menor.representante_jugador_id,
+    certificada: !!ins.categoria_certificada_at,
+    pagos: (pagos || []).map((p) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+  }
+  const despues = estadoInscripcionMenorCalculado(datos)
+  if (despues !== ins.estado) {
+    const { error: errUpd } = await db.from('torneo_inscripciones').update({ estado: despues }).eq('id', ins.id)
+    if (errUpd) throw errUpd
+  }
+  return {
+    inscripcionId: ins.id,
+    categoriaNombre: categoria.nombre,
+    torneoNombre: categoria.torneos.nombre,
+    jugadorIds: [menor.representante_jugador_id],
+    antes: ins.estado as EstadoInscripcion,
+    despues,
+    pendientes: pendientesInscripcionMenor(datos),
+    menor: menor as MenorConRepresentante,
   }
 }
 
@@ -125,9 +175,31 @@ export async function notificarJugadores(
   )
 }
 
-// Aviso de inscripción confirmada a los jugadores de la inscripción.
+// Avisa al representante de un menor (campana + correo). Informativo, como notificarJugadores.
+export async function notificarRepresentante(
+  db: SupabaseClient,
+  menor: MenorConRepresentante,
+  aviso: { tipo: string; mensaje: string; asunto: string; cuerpoHtml: string }
+): Promise<void> {
+  await notificarJugadores(db, [menor.representante_jugador_id], { ...aviso, cuerpoHtml: () => aviso.cuerpoHtml })
+}
+
+// Aviso de inscripción confirmada a los jugadores de la inscripción (o al
+// representante, si es de un menor).
 export async function avisarInscripcionConfirmada(db: SupabaseClient, r: ResultadoRecalculo) {
   const torneoNombre = r.torneoNombre
+  if (r.menor) {
+    await notificarRepresentante(db, r.menor, {
+      tipo: 'torneo_inscripcion_confirmada',
+      mensaje: `✅ La inscripción de ${r.menor.nombre} en ${r.categoriaNombre} (${torneoNombre}) está confirmada.`,
+      asunto: `✅ Inscripción confirmada — ${torneoNombre}`,
+      cuerpoHtml: `
+        <p>La inscripción de <strong>${escaparHtml(r.menor.nombre)} ${escaparHtml(r.menor.apellido)}</strong> en <strong>${escaparHtml(r.categoriaNombre)}</strong> del <strong>${escaparHtml(torneoNombre)}</strong> quedó <strong>confirmada</strong>: el pago está validado y la categoría certificada.</p>
+        <p>Te avisaremos cuando se haga el sorteo de los grupos.</p>
+      `,
+    })
+    return
+  }
   await notificarJugadores(db, r.jugadorIds, {
     tipo: 'torneo_inscripcion_confirmada',
     mensaje: `✅ Tu inscripción en ${r.categoriaNombre} (${torneoNombre}) está confirmada.`,

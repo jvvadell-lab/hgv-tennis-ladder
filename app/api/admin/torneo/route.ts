@@ -3,11 +3,15 @@ import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { torneoVigente } from '@/lib/torneoServidor'
 import { pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
+import { COLUMNAS_MENOR } from '@/lib/torneoInfantilServidor'
+import { edadAlCorte, fechaCorteEdad, pendientesInscripcionMenor } from '@/lib/torneoInfantil'
 import type { Nivel } from '@/lib/torneo'
 
 // Pestaña Torneo del admin: torneo vigente, categorías e inscripciones con
 // sus jugadores, pagos, pendientes y limitaciones de horario. La pueden ver
 // los dos niveles de admin (el de pagos valida los pagos del torneo).
+// Las inscripciones infantiles traen la ficha del menor (con su edad al
+// corte y su representante) en vez de jugadores.
 export async function GET() {
   try {
     const session = await getSession()
@@ -21,7 +25,7 @@ export async function GET() {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden, es_infantil, edad_min, edad_max, duracion_min, formato_partido, plantilla_turnos')
       .eq('torneo_id', torneo.id)
       .order('orden')
     if (errCat) throw errCat
@@ -30,16 +34,27 @@ export async function GET() {
     const { data: inscripciones, error: errIns } = categoriaIds.length
       ? await db
           .from('torneo_inscripciones')
-          .select('id, categoria_id, jugador1_id, jugador2_id, siembra, estado, inscrita_por, created_at')
+          .select('id, categoria_id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, categoria_certificada_at, siembra, estado, inscrita_por, inscrita_por_admin, created_at')
           .in('categoria_id', categoriaIds)
           .order('created_at')
       : { data: [], error: null }
     if (errIns) throw errIns
 
     const inscripcionIds = (inscripciones || []).map((i) => i.id)
-    const jugadorIds = [...new Set((inscripciones || []).flatMap((i) => [i.jugador1_id, i.jugador2_id]).filter(Boolean))] as string[]
+    const menorIds = [...new Set((inscripciones || []).map((i) => i.menor_id).filter(Boolean))] as string[]
+    const { data: menores, error: errMen } = menorIds.length
+      ? await db.from('torneo_menores').select(COLUMNAS_MENOR).in('id', menorIds)
+      : { data: [] as any[], error: null }
+    if (errMen) throw errMen
+    const menorPorId = new Map((menores || []).map((m: any) => [m.id, m]))
 
-    const [{ data: jugadores, error: errJug }, { data: pagos, error: errPag }, { data: disponibilidad, error: errDisp }] = await Promise.all([
+    // Los representantes con cuenta también se leen de jugadores (nombre y contacto).
+    const jugadorIds = [...new Set([
+      ...(inscripciones || []).flatMap((i) => [i.jugador1_id, i.jugador2_id]),
+      ...(menores || []).map((m: any) => m.representante_jugador_id),
+    ].filter(Boolean))] as string[]
+
+    const [{ data: jugadores, error: errJug }, { data: pagos, error: errPag }, { data: disponibilidad, error: errDisp }, { data: activos, error: errAct }] = await Promise.all([
       jugadorIds.length
         ? db.from('jugadores').select('id, nombre, genero, categoria, categoria_torneo, telefono, email').in('id', jugadorIds)
         : Promise.resolve({ data: [] as any[], error: null }),
@@ -51,7 +66,10 @@ export async function GET() {
             .order('created_at')
         : Promise.resolve({ data: [] as any[], error: null }),
       db.from('torneo_disponibilidad').select('jugador_id, no_disponible, nota, updated_at').eq('torneo_id', torneo.id),
+      // Para elegir al representante con cuenta al inscribir a un menor.
+      db.from('jugadores').select('id, nombre').eq('activo', true).order('nombre'),
     ])
+    if (errAct) throw errAct
     if (errJug) throw errJug
     if (errPag) throw errPag
     if (errDisp) throw errDisp
@@ -60,6 +78,32 @@ export async function GET() {
     const catPorId = new Map((categorias || []).map((c) => [c.id, c]))
 
     const filas = (inscripciones || []).map((i) => {
+      if (i.menor_id) {
+        const m = menorPorId.get(i.menor_id)
+        const rep = m ? jugadorPorId.get(m.representante_jugador_id) : null
+        const suyos = (pagos || []).filter((p: any) => p.torneo_inscripcion_id === i.id)
+        const pendientes = i.estado === 'retirada' || !m ? [] : pendientesInscripcionMenor({
+          estado: i.estado,
+          menorId: m.id,
+          representanteJugadorId: m.representante_jugador_id,
+          certificada: !!i.categoria_certificada_at,
+          pagos: suyos.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+        })
+        return {
+          ...i,
+          jugadores: [],
+          menor: m ? {
+            ...m,
+            edad_al_corte: edadAlCorte(m.fecha_nacimiento, torneo),
+            representante: { jugador_id: m.representante_jugador_id, nombre: rep?.nombre ?? null, telefono: rep?.telefono ?? null, email: rep?.email ?? null },
+          } : null,
+          pagos: suyos,
+          pendientes: pendientes.map((p) => ({
+            ...p,
+            texto: textoPendiente(p, p.jugadorId === m?.id ? m.nombre : rep?.nombre || 'el representante'),
+          })),
+        }
+      }
       const ids = [i.jugador1_id, i.jugador2_id].filter(Boolean) as string[]
       const suyos = (pagos || []).filter((p: any) => p.torneo_inscripcion_id === i.id)
       const pendientes = i.estado === 'retirada' ? [] : pendientesInscripcion({
@@ -71,6 +115,7 @@ export async function GET() {
       return {
         ...i,
         jugadores: ids.map((id) => jugadorPorId.get(id)).filter(Boolean),
+        menor: null,
         pagos: suyos,
         pendientes: pendientes.map((p) => ({ ...p, texto: textoPendiente(p, jugadorPorId.get(p.jugadorId)?.nombre || '—') })),
       }
@@ -79,9 +124,11 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       torneo,
+      fechaCorte: fechaCorteEdad(torneo),
       categorias: categorias || [],
       inscripciones: filas,
       disponibilidad: disponibilidad || [],
+      jugadoresActivos: activos || [],
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al cargar el torneo' }, { status: 500 })

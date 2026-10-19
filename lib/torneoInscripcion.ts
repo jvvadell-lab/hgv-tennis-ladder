@@ -47,6 +47,7 @@ export function nivelAdmitido(nivelCategoria: Nivel | null, nivelJugador: string
 
 // null si los géneros cuadran con la categoría; si no, el error.
 export function errorGeneros(generoCategoria: TorneoCategoria['genero'], generos: string[]): string | null {
+  if (generoCategoria === 'abierto') return null
   if (generoCategoria === 'mixto') {
     const ordenados = [...generos].sort().join(',')
     return ordenados === 'caballeros,damas' ? null : 'El Mixto es para una pareja de un caballero y una dama'
@@ -141,6 +142,13 @@ export function mensajeErrorBaseInscripcion(mensaje: string): string | null {
     'Un jugador puede inscribirse en máximo 2 categorías del torneo',
     'Una inscripción de dobles necesita pareja',
     'Una inscripción de single no lleva pareja',
+    'La edad del menor no corresponde a la categoría',
+    'El género del menor no corresponde a la categoría',
+    'El torneo es solo para socios: falta el N.º de acción del menor',
+    'El menor ya está inscrito en esta categoría',
+    'Un menor puede inscribirse en máximo 2 categorías del torneo',
+    'Un menor solo puede inscribirse en una categoría infantil',
+    'Las categorías infantiles son para menores',
   ]
   return conocidos.find((c) => mensaje.includes(c)) ?? null
 }
@@ -155,6 +163,8 @@ export type Pendiente =
   | { tipo: 'pago_por_validar'; jugadorId: string }
   | { tipo: 'categoria'; jugadorId: string }              // sin categoría oficial
   | { tipo: 'categoria_incompatible'; jugadorId: string } // la oficial no admite esta categoría
+  // Infantil (lib/torneoInfantil.ts): jugadorId = id del menor.
+  | { tipo: 'categoria_por_certificar'; jugadorId: string }
 
 export type DatosEstadoInscripcion = {
   estado: EstadoInscripcion
@@ -190,6 +200,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
       case 'pago_por_validar': return 'Tu pago está por validar'
       case 'categoria': return 'Falta que el admin confirme tu categoría'
       case 'categoria_incompatible': return 'Tu categoría oficial no corresponde a esta categoría'
+      case 'categoria_por_certificar': return 'Falta que el admin certifique la categoría'
     }
   }
   switch (p.tipo) {
@@ -197,6 +208,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
     case 'pago_por_validar': return `Pago de ${nombre} por validar`
     case 'categoria': return `Falta confirmar la categoría de ${nombre}`
     case 'categoria_incompatible': return `La categoría oficial de ${nombre} no corresponde a esta categoría`
+    case 'categoria_por_certificar': return `Falta certificar la categoría de ${nombre}`
   }
 }
 

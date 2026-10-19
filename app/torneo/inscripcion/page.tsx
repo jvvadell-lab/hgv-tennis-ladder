@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
-import TasaBcv, { formatearBs, type TasaBcvVigente } from '@/app/components/TasaBcv'
-import { formatearFechaConAnio, hoyEnCaracas, instanteEnCaracas } from '@/lib/tiempo'
+import { formatearBs } from '@/app/components/TasaBcv'
+import FormPagoTorneo from '@/app/components/FormPagoTorneo'
+import { formatearFechaConAnio, instanteEnCaracas } from '@/lib/tiempo'
 import { ETIQUETA_ESTADO_TORNEO, MAX_CATEGORIAS_POR_JUGADOR, type EstadoInscripcion, type EstadoTorneo, type Nivel } from '@/lib/torneo'
 import {
   DIAS_TORNEO,
@@ -10,7 +11,6 @@ import {
   MAX_NOTA_DISPONIBILIDAD,
   celdaDisponibilidad,
   errorGeneros,
-  montoInscripcionBs,
   nivelAdmitido,
   nivelParaTorneo,
 } from '@/lib/torneoInscripcion'
@@ -150,7 +150,7 @@ export default function InscripcionTorneo() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: '28px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[['/ladder', '🎾 Escalera'], ['/perfil', '👤 Mi perfil']].map(([href, texto]) => (
+          {[['/torneo/inscripcion/infantil', '🧒 Inscribir a mi hijo/a'], ['/ladder', '🎾 Escalera'], ['/perfil', '👤 Mi perfil']].map(([href, texto]) => (
             <a key={href} href={href} style={{
               color: 'var(--color-ink)', fontSize: '14px', fontWeight: 700, textDecoration: 'none',
               border: '1px solid var(--color-court)', borderRadius: '4px', padding: '9px 20px',
@@ -215,10 +215,10 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
 
             {ins.estado !== 'retirada' && !pagoMioVivo && (
               pagandoId === ins.id ? (
-                <FormPago
-                  inscripcion={ins}
+                <FormPagoTorneo
+                  inscripcionId={ins.id}
                   montoEur={datos.torneo!.monto_inscripcion_eur}
-                  puedeIncluirPareja={!!ins.pareja && !pagoParejaVivo}
+                  parejaNombre={ins.pareja && !pagoParejaVivo ? ins.pareja.nombre : null}
                   onCancelar={() => setPagandoId(null)}
                   onListo={async () => {
                     setPagandoId(null)
@@ -233,91 +233,6 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
         )
       })}
     </div>
-  )
-}
-
-function FormPago({ inscripcion, montoEur, puedeIncluirPareja, onCancelar, onListo }: {
-  inscripcion: MiInscripcion
-  montoEur: number
-  puedeIncluirPareja: boolean
-  onCancelar: () => void
-  onListo: () => Promise<void>
-}) {
-  const [tipoPago, setTipoPago] = useState('pago_movil')
-  const [fechaPago, setFechaPago] = useState(hoyEnCaracas())
-  const [referencia, setReferencia] = useState('')
-  const [incluyePareja, setIncluyePareja] = useState(false)
-  const [tasa, setTasa] = useState<TasaBcvVigente | null>(null)
-  const [enviando, setEnviando] = useState(false)
-  const [error, setError] = useState('')
-
-  const porJugador = tasa ? montoInscripcionBs(montoEur, tasa.eur) : null
-  const total = porJugador === null ? null : porJugador * (incluyePareja ? 2 : 1)
-
-  const enviar = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setEnviando(true)
-    setError('')
-    try {
-      await postJson('/api/jugador/torneo/reportar-pago', { inscripcionId: inscripcion.id, tipoPago, fecha: fechaPago, referencia, incluyePareja })
-      await onListo()
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setEnviando(false)
-    }
-  }
-
-  return (
-    <form onSubmit={enviar} style={{ marginTop: '12px', background: 'rgba(28,126,196,0.05)', border: '1px solid rgba(28,126,196,0.15)', borderRadius: '4px', padding: '14px' }}>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
-        <div style={{ flex: '1 1 200px', background: '#fff', border: '1px solid rgba(28,126,196,0.25)', borderRadius: '4px', padding: '10px 12px' }}>
-          <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-ink)', margin: '0 0 4px 0' }}>📱 Datos para Pago Móvil</p>
-          <p style={{ fontSize: '13px', color: '#333', margin: 0, lineHeight: 1.6 }}>
-            Yelitza Contreras<br />V-19.523.642<br />0412-7628281<br />Banco BNC
-          </p>
-        </div>
-        <div style={{ flex: '1 1 200px' }}>
-          <TasaBcv fecha={fechaPago} onTasa={setTasa} />
-        </div>
-      </div>
-
-      <p style={{ fontSize: '14px', margin: '0 0 12px 0', color: 'var(--color-ink)' }}>
-        {montoEur} € por jugador, en Bs. a la tasa BCV del euro del día del pago:{' '}
-        <strong>{total === null ? '—' : formatearBs(total)}</strong>
-        {incluyePareja && porJugador !== null && <span style={{ color: '#666' }}> ({formatearBs(porJugador)} × 2)</span>}
-      </p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '10px' }}>
-        <div>
-          <label style={labelStyle}>Tipo de pago</label>
-          <select value={tipoPago} onChange={(e) => setTipoPago(e.target.value)} style={inputStyle}>
-            <option value="pago_movil">Pago móvil</option>
-            <option value="transferencia">Transferencia</option>
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Fecha del pago</label>
-          <input type="date" value={fechaPago} max={hoyEnCaracas()} onChange={(e) => setFechaPago(e.target.value)} required style={inputStyle} />
-        </div>
-      </div>
-      <div style={{ marginBottom: '10px' }}>
-        <label style={labelStyle}>Número de referencia</label>
-        <input type="text" value={referencia} onChange={(e) => setReferencia(e.target.value)} required style={inputStyle} />
-      </div>
-      {puedeIncluirPareja && (
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '14px', marginBottom: '10px' }}>
-          <input type="checkbox" checked={incluyePareja} onChange={(e) => setIncluyePareja(e.target.checked)} />
-          El pago incluye la parte de {inscripcion.pareja!.nombre}
-        </label>
-      )}
-      <p style={{ fontSize: '12px', color: '#666', margin: '0 0 10px 0' }}>Quedará <strong>pendiente de validación</strong> hasta que un administrador confirme que lo recibió.</p>
-      {error && <Aviso tipo="error">{error}</Aviso>}
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button type="submit" disabled={enviando || !tasa} style={botonPrincipal(enviando || !tasa)}>{enviando ? 'Enviando…' : 'Reportar pago'}</button>
-        <button type="button" onClick={onCancelar} style={{ padding: '12px 16px', border: '1px solid #ccc', background: 'white', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
-      </div>
-    </form>
   )
 }
 
