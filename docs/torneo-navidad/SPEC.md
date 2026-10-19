@@ -230,16 +230,19 @@ Sección del torneo para menores de edad, dentro del mismo `torneos` (Torneo Nav
 
 ### 14.1 Categorías (solo single)
 
-La edad se calcula **al 31-dic-2026** **[CONFIRMAR fecha de corte]**. La fecha queda en `torneos.fecha_corte_edad`; si está vacía, se usa el 31-dic del año de `fecha_inicio`.
+La edad se calcula **al 31-dic-2026** (aprobado 19-oct-2026). La fecha queda en `torneos.fecha_corte_edad`; si está vacía, se usa el 31-dic del año de `fecha_inicio`.
 
-| Categoría | Edad | Formato de partido | Turno | Grupos / llave (propuesta) |
-|---|---|---|---|---|
-| Pelota Naranja | 8–10 | Festival: todos contra todos, sets a 4 games, **mínimo 3 partidos por niño** | 40 min | Grupos de 4 (3 partidos c/u), sin llave **[CONFIRMAR]** |
-| Pelota Verde | 9–11 | 1 set a 6 games con tie-break en 6-6 | 60 min **[CONFIRMAR]** | Grupos de 4 → cuartos **[CONFIRMAR]** |
-| Infantil | 12–14 | 2 sets con súper tie-break (como adultos) | 90 min **[CONFIRMAR]** | 2 grupos de 4 → semis **[CONFIRMAR]** |
-| Juvenil | 15–17 | 2 sets con súper tie-break (como adultos) | 90 min **[CONFIRMAR]** | 2 grupos de 4 → semis **[CONFIRMAR]** |
+| Categoría | Edad | Género | Formato de partido | Turno | Cupo máx. / grupos / llave |
+|---|---|---|---|---|---|
+| Pelota Naranja | 8–10 | Mixto | Festival: todos contra todos, sets a 4 games, **mínimo 3 partidos por niño** | 40 min | 16 · grupos de 4 (3 partidos c/u), sin llave |
+| Pelota Verde | 9–11 | Mixto | 1 set a 6 games con tie-break en 6-6 | 60 min | 16 · 4 grupos de 4 → cuartos |
+| Infantil Caballeros / Infantil Damas | 12–14 | Separado | 2 sets con súper tie-break (como adultos) | 90 min | 8 c/u · 2 grupos de 4 → semis |
+| Juvenil Caballeros / Juvenil Damas | 15–17 | Separado | 2 sets con súper tie-break (como adultos) | 90 min | 8 c/u · 2 grupos de 4 → semis |
 
-- **Género:** se configura por categoría (`torneo_categorias.genero`): `abierto` (niños y niñas juntos, el valor de la carga inicial), o `caballeros`/`damas` si se separan (una fila por género, p. ej. "Pelota Verde Niñas"). **[CONFIRMAR mixto o separado]**
+Duraciones, cupos (como máximo) y la regla de sugerencia: aprobados 19-oct-2026. Los grupos y la llave se ajustan antes del sorteo según los inscritos.
+
+- **Género** (`torneo_categorias.genero`): `abierto` = niños y niñas juntos (Naranja y Verde); `caballeros`/`damas` = una categoría por género (Infantil y Juvenil). **[CONFIRMAR si hay suficientes inscritos en Infantil y Juvenil; si no, se fusionan antes del sorteo]**
+- **Fusionar** dos categorías separadas (p. ej. Infantil Caballeros + Damas → Infantil): se hace antes del sorteo, con el plan aprobado por la Comisión. Se pasa una de las dos a `genero = 'abierto'` (y nombre "Infantil"), se mueven ahí las inscripciones de la otra y se borra la vacía. No hay botón para esto todavía: se hace por SQL revisado.
 - **Rangos que se solapan** (Naranja 8–10 y Verde 9–11): un niño de 9 o 10 años puede jugar cualquiera de las dos. La app **sugiere** la categoría cuyo rango tiene el centro más cercano a la edad del niño (9 → Naranja, 10 → Verde) y muestra las demás que le corresponden. El representante elige y **el admin certifica** (§14.4).
 - **Cupo:** `cupo` es el máximo de inscritos. En las categorías infantiles `num_grupos × tamano_grupo` **no tiene que ser igual** al cupo, porque es difícil prever cuántos se inscriben. El admin ajusta grupos y tamaño antes del sorteo.
 - **Máximo 2 categorías** por menor en el torneo, la misma regla que para los adultos. Con los rangos actuales solo pasa en Naranja + Verde.
@@ -248,7 +251,7 @@ La edad se calcula **al 31-dic-2026** **[CONFIRMAR fecha de corte]**. La fecha q
 ### 14.2 Inscripción y pago
 
 - **15 € por niño** y por categoría, en Bs. a tasa BCV del euro del día. Es el mismo flujo de pagos de §1: el pago queda en `pagos` con `torneo_inscripcion_id` de la inscripción del menor y **a nombre del representante** (`pagos.jugador_id` = representante).
-- **Representante sin cuenta en la app:** hoy no puede tener pago, porque `pagos.jugador_id` es NOT NULL con FK a `jugadores`. Ver la propuesta en §14.6. Mientras no se decida, esas inscripciones quedan en `pendiente_pago`.
+- **El representante tiene que tener cuenta en la app** (registro normal de usuario; no entra al escalafón). Así su pago cabe en `pagos.jugador_id` sin cambiar la tabla. El admin puede inscribir a un menor en nombre de un representante con cuenta. Sin cuenta no se puede inscribir (mejora futura en §14.6).
 - **Solo socios** (`torneos.solo_socios`, por defecto `false`, **decisión pendiente**): si se activa, el menor debe tener `numero_accion`.
 - La inscripción se confirma cuando el pago del representante está validado **y** el admin certificó la categoría.
 
@@ -257,7 +260,7 @@ La edad se calcula **al 31-dic-2026** **[CONFIRMAR fecha de corte]**. La fecha q
 Una ficha por niño, reutilizable en torneos futuros ("Mis representados"). Campos:
 
 - nombre, apellido, fecha de nacimiento, género (`caballeros` = niño, `damas` = niña) y N.º de acción (opcional).
-- **Representante:** un jugador con cuenta (`representante_jugador_id`) o, si no tiene cuenta, sus datos libres (nombre, teléfono y correo, como los inscritos con nombre libre de Delegación). Siempre lleva parentesco.
+- **Representante:** un usuario con cuenta (`representante_jugador_id`, obligatorio), con su parentesco.
 - **Contacto de emergencia:** nombre y teléfono, obligatorios.
 - **Autorización de participación** (obligatoria) y **autorización de uso de imagen** (opcional), cada una con fecha. Se vuelven a pedir en cada inscripción y quedan con la fecha de la última.
 - Quién la registró (jugador o admin) y cuándo.
@@ -279,18 +282,20 @@ Una ficha por niño, reutilizable en torneos futuros ("Mis representados"). Camp
 
 ### 14.5 Horario "escuela"
 
-- Los turnos infantiles van en el **horario escuela, de 15:00 a 18:00, de lunes a viernes** **[CONFIRMAR días]**, en HGV1 y HGV2.
+- Los turnos infantiles van en el **horario escuela**: por ahora, **lunes a viernes de 15:00 a 18:00, en HGV1 y HGV2** **[CONFIRMAR con el profesor qué días y qué cancha se ceden]**.
+- La plantilla se configura **desde el admin** (pestaña Torneo, por categoría infantil): días, canchas y ventana horaria. Guardarla **no bloquea nada**: las canchas solo se bloquean cuando se programa cada partido.
 - El horario es **solo para turnos de categorías infantiles**. `horaValidaParaCancha` **no cambia** y las reservas normales siguen con su horario.
 - Cada categoría infantil lleva su plantilla en `torneo_categorias.plantilla_turnos` (jsonb `{dias, desde, hasta, canchas}`; `null` = plantilla adulta de §4). Los turnos se generan cada `duracion_min` dentro de la ventana; Naranja, por ejemplo, tiene turnos de 40 min.
 - La validación de un turno infantil es `turnoInfantilValido` (lib/torneoInfantil.ts), en lugar de `horaValidaParaCancha`.
 - Cada turno infantil programado crea su fila en `bloqueos_cancha`, igual que los demás partidos (§4). Las reglas de "dos partidos la misma noche" se aplican por menor, en el mismo día.
 
-### 14.6 Decisiones pendientes
+### 14.6 Pendientes y mejoras futuras
 
-1. **Pago de un representante sin cuenta.** Propuesta (no aplicada):
+1. **Mejora futura: representante sin cuenta.** Decisión del 19-oct-2026: por ahora no se cambia `pagos`, y el representante tiene que registrarse. Si más adelante se quiere admitir:
    - Hacer `pagos.jugador_id` nullable.
    - Agregar `pagos.pagador_nombre_externo` y `pagos.registrado_por_admin`, con check `(jugador_id is null) <> (pagador_nombre_externo is null)`.
+   - Agregar a `torneo_menores` los datos libres del representante (nombre, teléfono, correo) y hacer `representante_jugador_id` nullable.
    - El admin registra el pago desde la pestaña Torneo, como en Delegación.
-   - Antes de aplicarla hay que revisar los consumidores de `pagos.jugador_id` (recibos, reportes, cierre de temporada).
-   - Alternativa descartada: crear una ficha "sin acceso" en `jugadores`, porque ensucia el escalafón y los listados.
-2. Fecha de corte de edad, géneros por categoría, días del horario escuela, duraciones, grupos/llave por categoría y "solo socios".
+   - Antes, revisar los consumidores de `pagos.jugador_id` (recibos, reportes, cierre de temporada).
+   - Descartado: crear fichas "sin acceso" en `jugadores`, porque ensucian el escalafón y los listados.
+2. **[CONFIRMAR]:** días y cancha del horario escuela (con el profesor), si Infantil y Juvenil tienen inscritos suficientes para ir separados, y "solo socios".

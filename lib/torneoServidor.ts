@@ -38,9 +38,7 @@ export type MenorConRepresentante = {
   id: string
   nombre: string
   apellido: string
-  representante_jugador_id: string | null
-  representante_nombre: string | null
-  representante_correo: string | null
+  representante_jugador_id: string
 }
 
 // Recalcula y guarda el estado de una inscripción (pendiente_pago ↔
@@ -96,7 +94,7 @@ async function recalcularInscripcionMenor(
   categoria: { nombre: string; torneos: { nombre: string } }
 ): Promise<ResultadoRecalculo> {
   const [{ data: menor, error: errM }, { data: pagos, error: errP }] = await Promise.all([
-    db.from('torneo_menores').select('id, nombre, apellido, representante_jugador_id, representante_nombre, representante_correo').eq('id', ins.menor_id).single(),
+    db.from('torneo_menores').select('id, nombre, apellido, representante_jugador_id').eq('id', ins.menor_id).single(),
     db.from('pagos').select('jugador_id, validado').eq('torneo_inscripcion_id', ins.id),
   ])
   if (errM) throw errM
@@ -118,7 +116,7 @@ async function recalcularInscripcionMenor(
     inscripcionId: ins.id,
     categoriaNombre: categoria.nombre,
     torneoNombre: categoria.torneos.nombre,
-    jugadorIds: menor.representante_jugador_id ? [menor.representante_jugador_id] : [],
+    jugadorIds: [menor.representante_jugador_id],
     antes: ins.estado as EstadoInscripcion,
     despues,
     pendientes: pendientesInscripcionMenor(datos),
@@ -177,21 +175,13 @@ export async function notificarJugadores(
   )
 }
 
-// Avisa al representante de un menor: campana + correo si tiene cuenta; si
-// no, solo correo (si lo dejó). Informativo, como notificarJugadores.
+// Avisa al representante de un menor (campana + correo). Informativo, como notificarJugadores.
 export async function notificarRepresentante(
   db: SupabaseClient,
   menor: MenorConRepresentante,
   aviso: { tipo: string; mensaje: string; asunto: string; cuerpoHtml: string }
 ): Promise<void> {
-  if (menor.representante_jugador_id) {
-    await notificarJugadores(db, [menor.representante_jugador_id], { ...aviso, cuerpoHtml: () => aviso.cuerpoHtml })
-    return
-  }
-  if (!menor.representante_correo) return
-  await enviarCorreo(menor.representante_correo, aviso.asunto, correoTorneo(menor.representante_nombre || '', aviso.cuerpoHtml)).catch((err) =>
-    console.error(`[torneo] Falló el correo ${aviso.tipo} a ${menor.representante_correo}:`, err.message)
-  )
+  await notificarJugadores(db, [menor.representante_jugador_id], { ...aviso, cuerpoHtml: () => aviso.cuerpoHtml })
 }
 
 // Aviso de inscripción confirmada a los jugadores de la inscripción (o al

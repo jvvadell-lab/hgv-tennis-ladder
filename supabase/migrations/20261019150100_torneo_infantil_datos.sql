@@ -1,10 +1,12 @@
 -- Categorías infantiles del Torneo Navidad HGV 2026 (docs/torneo-navidad/SPEC.md §14).
 -- Idempotente: no hace nada si el torneo ya tiene categorías infantiles.
 --
--- Valores marcados [CONFIRMAR] en el SPEC, ajustables desde la base antes de
--- abrir inscripciones: fecha de corte (31-dic-2026), género 'abierto' (niños
--- y niñas juntos), cupos, grupos/llave y duración de Verde/Infantil/Juvenil.
--- Horario escuela: lunes a viernes de 15:00 a 18:00 en HGV1 y HGV2.
+-- Aprobado (19-oct-2026): corte de edad al 31-dic-2026, duraciones 40/60/90/90
+-- min, cupos como máximo. Naranja y Verde mixtas ('abierto'); Infantil y
+-- Juvenil separadas por género [CONFIRMAR si hay inscritos suficientes; si
+-- no, se fusionan antes del sorteo, SPEC §14.1].
+-- Horario escuela inicial: lunes a viernes de 15:00 a 18:00 en HGV1 y HGV2
+-- [CONFIRMAR con el profesor]; se edita desde el admin.
 
 do $$
 declare
@@ -27,7 +29,9 @@ begin
   values
     (v_torneo, 'Pelota Naranja', 'single', 'abierto', null, 16, 4, 4, 1, 'sin_llave', 40, 11, true,  8, 10, 'festival_4games', v_escuela, 3),
     (v_torneo, 'Pelota Verde',   'single', 'abierto', null, 16, 4, 4, 2, 'cuartos',   60, 12, true,  9, 11, 'un_set_6_tb',     v_escuela, null),
-    (v_torneo, 'Infantil',       'single', 'abierto', null,  8, 2, 4, 2, 'semis',     90, 13, true, 12, 14, 'dos_sets_stb',    v_escuela, null),
-    (v_torneo, 'Juvenil',        'single', 'abierto', null,  8, 2, 4, 2, 'semis',     90, 14, true, 15, 17, 'dos_sets_stb',    v_escuela, null);
+    (v_torneo, 'Infantil Caballeros', 'single', 'caballeros', null, 8, 2, 4, 2, 'semis', 90, 13, true, 12, 14, 'dos_sets_stb', v_escuela, null),
+    (v_torneo, 'Infantil Damas',      'single', 'damas',      null, 8, 2, 4, 2, 'semis', 90, 14, true, 12, 14, 'dos_sets_stb', v_escuela, null),
+    (v_torneo, 'Juvenil Caballeros',  'single', 'caballeros', null, 8, 2, 4, 2, 'semis', 90, 15, true, 15, 17, 'dos_sets_stb', v_escuela, null),
+    (v_torneo, 'Juvenil Damas',       'single', 'damas',      null, 8, 2, 4, 2, 'semis', 90, 16, true, 15, 17, 'dos_sets_stb', v_escuela, null);
 end;
 $$;

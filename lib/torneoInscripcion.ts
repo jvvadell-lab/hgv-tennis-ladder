@@ -165,7 +165,6 @@ export type Pendiente =
   | { tipo: 'categoria_incompatible'; jugadorId: string } // la oficial no admite esta categoría
   // Infantil (lib/torneoInfantil.ts): jugadorId = id del menor.
   | { tipo: 'categoria_por_certificar'; jugadorId: string }
-  | { tipo: 'pago_representante_sin_cuenta'; jugadorId: string }
 
 export type DatosEstadoInscripcion = {
   estado: EstadoInscripcion
@@ -202,7 +201,6 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
       case 'categoria': return 'Falta que el admin confirme tu categoría'
       case 'categoria_incompatible': return 'Tu categoría oficial no corresponde a esta categoría'
       case 'categoria_por_certificar': return 'Falta que el admin certifique la categoría'
-      case 'pago_representante_sin_cuenta': return 'El representante no tiene cuenta: su pago lo registra el club'
     }
   }
   switch (p.tipo) {
@@ -211,7 +209,6 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
     case 'categoria': return `Falta confirmar la categoría de ${nombre}`
     case 'categoria_incompatible': return `La categoría oficial de ${nombre} no corresponde a esta categoría`
     case 'categoria_por_certificar': return `Falta certificar la categoría de ${nombre}`
-    case 'pago_representante_sin_cuenta': return `El representante de ${nombre} no tiene cuenta: falta definir cómo registrar su pago`
   }
 }
 

@@ -11,7 +11,7 @@ import { mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
 import { escaparHtml, notificarRepresentante, type MenorConRepresentante } from '@/lib/torneoServidor'
 
 export const COLUMNAS_MENOR =
-  'id, nombre, apellido, fecha_nacimiento, genero, numero_accion, representante_jugador_id, representante_nombre, representante_telefono, representante_correo, parentesco, emergencia_nombre, emergencia_telefono, autorizacion_participacion, autorizacion_participacion_at, autorizacion_imagen, autorizacion_imagen_at, created_at'
+  'id, nombre, apellido, fecha_nacimiento, genero, numero_accion, representante_jugador_id, parentesco, emergencia_nombre, emergencia_telefono, autorizacion_participacion, autorizacion_participacion_at, autorizacion_imagen, autorizacion_imagen_at, created_at'
 
 export type CategoriaInfantilFila = CategoriaInfantil & { cupo: number; es_infantil: boolean; duracion_min: number; formato_partido: string; orden: number }
 
@@ -98,9 +98,7 @@ export async function inscribirMenor(
     throw errIns
   }
 
-  const pagoPendiente = p.menor.representante_jugador_id
-    ? `Falta reportar el pago (${p.torneo.monto_inscripcion_eur} € en Bs. a la tasa BCV del euro del día del pago) desde la app, en <strong>Torneo Navidad → Inscribir a mi hijo/a</strong>,`
-    : `El pago (${p.torneo.monto_inscripcion_eur} € en Bs. a la tasa BCV del euro del día del pago) se coordina con el club,`
+  const pagoPendiente = `Falta reportar el pago (${p.torneo.monto_inscripcion_eur} € en Bs. a la tasa BCV del euro del día del pago) desde la app, en <strong>Torneo Navidad → Inscribir a mi hijo/a</strong>,`
   await notificarRepresentante(db, p.menor, {
     tipo: 'torneo_inscripcion',
     mensaje: `🎄 ${p.menor.nombre} quedó inscrito en ${categoria.nombre} (${p.torneo.nombre}). Falta el pago y que el admin certifique la categoría.`,

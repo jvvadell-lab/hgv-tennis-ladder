@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
     const { data: menor, error } = await db
       .from('torneo_menores')
-      .select('id, nombre, apellido, genero, fecha_nacimiento, numero_accion, representante_jugador_id, representante_nombre, representante_correo')
+      .select('id, nombre, apellido, genero, fecha_nacimiento, numero_accion, representante_jugador_id')
       .eq('id', menorId)
       .eq('representante_jugador_id', session.id)
       .maybeSingle()

@@ -96,12 +96,6 @@ export type FichaMenor = {
   emergencia_telefono: string
 }
 
-export type RepresentanteExterno = {
-  representante_nombre: string
-  representante_telefono: string
-  representante_correo: string | null
-}
-
 const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 // Valida y normaliza lo que manda el formulario. `hoy` = hoyEnCaracas().
@@ -138,16 +132,6 @@ export function normalizarFichaMenor(entrada: any, hoy: string): { error: string
       emergencia_nombre, emergencia_telefono,
     },
   }
-}
-
-// Representante sin cuenta (solo lo registra el admin, como en Delegación).
-export function normalizarRepresentanteExterno(entrada: any): { error: string } | { representante: RepresentanteExterno } {
-  const representante_nombre = texto(entrada?.representante_nombre)
-  const representante_telefono = texto(entrada?.representante_telefono)
-  const correo = texto(entrada?.representante_correo)
-  if (!representante_nombre || !representante_telefono) return { error: 'Escribe el nombre y el teléfono del representante' }
-  if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return { error: 'El correo del representante no es válido' }
-  return { representante: { representante_nombre, representante_telefono, representante_correo: correo || null } }
 }
 
 // ---------------------------------------------------------------------------
@@ -200,21 +184,16 @@ export function validarInscripcionMenor(d: DatosInscripcionMenor): { ok: false; 
 export type DatosEstadoInscripcionMenor = {
   estado: EstadoInscripcion
   menorId: string
-  representanteJugadorId: string | null
+  representanteJugadorId: string
   certificada: boolean
   pagos: { jugador_id: string; validado: boolean }[]
 }
 
 export function pendientesInscripcionMenor(d: DatosEstadoInscripcionMenor): Pendiente[] {
   const pendientes: Pendiente[] = []
-  if (!d.representanteJugadorId) {
-    // pagos.jugador_id no admite un representante sin cuenta (SPEC §14.6).
-    pendientes.push({ tipo: 'pago_representante_sin_cuenta', jugadorId: d.menorId })
-  } else {
-    const suyos = d.pagos.filter((p) => p.jugador_id === d.representanteJugadorId)
-    if (!suyos.some((p) => p.validado)) {
-      pendientes.push({ tipo: suyos.length ? 'pago_por_validar' : 'pago', jugadorId: d.representanteJugadorId })
-    }
+  const suyos = d.pagos.filter((p) => p.jugador_id === d.representanteJugadorId)
+  if (!suyos.some((p) => p.validado)) {
+    pendientes.push({ tipo: suyos.length ? 'pago_por_validar' : 'pago', jugadorId: d.representanteJugadorId })
   }
   if (!d.certificada) pendientes.push({ tipo: 'categoria_por_certificar', jugadorId: d.menorId })
   return pendientes

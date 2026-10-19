@@ -25,7 +25,7 @@ export async function GET() {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden, es_infantil, edad_min, edad_max, duracion_min, formato_partido')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden, es_infantil, edad_min, edad_max, duracion_min, formato_partido, plantilla_turnos')
       .eq('torneo_id', torneo.id)
       .order('orden')
     if (errCat) throw errCat
@@ -80,7 +80,7 @@ export async function GET() {
     const filas = (inscripciones || []).map((i) => {
       if (i.menor_id) {
         const m = menorPorId.get(i.menor_id)
-        const rep = m?.representante_jugador_id ? jugadorPorId.get(m.representante_jugador_id) : null
+        const rep = m ? jugadorPorId.get(m.representante_jugador_id) : null
         const suyos = (pagos || []).filter((p: any) => p.torneo_inscripcion_id === i.id)
         const pendientes = i.estado === 'retirada' || !m ? [] : pendientesInscripcionMenor({
           estado: i.estado,
@@ -95,9 +95,7 @@ export async function GET() {
           menor: m ? {
             ...m,
             edad_al_corte: edadAlCorte(m.fecha_nacimiento, torneo),
-            representante: rep
-              ? { jugador_id: rep.id, nombre: rep.nombre, telefono: rep.telefono, email: rep.email }
-              : { jugador_id: null, nombre: m.representante_nombre, telefono: m.representante_telefono, email: m.representante_correo },
+            representante: { jugador_id: m.representante_jugador_id, nombre: rep?.nombre ?? null, telefono: rep?.telefono ?? null, email: rep?.email ?? null },
           } : null,
           pagos: suyos,
           pendientes: pendientes.map((p) => ({

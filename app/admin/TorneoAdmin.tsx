@@ -1,7 +1,7 @@
 'use client'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { formatearFechaConAnio, formatearFechaHora, instanteEnCaracas } from '@/lib/tiempo'
-import { ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
+import { CANCHAS_TORNEO, ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type CanchaTorneo, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
 import {
   DIAS_TORNEO,
   ETIQUETA_GENERO_JUGADOR,
@@ -16,9 +16,12 @@ import {
   ETIQUETA_GENERO_MENOR,
   ETIQUETA_PARENTESCO,
   PARENTESCOS,
+  HORARIO_ESCUELA,
   categoriasParaMenor,
   edadAlCorte,
+  parsearPlantillaTurnos,
   type Parentesco,
+  type PlantillaTurnosInfantil,
 } from '@/lib/torneoInfantil'
 
 // Pestaña Torneo del admin (Torneo Navidad, fase 3): inscripciones por
@@ -29,7 +32,7 @@ import {
 // Categorías infantiles (SPEC §14): cada fila es un menor, con su edad al
 // corte, representante, contacto de emergencia y autorización de imagen;
 // el admin certifica (o cambia) su categoría y puede inscribir a un menor
-// cuyo representante no tiene cuenta.
+// en nombre de un representante con cuenta.
 
 type Jugador = {
   id: string
@@ -66,7 +69,7 @@ type Menor = {
   autorizacion_imagen: boolean
   autorizacion_participacion_at: string
   edad_al_corte: number
-  representante: { jugador_id: string | null; nombre: string | null; telefono: string | null; email: string | null }
+  representante: { jugador_id: string; nombre: string | null; telefono: string | null; email: string | null }
 }
 
 type Inscripcion = {
@@ -85,6 +88,7 @@ type Inscripcion = {
 type Categoria = {
   id: string; nombre: string; modalidad: string; genero: GeneroCategoria; categoria_nivel: Nivel | null; cupo: number
   es_infantil: boolean; edad_min: number | null; edad_max: number | null; duracion_min: number
+  plantilla_turnos: unknown | null
 }
 
 type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: string | null }
@@ -257,6 +261,14 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
             <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#666' }}>
               {c.modalidad === 'doble' ? 'Dobles' : 'Single'} · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}
             </p>
+            {c.es_infantil && (
+              <HorarioCategoria
+                categoria={c}
+                editable={esAdminCompleto}
+                ocupado={ocupado === `plantilla-${c.id}`}
+                onGuardar={(plantilla) => accion(`plantilla-${c.id}`, 'infantil/plantilla', { categoriaId: c.id, plantilla }, `${c.nombre}: horario guardado`)}
+              />
+            )}
             {lista.length === 0 && <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Sin inscripciones todavía.</p>}
 
             {lista.map((ins, idx) => (
@@ -515,7 +527,6 @@ function FichaMenorAdmin({ ins, menor, categoria, categorias, editable, ocupado,
       <div>
         <div style={{ fontWeight: 'bold' }}>
           Representante: {rep.nombre || '—'} ({ETIQUETA_PARENTESCO[menor.parentesco] || menor.parentesco})
-          {!rep.jugador_id && <span style={{ color: '#8a5a00' }}> · sin cuenta</span>}
         </div>
         {rep.telefono && <div style={{ color: '#777' }}>{rep.telefono}</div>}
         {rep.email && <div style={{ color: '#777' }}>{rep.email}</div>}
@@ -523,8 +534,7 @@ function FichaMenorAdmin({ ins, menor, categoria, categorias, editable, ocupado,
       </div>
       <div>
         <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Pago</div>
-        {!rep.jugador_id && <span style={{ color: '#8a5a00' }}>Representante sin cuenta: el pago todavía no se puede registrar en la app.</span>}
-        {rep.jugador_id && ins.pagos.length === 0 && <span style={{ color: '#999' }}>Sin reportar</span>}
+        {ins.pagos.length === 0 && <span style={{ color: '#999' }}>Sin reportar</span>}
         {ins.pagos.map((p) => (
           <div key={p.id} style={{ marginBottom: '6px' }}>
             <div><strong>{bs(p.monto)}</strong> · {ETIQUETA_TIPO_PAGO[p.tipo_pago as TipoPago] || p.tipo_pago} · {fecha(p.fecha)}</div>
@@ -581,8 +591,9 @@ function FichaMenorAdmin({ ins, menor, categoria, categorias, editable, ocupado,
 
 const campoAdmin: React.CSSProperties = { width: '100%', padding: '7px', border: '1px solid #ccc', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box' }
 
-// Inscribir a un menor desde el admin: representante con cuenta (se elige
-// de la lista) o sin cuenta (nombre, teléfono y correo libres).
+// Inscribir a un menor desde el admin en nombre de un representante que
+// tiene cuenta en la app (se elige de la lista). Sin cuenta no se puede:
+// primero tiene que registrarse (mejora futura, SPEC §14.6).
 function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, onEnviar }: {
   torneo: TorneoAdminDatos
   categorias: Categoria[]
@@ -594,11 +605,9 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
   const vacio = {
     nombre: '', apellido: '', fecha_nacimiento: '', genero: '', numero_accion: '', parentesco: '',
     emergencia_nombre: '', emergencia_telefono: '',
-    representante_nombre: '', representante_telefono: '', representante_correo: '',
   }
   const [abierto, setAbierto] = useState(false)
   const [f, setF] = useState(vacio)
-  const [conCuenta, setConCuenta] = useState(false)
   const [representanteJugadorId, setRepresentanteJugadorId] = useState('')
   const [categoriaId, setCategoriaId] = useState('')
   const [participacion, setParticipacion] = useState(false)
@@ -616,7 +625,7 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
     e.preventDefault()
     const ok = await onEnviar({
       ...f,
-      ...(conCuenta ? { representanteJugadorId, representante_nombre: '', representante_telefono: '', representante_correo: '' } : {}),
+      representanteJugadorId,
       categoriaId,
       autorizacionParticipacion: participacion,
       autorizacionImagen: imagen,
@@ -654,26 +663,15 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
       </div>
 
       <div style={{ marginTop: '12px', fontSize: '13px' }}>
-        <label style={{ marginRight: '14px' }}><input type="radio" checked={!conCuenta} onChange={() => setConCuenta(false)} /> Representante sin cuenta</label>
-        <label><input type="radio" checked={conCuenta} onChange={() => setConCuenta(true)} /> Representante con cuenta</label>
-      </div>
-      {conCuenta ? (
-        <select required value={representanteJugadorId} onChange={(e) => setRepresentanteJugadorId(e.target.value)} style={{ ...campoAdmin, marginTop: '6px', maxWidth: '360px' }}>
-          <option value="">Elige al jugador…</option>
+        <div style={{ marginBottom: '6px' }}>Representante (usuario de la app)</div>
+        <select required value={representanteJugadorId} onChange={(e) => setRepresentanteJugadorId(e.target.value)} style={{ ...campoAdmin, maxWidth: '360px' }}>
+          <option value="">Elige al usuario…</option>
           {jugadores.map((j) => <option key={j.id} value={j.id}>{j.nombre}</option>)}
         </select>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '8px', fontSize: '12px', marginTop: '6px' }}>
-          <label>Nombre del representante<input required {...campo('representante_nombre')} style={campoAdmin} /></label>
-          <label>Teléfono<input required {...campo('representante_telefono')} style={campoAdmin} /></label>
-          <label>Correo (para avisos)<input type="email" {...campo('representante_correo')} style={campoAdmin} /></label>
-        </div>
-      )}
-      {!conCuenta && (
-        <p style={{ fontSize: '12px', color: '#8a5a00', margin: '6px 0 0 0' }}>
-          Sin cuenta, el pago del representante todavía no se puede registrar en la app (pendiente de decisión): la inscripción quedará pendiente.
+        <p style={{ fontSize: '12px', color: '#666', margin: '6px 0 0 0' }}>
+          Si el representante no tiene cuenta, primero tiene que registrarse en la app (no entra al escalafón).
         </p>
-      )}
+      </div>
 
       <div style={{ marginTop: '12px', fontSize: '13px' }}>
         <div style={{ marginBottom: '6px' }}>
@@ -697,5 +695,63 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
         <button type="button" onClick={() => setAbierto(false)} style={boton('#777')}>Cancelar</button>
       </div>
     </form>
+  )
+}
+
+const DIAS_SEMANA = [
+  { n: 1, etiqueta: 'Lun' }, { n: 2, etiqueta: 'Mar' }, { n: 3, etiqueta: 'Mié' }, { n: 4, etiqueta: 'Jue' },
+  { n: 5, etiqueta: 'Vie' }, { n: 6, etiqueta: 'Sáb' }, { n: 0, etiqueta: 'Dom' },
+]
+
+const resumenPlantilla = (p: PlantillaTurnosInfantil) =>
+  `${DIAS_SEMANA.filter((d) => p.dias.includes(d.n)).map((d) => d.etiqueta).join(', ')} · ${p.desde}–${p.hasta} · ${p.canchas.join(' y ')}`
+
+// Horario escuela de una categoría infantil (SPEC §14.5): días, canchas y
+// ventana. Guardarlo no bloquea canchas; eso pasa al programar cada partido.
+function HorarioCategoria({ categoria, editable, ocupado, onGuardar }: {
+  categoria: Categoria
+  editable: boolean
+  ocupado: boolean
+  onGuardar: (plantilla: PlantillaTurnosInfantil) => Promise<boolean>
+}) {
+  const actual = parsearPlantillaTurnos(categoria.plantilla_turnos)
+  const [editando, setEditando] = useState(false)
+  const [p, setP] = useState<PlantillaTurnosInfantil>(actual ?? HORARIO_ESCUELA)
+  const alternar = <T,>(lista: T[], v: T) => (lista.includes(v) ? lista.filter((x) => x !== v) : [...lista, v])
+
+  if (!editando) {
+    return (
+      <p style={{ margin: '-8px 0 14px 0', fontSize: '12px', color: '#555', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        🕒 Horario escuela: <strong>{actual ? resumenPlantilla(actual) : 'sin definir'}</strong>
+        {editable && <button onClick={() => { setP(actual ?? HORARIO_ESCUELA); setEditando(true) }} style={boton('var(--color-court)')}>Editar horario</button>}
+      </p>
+    )
+  }
+
+  return (
+    <div style={{ background: 'white', borderRadius: '8px', padding: '12px', margin: '-4px 0 14px 0', fontSize: '12px', border: '1px solid #e5e5e5' }}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
+        <strong>Días:</strong>
+        {DIAS_SEMANA.map((d) => (
+          <label key={d.n}><input type="checkbox" checked={p.dias.includes(d.n)} onChange={() => setP({ ...p, dias: alternar(p.dias, d.n).sort() })} /> {d.etiqueta}</label>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
+        <strong>Canchas:</strong>
+        {CANCHAS_TORNEO.map((c) => (
+          <label key={c}><input type="checkbox" checked={p.canchas.includes(c)} onChange={() => setP({ ...p, canchas: alternar<CanchaTorneo>(p.canchas, c).sort() })} /> {c}</label>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
+        <strong>Desde</strong><input type="time" value={p.desde} onChange={(e) => setP({ ...p, desde: e.target.value })} style={{ ...campoAdmin, width: 'auto' }} />
+        <strong>hasta</strong><input type="time" value={p.hasta} onChange={(e) => setP({ ...p, hasta: e.target.value })} style={{ ...campoAdmin, width: 'auto' }} />
+        <span style={{ color: '#777' }}>(turnos de {categoria.duracion_min} min)</span>
+      </div>
+      <p style={{ color: '#777', margin: '0 0 8px 0' }}>Guardar el horario no bloquea canchas: se bloquean al programar cada partido.</p>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button disabled={ocupado} onClick={async () => { if (await onGuardar(p)) setEditando(false) }} style={boton('var(--color-court)', true)}>Guardar</button>
+        <button onClick={() => setEditando(false)} style={boton('#777')}>Cancelar</button>
+      </div>
+    </div>
   )
 }

@@ -4,9 +4,10 @@
 -- 2. torneo_categorias: es_infantil + rango de edad, formato de partido,
 --    plantilla de turnos propia (horario escuela) y género 'abierto'. En las
 --    infantiles num_grupos × tamano_grupo ya no tiene que ser igual al cupo.
--- 3. torneo_menores: ficha del menor con su representante (jugador con
---    cuenta o datos libres), contacto de emergencia y autorizaciones. Sin
---    datos médicos. Sin SELECT público (como torneo_disponibilidad).
+-- 3. torneo_menores: ficha del menor con su representante (siempre un
+--    jugador con cuenta en la app, aunque no esté en el escalafón), contacto
+--    de emergencia y autorizaciones. Sin datos médicos. Sin SELECT público
+--    (como torneo_disponibilidad).
 -- 4. torneo_inscripciones: de un jugador o de un menor (exactamente uno),
 --    certificación de la categoría del menor por el admin, inscripción hecha
 --    por un admin, y menor_nombre_publico ("Sofía M.") para grupos y llave.
@@ -14,7 +15,7 @@
 --    duplicado, máximo 2 categorías y cupo).
 --
 -- pagos NO cambia: el pago de un menor va a nombre de su representante
--- (pagos.jugador_id). El representante sin cuenta queda pendiente (§14.6).
+-- (pagos.jugador_id). Representante sin cuenta: mejora futura (SPEC §14.6).
 
 -- 1. Torneos -----------------------------------------------------------------
 
@@ -76,11 +77,9 @@ create table public.torneo_menores (
   genero text not null check (genero in ('caballeros', 'damas')),   -- niño / niña, mismos valores que jugadores.genero
   numero_accion text null,
 
-  -- Representante: un jugador con cuenta o, si no tiene, sus datos libres.
-  representante_jugador_id uuid null references public.jugadores(id),
-  representante_nombre text null,
-  representante_telefono text null,
-  representante_correo text null,
+  -- Representante: siempre un jugador con cuenta (registro normal; no
+  -- tiene que estar en el escalafón). Su pago va en pagos.jugador_id.
+  representante_jugador_id uuid not null references public.jugadores(id),
   parentesco text not null check (parentesco in ('madre', 'padre', 'abuelo', 'tio', 'representante_legal', 'otro')),
 
   emergencia_nombre text not null check (length(btrim(emergencia_nombre)) > 0),
@@ -96,17 +95,11 @@ create table public.torneo_menores (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  constraint torneo_menores_representante check (
-    case when representante_jugador_id is not null
-      then representante_nombre is null and representante_telefono is null and representante_correo is null
-      else length(btrim(coalesce(representante_nombre, ''))) > 0 and length(btrim(coalesce(representante_telefono, ''))) > 0
-    end
-  ),
   constraint torneo_menores_imagen_con_fecha check (not autorizacion_imagen or autorizacion_imagen_at is not null),
   constraint torneo_menores_registrado_por check ((registrado_por_jugador is null) <> (registrado_por_admin is null))
 );
 
-create index torneo_menores_representante_idx on public.torneo_menores (representante_jugador_id) where representante_jugador_id is not null;
+create index torneo_menores_representante_idx on public.torneo_menores (representante_jugador_id);
 
 -- Datos de menores: sin política de SELECT, solo rutas server con service role.
 alter table public.torneo_menores enable row level security;

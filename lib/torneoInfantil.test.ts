@@ -9,7 +9,6 @@ import {
   fechaCorteEdad,
   nombrePublicoMenor,
   normalizarFichaMenor,
-  normalizarRepresentanteExterno,
   parsearPlantillaTurnos,
   pendientesInscripcionMenor,
   turnoInfantilValido,
@@ -146,11 +145,6 @@ describe('estado de la inscripción del menor', () => {
   it('el pago de otra persona no cuenta', () => {
     expect(pendientesInscripcionMenor({ ...base, pagos: [{ jugador_id: 'otro', validado: true }] }).map((p) => p.tipo)).toEqual(['pago'])
   })
-  it('representante sin cuenta: no se puede confirmar todavía', () => {
-    const r = { ...base, representanteJugadorId: null }
-    expect(pendientesInscripcionMenor(r).map((p) => p.tipo)).toEqual(['pago_representante_sin_cuenta'])
-    expect(estadoInscripcionMenorCalculado(r)).toBe('pendiente_pago')
-  })
   it('la retirada no se toca', () => expect(estadoInscripcionMenorCalculado({ ...base, estado: 'retirada' })).toBe('retirada'))
 })
 
@@ -176,13 +170,6 @@ describe('ficha del menor', () => {
     expect(err({ genero: 'x' })).toMatch(/niño o niña/)
     expect(err({ parentesco: 'vecino' })).toMatch(/parentesco/)
     expect(err({ emergencia_telefono: ' ' })).toMatch(/emergencia/)
-  })
-  it('representante externo', () => {
-    expect(normalizarRepresentanteExterno({ representante_nombre: 'Ana', representante_telefono: '0412' })).toEqual({
-      representante: { representante_nombre: 'Ana', representante_telefono: '0412', representante_correo: null },
-    })
-    expect(normalizarRepresentanteExterno({ representante_nombre: 'Ana', representante_telefono: '0412', representante_correo: 'malo' })).toEqual({ error: 'El correo del representante no es válido' })
-    expect(normalizarRepresentanteExterno({ representante_nombre: 'Ana' })).toHaveProperty('error')
   })
   it('nombre público: nombre + inicial del apellido', () => {
     expect(nombrePublicoMenor(' María José ', 'martínez')).toBe('María José M.')
