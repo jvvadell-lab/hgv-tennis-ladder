@@ -223,3 +223,74 @@ Botón en la vista de llave del admin para resolver incidencias que el avance au
 - Se guarda qué admin lo hizo y cuándo, junto con el puesto ajustado y la inscripción anterior y la nueva, por ejemplo en una tabla `torneo_ajustes_llave` (partido_id, posición, inscripción anterior, inscripción nueva, motivo, admin_id, created_at).
 - Las validaciones anteriores van en el servidor (endpoint o función Postgres), no solo en la UI.
 - La vista pública de la llave muestra una nota en el puesto ajustado (p. ej. "Ajustado por la organización: <motivo>").
+
+## 14. Infantil
+
+Sección del torneo para menores de edad, dentro del mismo `torneos` (Torneo Navidad HGV 2026). Comparte grupos, llave, resultados y pagos con los adultos. Cambian quién se inscribe (un menor, inscrito por su representante), el formato de partido y el horario.
+
+### 14.1 Categorías (solo single)
+
+La edad se calcula **al 31-dic-2026** **[CONFIRMAR fecha de corte]**. La fecha queda en `torneos.fecha_corte_edad`; si está vacía, se usa el 31-dic del año de `fecha_inicio`.
+
+| Categoría | Edad | Formato de partido | Turno | Grupos / llave (propuesta) |
+|---|---|---|---|---|
+| Pelota Naranja | 8–10 | Festival: todos contra todos, sets a 4 games, **mínimo 3 partidos por niño** | 40 min | Grupos de 4 (3 partidos c/u), sin llave **[CONFIRMAR]** |
+| Pelota Verde | 9–11 | 1 set a 6 games con tie-break en 6-6 | 60 min **[CONFIRMAR]** | Grupos de 4 → cuartos **[CONFIRMAR]** |
+| Infantil | 12–14 | 2 sets con súper tie-break (como adultos) | 90 min **[CONFIRMAR]** | 2 grupos de 4 → semis **[CONFIRMAR]** |
+| Juvenil | 15–17 | 2 sets con súper tie-break (como adultos) | 90 min **[CONFIRMAR]** | 2 grupos de 4 → semis **[CONFIRMAR]** |
+
+- **Género:** se configura por categoría (`torneo_categorias.genero`): `abierto` (niños y niñas juntos, el valor de la carga inicial), o `caballeros`/`damas` si se separan (una fila por género, p. ej. "Pelota Verde Niñas"). **[CONFIRMAR mixto o separado]**
+- **Rangos que se solapan** (Naranja 8–10 y Verde 9–11): un niño de 9 o 10 años puede jugar cualquiera de las dos. La app **sugiere** la categoría cuyo rango tiene el centro más cercano a la edad del niño (9 → Naranja, 10 → Verde) y muestra las demás que le corresponden. El representante elige y **el admin certifica** (§14.4).
+- **Cupo:** `cupo` es el máximo de inscritos. En las categorías infantiles `num_grupos × tamano_grupo` **no tiene que ser igual** al cupo, porque es difícil prever cuántos se inscriben. El admin ajusta grupos y tamaño antes del sorteo.
+- **Máximo 2 categorías** por menor en el torneo, la misma regla que para los adultos. Con los rangos actuales solo pasa en Naranja + Verde.
+- **Resultados:** `validarMarcadorTorneo` hoy solo valida el formato adulto. Hay que agregar los formatos `un_set_6_tb` y `festival_4games` (`torneo_categorias.formato_partido`) antes de la fase de resultados. Tabla del festival: partidos ganados, después games. **[CONFIRMAR]**
+
+### 14.2 Inscripción y pago
+
+- **15 € por niño** y por categoría, en Bs. a tasa BCV del euro del día. Es el mismo flujo de pagos de §1: el pago queda en `pagos` con `torneo_inscripcion_id` de la inscripción del menor y **a nombre del representante** (`pagos.jugador_id` = representante).
+- **Representante sin cuenta en la app:** hoy no puede tener pago, porque `pagos.jugador_id` es NOT NULL con FK a `jugadores`. Ver la propuesta en §14.6. Mientras no se decida, esas inscripciones quedan en `pendiente_pago`.
+- **Solo socios** (`torneos.solo_socios`, por defecto `false`, **decisión pendiente**): si se activa, el menor debe tener `numero_accion`.
+- La inscripción se confirma cuando el pago del representante está validado **y** el admin certificó la categoría.
+
+### 14.3 Datos del menor (`torneo_menores`)
+
+Una ficha por niño, reutilizable en torneos futuros ("Mis representados"). Campos:
+
+- nombre, apellido, fecha de nacimiento, género (`caballeros` = niño, `damas` = niña) y N.º de acción (opcional).
+- **Representante:** un jugador con cuenta (`representante_jugador_id`) o, si no tiene cuenta, sus datos libres (nombre, teléfono y correo, como los inscritos con nombre libre de Delegación). Siempre lleva parentesco.
+- **Contacto de emergencia:** nombre y teléfono, obligatorios.
+- **Autorización de participación** (obligatoria) y **autorización de uso de imagen** (opcional), cada una con fecha. Se vuelven a pedir en cada inscripción y quedan con la fecha de la última.
+- Quién la registró (jugador o admin) y cuándo.
+- **No se guardan datos médicos.**
+
+**Privacidad:**
+- RLS sin SELECT público, como `torneo_disponibilidad`. Solo se lee por rutas server con service role.
+- Lo único público es `torneo_inscripciones.menor_nombre_publico` ("Sofía M.": nombre + inicial del apellido), que llena el trigger y es lo que muestran los grupos, la llave y el calendario.
+
+### 14.4 Validaciones (API y trigger)
+
+- La categoría infantil solo admite inscripciones de menor, y la de adultos solo de jugadores: `torneo_inscripciones` tiene exactamente uno de `jugador1_id` o `menor_id`.
+- La edad al corte cae en `edad_min..edad_max` de la categoría.
+- El género es compatible: `abierto` admite a cualquiera.
+- El menor no está ya inscrito en la categoría, no supera 2 categorías y hay cupo.
+- La autorización de participación está dada.
+- **Certificación del admin:** `torneo_inscripciones.categoria_certificada_por/_at`. El admin revisa la fecha de nacimiento y puede pasar al niño a otra categoría infantil compatible con su edad. Equivale a la `categoria_torneo` de los adultos.
+- Los endpoints validan todo con mensajes claros, y el trigger `torneo_inscripciones_validar` repite edad, categoría, duplicado, máximo 2 y cupo como red de seguridad.
+
+### 14.5 Horario "escuela"
+
+- Los turnos infantiles van en el **horario escuela, de 15:00 a 18:00, de lunes a viernes** **[CONFIRMAR días]**, en HGV1 y HGV2.
+- El horario es **solo para turnos de categorías infantiles**. `horaValidaParaCancha` **no cambia** y las reservas normales siguen con su horario.
+- Cada categoría infantil lleva su plantilla en `torneo_categorias.plantilla_turnos` (jsonb `{dias, desde, hasta, canchas}`; `null` = plantilla adulta de §4). Los turnos se generan cada `duracion_min` dentro de la ventana; Naranja, por ejemplo, tiene turnos de 40 min.
+- La validación de un turno infantil es `turnoInfantilValido` (lib/torneoInfantil.ts), en lugar de `horaValidaParaCancha`.
+- Cada turno infantil programado crea su fila en `bloqueos_cancha`, igual que los demás partidos (§4). Las reglas de "dos partidos la misma noche" se aplican por menor, en el mismo día.
+
+### 14.6 Decisiones pendientes
+
+1. **Pago de un representante sin cuenta.** Propuesta (no aplicada):
+   - Hacer `pagos.jugador_id` nullable.
+   - Agregar `pagos.pagador_nombre_externo` y `pagos.registrado_por_admin`, con check `(jugador_id is null) <> (pagador_nombre_externo is null)`.
+   - El admin registra el pago desde la pestaña Torneo, como en Delegación.
+   - Antes de aplicarla hay que revisar los consumidores de `pagos.jugador_id` (recibos, reportes, cierre de temporada).
+   - Alternativa descartada: crear una ficha "sin acceso" en `jugadores`, porque ensucia el escalafón y los listados.
+2. Fecha de corte de edad, géneros por categoría, días del horario escuela, duraciones, grupos/llave por categoría y "solo socios".
