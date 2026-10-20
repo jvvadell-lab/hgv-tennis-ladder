@@ -3,6 +3,7 @@ import {
   armarSorteoCategoria,
   barajar,
   formatoSorteo,
+  pendientesQueBloqueanSorteo,
   planCategoria,
   tamanosGrupos,
   validarGruposSorteo,
@@ -245,6 +246,15 @@ describe('planCategoria', () => {
     const r = armarSorteoCategoria(infantil, inscripciones(4), 'bombos', semilla(1))
     if (!r.ok) throw new Error(r.error)
     expect(planCategoria(r.sorteo).partidos.every((p) => p.fase === 'grupo')).toBe(true)
+  })
+})
+
+describe('pendientesQueBloqueanSorteo', () => {
+  it('el pago pendiente no bloquea; la categoría, la certificación o la autorización de invitado sí', () => {
+    const p = (tipo: any) => ({ tipo, jugadorId: 'x' })
+    expect(pendientesQueBloqueanSorteo([p('pago'), p('pago_por_validar')])).toEqual([])
+    expect(pendientesQueBloqueanSorteo([p('pago'), p('categoria'), p('categoria_incompatible'), p('categoria_por_certificar'), p('invitado_por_autorizar')]).map((x) => x.tipo))
+      .toEqual(['categoria', 'categoria_incompatible', 'categoria_por_certificar', 'invitado_por_autorizar'])
   })
 })
 

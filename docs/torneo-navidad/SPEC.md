@@ -96,10 +96,12 @@ RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas 
 
 Aprobado 20-oct-2026. El admin elige el método al sortear: **bombos** (por defecto) o **serpentina**.
 
-- El torneo tiene que estar en `inscripcion`; al publicar el sorteo pasa a `sorteado`.
-- Solo entran las inscripciones **confirmadas**.
-- Si una categoría tiene **menos de 3** inscripciones confirmadas, el sorteo se bloquea con un aviso (hay que fusionarla o retirarla antes).
-- **Vista previa:** el admin puede repetir el sorteo cuantas veces quiera; nada se guarda hasta que lo publica. Al publicar queda fijo y se guarda quién lo hizo, cuándo y con qué método (`torneos.sorteo_metodo`, `sorteo_publicado_por`, `sorteo_publicado_at`). Si entre la vista previa y la publicación cambian las inscripciones confirmadas, la publicación se rechaza y hay que repetir el sorteo.
+- Se puede sortear con las inscripciones **abiertas** (`inscripcion`) o ya **cerradas** (`borrador`); al publicar el sorteo el torneo pasa a `sorteado` (aprobado 20-oct-2026).
+- Entran **todas las inscripciones no retiradas, hayan pagado o no** (aprobado 20-oct-2026, por la experiencia con el sorteo y los pagos de la escalera). Los jugadores siguen reportando su pago con las inscripciones cerradas y después del sorteo, y el admin lo valida como siempre.
+- Lo que sí hay que resolver antes de sortear (si no, el sorteo se bloquea con la lista): categoría oficial sin asignar o incompatible, categoría del menor sin certificar e invitado / wild card sin autorizar. O se resuelve, o se retira la inscripción.
+- Si una categoría tiene **menos de 3** inscripciones, el sorteo se bloquea con un aviso (hay que completarla con invitados / wild card, o retirarla).
+- Quien no pague después del sorteo: lo resuelve el admin (retiro y puesto vacante, "Ajustar llave" de la §13).
+- **Vista previa:** el admin puede repetir el sorteo cuantas veces quiera; nada se guarda hasta que lo publica. Al publicar queda fijo y se guarda quién lo hizo, cuándo y con qué método (`torneos.sorteo_metodo`, `sorteo_publicado_por`, `sorteo_publicado_at`). Si entre la vista previa y la publicación cambian las inscripciones, la publicación se rechaza y hay que repetir el sorteo.
 - Todo se escribe en una transacción (función Postgres `torneo_publicar_sorteo`, como `retirar_de_escalafon`).
 
 **Bombos** (`torneo_inscripciones.bombo`, lo asigna el admin): con G grupos, las siembras 1..G forman el bombo 1 y quedan fijas como cabezas de A..G (siembra 1 → A, 2 → B…). Cada bombo siguiente se sortea al azar, uno por grupo; un bombo puede tener como máximo G inscripciones. Las inscripciones sin bombo van, en orden aleatorio, a bombos adicionales de G al final. Si un bombo tiene menos de G, sus inscripciones van a los grupos con menos miembros (al azar entre los empatados), así los grupos nunca difieren en más de 1.

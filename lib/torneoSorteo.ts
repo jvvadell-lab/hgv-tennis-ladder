@@ -10,6 +10,7 @@
 // con la función Postgres torneo_publicar_sorteo.
 
 import { crucesTodosContraTodos, distribuirSerpentina, generarLlave, letraGrupo, type FaseLlave, type LlaveDesde, type TorneoCategoria } from './torneo'
+import type { Pendiente } from './torneoInscripcion'
 
 export const METODOS_SORTEO = ['bombos', 'serpentina'] as const
 export type MetodoSorteo = (typeof METODOS_SORTEO)[number]
@@ -19,8 +20,19 @@ export const ETIQUETA_METODO_SORTEO: Record<MetodoSorteo, string> = {
   serpentina: 'Serpentina',
 }
 
-// Mínimo de inscripciones confirmadas para sortear una categoría.
+// Mínimo de inscripciones para sortear una categoría.
 export const MINIMO_PARA_SORTEAR = 3
+
+// Entran al sorteo todas las inscripciones vivas (no retiradas), hayan
+// pagado o no (decisión del 20-oct-2026): el pago se sigue reportando y
+// validando después. Lo que sí impide sortear es lo que define quién puede
+// jugar: categoría oficial sin asignar o incompatible, menor sin certificar
+// o invitado sin autorizar. Esas se resuelven o se retiran antes.
+export const PENDIENTES_QUE_NO_BLOQUEAN_SORTEO: Pendiente['tipo'][] = ['pago', 'pago_por_validar']
+
+export function pendientesQueBloqueanSorteo<P extends { tipo: Pendiente['tipo'] }>(pendientes: P[]): P[] {
+  return pendientes.filter((p) => !PENDIENTES_QUE_NO_BLOQUEAN_SORTEO.includes(p.tipo))
+}
 
 export type LlaveSorteo = LlaveDesde | 'final' | 'sin_llave'
 
@@ -53,7 +65,7 @@ export function tamanosGrupos(n: number, g: number): number[] {
 //    categoría, reducidos para que cada uno tenga al menos 4.
 export function formatoSorteo(c: CategoriaParaSorteo, n: number): { ok: false; error: string } | { ok: true; formato: FormatoSorteo } {
   if (n < MINIMO_PARA_SORTEAR) {
-    return { ok: false, error: `${c.nombre}: tiene ${n} inscripción${n === 1 ? '' : 'es'} confirmada${n === 1 ? '' : 's'} y hacen falta al menos ${MINIMO_PARA_SORTEAR} para sortear. Fusiónala o retírala antes del sorteo.` }
+    return { ok: false, error: `${c.nombre}: tiene ${n} inscripción${n === 1 ? '' : 'es'} y hacen falta al menos ${MINIMO_PARA_SORTEAR} para sortear. Complétala con invitados o wild card, o retírala antes del sorteo.` }
   }
 
   const minimoGrupo = (g: number) => Math.min(...tamanosGrupos(n, g))
@@ -62,7 +74,7 @@ export function formatoSorteo(c: CategoriaParaSorteo, n: number): { ok: false; e
   if (!c.es_infantil) {
     if (c.llave_desde === 'sin_llave') return { ok: false, error: `${c.nombre}: una categoría de adultos necesita llave` }
     if (minimoGrupo(c.num_grupos) < 3) {
-      return { ok: false, error: `${c.nombre}: con ${n} inscripciones confirmadas algún grupo quedaría con menos de 3. Complétala con invitados o wild card antes del sorteo.` }
+      return { ok: false, error: `${c.nombre}: con ${n} inscripciones algún grupo quedaría con menos de 3. Complétala con invitados o wild card antes del sorteo.` }
     }
     return { ok: true, formato: { numGrupos: c.num_grupos, llave: c.llave_desde, avisos } }
   }
@@ -179,7 +191,7 @@ export function armarSorteoCategoria(
 }
 
 // Revisión de los grupos que manda la vista previa antes de publicar:
-// están exactamente las inscripciones confirmadas, una vez cada una, en el
+// están exactamente las inscripciones vivas, una vez cada una, en el
 // número de grupos que corresponde, parejos, y (en bombos con 2+ grupos)
 // con la siembra k como cabeza del grupo k.
 export function validarGruposSorteo(
@@ -194,7 +206,7 @@ export function validarGruposSorteo(
     return { ok: false, error: `${c.nombre}: los grupos no son válidos` }
   }
   const lista = grupos as string[][]
-  const repetir = `${c.nombre}: las inscripciones confirmadas cambiaron desde la vista previa. Repite el sorteo.`
+  const repetir = `${c.nombre}: las inscripciones cambiaron desde la vista previa. Repite el sorteo.`
   if (lista.length !== f.formato.numGrupos) return { ok: false, error: repetir }
   const ids = lista.flat()
   const esperados = new Set(inscripciones.map((i) => i.id))

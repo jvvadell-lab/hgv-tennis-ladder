@@ -6,10 +6,12 @@
 -- 2. torneos: método del sorteo publicado, quién lo publicó y cuándo.
 -- 3. torneo_publicar_sorteo: escribe en una transacción los grupos, sus
 --    miembros, los partidos de grupo y la llave que armó la vista previa
---    (lib/torneoSorteo.ts), y pasa el torneo de 'inscripcion' a 'sorteado'.
+--    (lib/torneoSorteo.ts), y pasa el torneo a 'sorteado'. Se puede con las
+--    inscripciones abiertas ('inscripcion') o ya cerradas ('borrador').
 --    Vuelve a revisar lo esencial: estado del torneo, que no haya un sorteo
 --    previo, que estén todas las categorías y, en cada una, exactamente sus
---    inscripciones confirmadas.
+--    inscripciones vivas (no retiradas): entran hayan pagado o no
+--    (decisión del 20-oct-2026); el pago se valida después.
 
 alter table public.torneo_inscripciones
   add column bombo integer null check (bombo between 1 and 26);
@@ -50,8 +52,8 @@ begin
   if v_estado is null then
     raise exception 'Torneo no encontrado';
   end if;
-  if v_estado <> 'inscripcion' then
-    raise exception 'El sorteo se hace con el torneo en inscripción (está en %)', v_estado;
+  if v_estado not in ('borrador', 'inscripcion') then
+    raise exception 'El sorteo ya se hizo (el torneo está en %)', v_estado;
   end if;
 
   if exists (
@@ -86,16 +88,16 @@ begin
 
     select coalesce(array_agg(id order by id), '{}') into v_esperadas
     from public.torneo_inscripciones
-    where categoria_id = v_cat.id and estado = 'confirmada';
+    where categoria_id = v_cat.id and estado <> 'retirada';
 
     select coalesce(array_agg(m::uuid order by m::uuid), '{}') into v_recibidas
     from jsonb_array_elements(v_plan_cat->'grupos') g, jsonb_array_elements_text(g->'miembros') m;
 
     if array_length(v_esperadas, 1) is null or array_length(v_esperadas, 1) < 3 then
-      raise exception '%: hacen falta al menos 3 inscripciones confirmadas para sortear', v_cat.nombre;
+      raise exception '%: hacen falta al menos 3 inscripciones para sortear', v_cat.nombre;
     end if;
     if v_esperadas <> v_recibidas then
-      raise exception '%: las inscripciones confirmadas cambiaron desde la vista previa. Repite el sorteo.', v_cat.nombre;
+      raise exception '%: las inscripciones cambiaron desde la vista previa. Repite el sorteo.', v_cat.nombre;
     end if;
 
     v_letras := '{}'::jsonb;

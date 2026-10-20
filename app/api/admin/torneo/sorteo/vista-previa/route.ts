@@ -6,7 +6,8 @@ import { METODOS_SORTEO, armarSorteoCategoria, planCategoria, type MetodoSorteo 
 import { azarSorteo, datosParaSorteo } from '@/lib/torneoSorteoServidor'
 
 // Vista previa del sorteo (SPEC §3): arma los grupos al azar con las
-// inscripciones confirmadas y los devuelve SIN guardar nada. El admin puede
+// inscripciones vivas (hayan pagado o no) y los devuelve SIN guardar nada.
+// Se puede con las inscripciones abiertas o cerradas. El admin puede
 // repetirla cuantas veces quiera; lo que publique se revisa otra vez en
 // /api/admin/torneo/sorteo/publicar.
 export async function POST(request: Request) {
@@ -24,19 +25,20 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const torneo = await torneoVigente(db)
     if (!torneo) return NextResponse.json({ error: 'No hay un torneo en organización' }, { status: 404 })
-    if (torneo.estado !== 'inscripcion') {
-      return NextResponse.json({ error: 'El sorteo se hace con el torneo en inscripción' }, { status: 400 })
+    if (!['borrador', 'inscripcion'].includes(torneo.estado)) {
+      return NextResponse.json({ error: 'El sorteo ya se hizo' }, { status: 400 })
     }
 
     const categorias = await datosParaSorteo(db, torneo)
-    const errores: string[] = []
+    // Categoría oficial, certificación o invitado sin autorizar: se resuelven antes.
+    const errores: string[] = categorias.flatMap((c) => c.bloqueos)
     const resultado = categorias.map((c) => {
       const r = armarSorteoCategoria(c, c.inscripciones, metodo as MetodoSorteo, azarSorteo)
       if (!r.ok) {
         errores.push(r.error)
         return { categoriaId: c.id, nombre: c.nombre, error: r.error, inscritas: c.inscripciones.length }
       }
-      const nombre = new Map(c.inscripciones.map((i) => [i.id, { nombre: i.nombre, siembra: i.siembra, bombo: i.bombo }]))
+      const nombre = new Map(c.inscripciones.map((i) => [i.id, { nombre: i.nombre, siembra: i.siembra, bombo: i.bombo, pagoPendiente: i.pagoPendiente }]))
       const plan = planCategoria(r.sorteo)
       return {
         categoriaId: c.id,

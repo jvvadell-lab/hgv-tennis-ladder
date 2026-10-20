@@ -6,7 +6,8 @@ import { METODOS_SORTEO, planCategoria, validarGruposSorteo, type MetodoSorteo, 
 import { datosParaSorteo } from '@/lib/torneoSorteoServidor'
 
 // Publica el sorteo que el admin vio en la vista previa (SPEC §3). Vuelve a
-// validar los grupos contra las inscripciones confirmadas de ahora,
+// validar los grupos contra las inscripciones vivas de ahora (hayan pagado
+// o no; con las inscripciones abiertas o cerradas),
 // regenera los partidos en el servidor (no confía en los del navegador) y
 // escribe todo en una transacción con torneo_publicar_sorteo, que también
 // pasa el torneo a 'sorteado' y registra quién lo publicó y cuándo.
@@ -26,11 +27,13 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const torneo = await torneoVigente(db)
     if (!torneo) return NextResponse.json({ error: 'No hay un torneo en organización' }, { status: 404 })
-    if (torneo.estado !== 'inscripcion') {
-      return NextResponse.json({ error: 'El sorteo se publica con el torneo en inscripción' }, { status: 400 })
+    if (!['borrador', 'inscripcion'].includes(torneo.estado)) {
+      return NextResponse.json({ error: 'El sorteo ya se hizo' }, { status: 400 })
     }
 
     const categorias = await datosParaSorteo(db, torneo)
+    const bloqueos = categorias.flatMap((c) => c.bloqueos)
+    if (bloqueos.length) return NextResponse.json({ error: `Antes del sorteo falta resolver: ${bloqueos.join(' · ')}` }, { status: 400 })
     const planes: PlanCategoria[] = []
     for (const c of categorias) {
       const r = validarGruposSorteo(c, c.inscripciones, metodo as MetodoSorteo, grupos[c.id])

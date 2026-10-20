@@ -5,7 +5,7 @@ import { ETIQUETA_FASE, type EstadoTorneo } from '@/lib/torneo'
 import { ETIQUETA_METODO_SORTEO, METODOS_SORTEO, type FormatoSorteo, type MetodoSorteo } from '@/lib/torneoSorteo'
 
 // Sorteo del torneo (SPEC §3), dentro de la pestaña Torneo del admin:
-// siembra y bombo de cada inscripción confirmada, vista previa (repetible,
+// siembra y bombo de cada inscripción viva (pagada o no), vista previa (repetible,
 // no guarda nada) y publicación. Por /api/admin/torneo/siembra y
 // /api/admin/torneo/sorteo/...
 
@@ -104,14 +104,10 @@ export default function TorneoSorteo({
       <div style={tarjeta}>
         <h4 style={{ margin: '0 0 6px 0', color: 'var(--color-ink)' }}>🎲 Sorteo de grupos</h4>
         <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555' }}>
-          Solo entran las inscripciones <strong>confirmadas</strong>. <strong>Bombos:</strong> las siembras 1..G son cabezas fijas de A..G; cada bombo siguiente se sortea uno por grupo; las inscripciones sin bombo van al final. <strong>Serpentina:</strong> zigzag por siembra; las que no tienen siembra van detrás, al azar.
+          Entran <strong>todas las inscripciones no retiradas, hayan pagado o no</strong>: el pago se sigue reportando y validando después del sorteo. Lo que sí hay que resolver antes es la categoría oficial, la certificación de los menores y la autorización de los invitados / wild card.
+          Puedes cerrar las inscripciones y después sortear. <strong>Bombos:</strong> las siembras 1..G son cabezas fijas de A..G; cada bombo siguiente se sortea uno por grupo; las inscripciones sin bombo van al final. <strong>Serpentina:</strong> zigzag por siembra; las que no tienen siembra van detrás, al azar.
           La vista previa no guarda nada: repítela las veces que quieras y publica cuando estés de acuerdo.
         </p>
-        {torneo.estado !== 'inscripcion' && (
-          <p style={{ margin: '0 0 12px 0', fontSize: '13px', background: '#fff4d6', color: '#8a5a00', padding: '8px 12px', borderRadius: '8px' }}>
-            El sorteo se hace con el torneo en <strong>inscripción</strong>. Puedes ir asignando siembras y bombos.
-          </p>
-        )}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           {METODOS_SORTEO.map((m) => (
             <label key={m} style={{ fontSize: '14px', display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -119,7 +115,7 @@ export default function TorneoSorteo({
               {ETIQUETA_METODO_SORTEO[m]}{m === 'bombos' ? ' (por defecto)' : ''}
             </label>
           ))}
-          <button disabled={torneo.estado !== 'inscripcion' || ocupado === 'previa'} onClick={sortear} style={btn('var(--color-court)', true)}>
+          <button disabled={!editable || ocupado === 'previa'} onClick={sortear} style={btn('var(--color-court)', true)}>
             {ocupado === 'previa' ? 'Sorteando…' : previa ? '🔁 Repetir sorteo' : '🎲 Vista previa del sorteo'}
           </button>
           {previa && !previa.bloqueado && (
@@ -173,15 +169,15 @@ export default function TorneoSorteo({
       )}
 
       {categorias.map((c) => {
-        const confirmadas = inscripciones.filter((i) => i.categoria_id === c.id && i.estado === 'confirmada')
-        const pendientes = inscripciones.filter((i) => i.categoria_id === c.id && i.estado === 'pendiente_pago').length
-        const ordenadas = [...confirmadas].sort((a, b) => (a.siembra ?? 999) - (b.siembra ?? 999) || a.nombre.localeCompare(b.nombre))
+        const vivas = inscripciones.filter((i) => i.categoria_id === c.id && i.estado !== 'retirada')
+        const sinPagar = vivas.filter((i) => i.estado !== 'confirmada').length
+        const ordenadas = [...vivas].sort((a, b) => (a.siembra ?? 999) - (b.siembra ?? 999) || a.nombre.localeCompare(b.nombre))
         return (
           <div key={c.id} style={tarjeta}>
             <h4 style={{ margin: '0 0 4px 0', color: 'var(--color-ink)' }}>{c.nombre}</h4>
-            <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: confirmadas.length < 3 ? '#c0392b' : '#666' }}>
-              {confirmadas.length} confirmadas{pendientes ? ` · ${pendientes} pendientes (no entran al sorteo)` : ''}
-              {confirmadas.length < 3 ? ' · menos de 3: bloquea el sorteo' : ''}
+            <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: vivas.length < 3 ? '#c0392b' : '#666' }}>
+              {vivas.length} inscripciones{sinPagar ? ` · ${sinPagar} con algo pendiente (pago u otro: ver pestaña Inscripciones)` : ''}
+              {vivas.length < 3 ? ' · menos de 3: bloquea el sorteo' : ''}
             </p>
             {ordenadas.length > 0 && (
               <table style={{ borderCollapse: 'collapse', fontSize: '13px', width: '100%', maxWidth: '560px' }}>
@@ -195,7 +191,10 @@ export default function TorneoSorteo({
                 <tbody>
                   {ordenadas.map((i) => (
                     <tr key={i.id} style={{ borderTop: '1px solid #eee' }}>
-                      <td style={{ padding: '4px 6px' }}>{i.nombre}</td>
+                      <td style={{ padding: '4px 6px' }}>
+                        {i.nombre}
+                        {i.estado !== 'confirmada' && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#8a5a00', background: '#fff4d6', padding: '1px 6px', borderRadius: '999px' }}>pendiente</span>}
+                      </td>
                       {(['siembra', 'bombo'] as const).filter((campo) => campo === 'siembra' || metodo === 'bombos').map((campo) => (
                         <td key={campo} style={{ padding: '4px 6px' }}>
                           <input
