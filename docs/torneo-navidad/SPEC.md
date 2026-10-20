@@ -2,20 +2,21 @@
 
 Documento para implementar en Claude Code. Reglas aprobadas por la Comisión de Tenis (16-oct-2026).
 Los puntos marcados **[CONFIRMAR]** son supuestos razonables que la Comisión aún no ha ratificado.
-Decisiones del 20-oct-2026: sorteo por bombos o serpentina (§3), WO (§6), handicap del Mixto (§4.1) y horario de la academia por franjas liberadas (§14.5). Lista de [CONFIRMAR] abiertos en §15.
+Decisiones del 20-oct-2026: sorteo por bombos o serpentina (§3), WO (§6), handicap del Mixto (§4.1), horario de la academia por franjas liberadas (§14.5), y en una segunda ronda: premiación el 11-dic, desempates (§7), retiro, Infantil y Juvenil separados, solo socios con invitados / wild card (§2.1). Lista de [CONFIRMAR] abiertos en §15.
 
 ## 0. Reglas del torneo (fuente de verdad)
 
 | Regla | Valor |
 |---|---|
-| Fechas | Lunes 2-nov-2026 a viernes 11-dic-2026. Cierre y premiación **[CONFIRMAR fecha, ¿sábado 12-dic?]** |
+| Fechas | Lunes 2-nov-2026 a viernes 11-dic-2026. Cierre y premiación el **viernes 11-dic** (aprobado 20-oct-2026), el día de las finales de adultos |
 | Categorías | Doble Masculino Sexta (12 parejas), Doble Femenino Sexta (12), Mixto con handicap (12), Single Caballeros Quinta (8 jugadores) |
 | Dobles | 4 grupos de 3, todos contra todos. Pasan 1º y 2º → cuartos, semis, final |
 | Single | 2 grupos de 4, todos contra todos. Pasan 1º y 2º → semis cruzadas, final |
 | 3er lugar | No hay |
 | Formato de partido | 2 sets. Si quedan 1-1, súper tie-break (a 10, diferencia de 2) |
 | Empate entre 2 en el grupo | Resultado entre ellos (head-to-head) |
-| Empate entre 3 en el grupo | Por score: diferencia de sets, luego diferencia de games **[CONFIRMAR orden y desempate final por sorteo]** |
+| Empate entre 3 en el grupo | Clasifican los dos mejores por score: diferencia de sets, luego diferencia de games (aprobado 20-oct-2026) |
+| Participantes | **Solo socios**, adultos e infantiles. El admin puede autorizar invitados / wild card, también para completar una categoría (§2.1) |
 | No presentación | Se declara WO a favor del rival tras **15 min de tolerancia** (aprobado 20-oct-2026). Cuenta 2-0 en sets y 12-0 en games |
 | Mixto con handicap | 15-0 al inicio de **cada game** para la pareja que el admin marque en cada partido (§4.1) |
 | Inscripción | 15 € por jugador por categoría, pagadero en Bs. a tasa BCV del euro del día |
@@ -83,6 +84,14 @@ RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas 
 - Validaciones server: `jugadores.categoria` coincide con `categoria_nivel` (o la certifica el admin); género compatible (Mixto = 1 caballero + 1 dama); el jugador no supera 2 categorías; no excede `cupo`; el torneo está en `inscripcion`.
 - Ambos jugadores reciben notificación; cada uno reporta su pago.
 
+### 2.1 Solo socios, invitados y wild card (aprobado 20-oct-2026)
+
+- El torneo es **solo para socios**, adultos e infantiles (`torneos.solo_socios = true`).
+- **Invitado = wild card** (es lo mismo): una persona que no es socia y que el admin autoriza a jugar.
+- **Cuenta del invitado:** se registra como cualquier jugador, marcando "No soy socio" (sin N.º de acción ni carné): `jugadores.es_invitado`. Juega los torneos a los que lo invite el club. La **escalera, los retos y las reservas** son para socios; un admin puede **habilitar** al invitado para esas actividades (`jugadores.invitado_habilitado_por/_at`, lista de jugadores del admin). Nadie se registra ya habilitado (trigger `jugadores_registro_sin_habilitacion`).
+- **Inscripción de un no socio** (invitado adulto, o un menor sin N.º de acción): se inscribe normalmente, pero la inscripción no se confirma hasta que el admin la autoriza como invitado / wild card en la pestaña Torneo (`torneo_inscripciones.invitado_autorizado_por/_at`). La base lo repite en el trigger `torneo_inscripciones_validar`.
+- **Categoría incompleta:** se completa con invitados / wild card antes del sorteo.
+
 ## 3. Sorteo y generación de grupos
 
 Aprobado 20-oct-2026. El admin elige el método al sortear: **bombos** (por defecto) o **serpentina**.
@@ -126,7 +135,7 @@ Pelota Naranja (`sin_llave`): solo grupos.
 
 Pelota Naranja con 3 inscritos solo da 2 partidos por niño: el sorteo lo permite y avisa.
 
-Adultos: siempre `num_grupos` de la categoría. Si con los confirmados algún grupo quedaría con menos de 3, el sorteo se bloquea con un aviso. **[CONFIRMAR qué hacer con una categoría de adultos incompleta]**
+Adultos: siempre `num_grupos` de la categoría. Si con los confirmados algún grupo quedaría con menos de 3, el sorteo se bloquea con un aviso: la categoría se completa con invitados / wild card (§2.1, aprobado 20-oct-2026).
 
 ## 4. Programación de partidos
 
@@ -182,13 +191,14 @@ Flujo: un jugador de cualquiera de las dos inscripciones reporta → el admin va
 
 Para cada inscripción, sobre partidos de grupo validados (jugado o WO):
 PJ, PG, PP, sets a favor/en contra, games a favor/en contra.
-El súper tie-break cuenta como 1 set ganado y como 1-0 en games (no se suman los puntos del tie-break). **[CONFIRMAR]**
+El súper tie-break cuenta como 1 set ganado y como 1-0 en games (no se suman sus puntos a los games). Su resultado (p. ej. 10-8) queda registrado y la tabla suma los puntos aparte (`stb_puntos_*`) para revisarlos cuando hay empate (aprobado 20-oct-2026).
+Retiro durante el partido: el partido va a favor de la otra dupla; para la tabla se cuenta lo jugado y se le completa el partido al ganador (aprobado 20-oct-2026).
 
 Orden:
 1. Partidos ganados (PG).
 2. Si empatan **2** inscripciones: resultado entre ellas.
-3. Si empatan **3 o más**: diferencia de sets → diferencia de games (entre todos los partidos del grupo). Si tras un criterio quedan 2 empatadas, se resuelve entre ellas por resultado directo.
-4. Si persiste el empate: sorteo por el admin (campo manual `desempate_manual`). **[CONFIRMAR]**
+3. Si empatan **3 o más**: pasan los dos mejores por score, diferencia de sets → diferencia de games (entre todos los partidos del grupo). Si tras un criterio quedan 2 empatadas, se resuelve entre ellas por resultado directo.
+4. Si persiste el empate: el admin revisa (incluidos los puntos de súper tie-break) y fija el orden (campo manual `desempate_manual`).
 
 Implementar como función pura `ordenarGrupo(partidos, inscripciones)` en `lib/torneo.ts` con tests unitarios (casos: sin empate, empate doble, triple empate 1-1-1 resuelto por sets, triple empate resuelto por games, empate total).
 
@@ -280,7 +290,7 @@ La edad se calcula **al 31-dic-2026** (aprobado 19-oct-2026). La fecha queda en 
 
 Duraciones, cupos (como máximo) y la regla de sugerencia: aprobados 19-oct-2026. Los grupos y la llave se ajustan antes del sorteo según los inscritos.
 
-- **Género** (`torneo_categorias.genero`): `abierto` = niños y niñas juntos (Naranja y Verde); `caballeros`/`damas` = una categoría por género (Infantil y Juvenil). **[CONFIRMAR si hay suficientes inscritos en Infantil y Juvenil; si no, se fusionan antes del sorteo]**
+- **Género** (`torneo_categorias.genero`): `abierto` = niños y niñas juntos (Naranja y Verde); `caballeros`/`damas` = una categoría por género (Infantil y Juvenil). **Infantil y Juvenil van separados por género** (aprobado 20-oct-2026); si una queda corta, se completa con invitados / wild card (§2.1).
 - **Fusionar** dos categorías separadas (p. ej. Infantil Caballeros + Damas → Infantil): se hace antes del sorteo, con el plan aprobado por la Comisión. Se pasa una de las dos a `genero = 'abierto'` (y nombre "Infantil"), se mueven ahí las inscripciones de la otra y se borra la vacía. No hay botón para esto todavía: se hace por SQL revisado.
 - **Rangos que se solapan** (Naranja 8–10 y Verde 9–11): un niño de 9 o 10 años puede jugar cualquiera de las dos. La app **sugiere** la categoría cuyo rango tiene el centro más cercano a la edad del niño (9 → Naranja, 10 → Verde) y muestra las demás que le corresponden. El representante elige y **el admin certifica** (§14.4).
 - **Cupo:** `cupo` es el máximo de inscritos. En las categorías infantiles `num_grupos × tamano_grupo` **no tiene que ser igual** al cupo, porque es difícil prever cuántos se inscriben. El admin ajusta grupos y tamaño antes del sorteo.
@@ -291,7 +301,7 @@ Duraciones, cupos (como máximo) y la regla de sugerencia: aprobados 19-oct-2026
 
 - **15 € por niño** y por categoría, en Bs. a tasa BCV del euro del día. Es el mismo flujo de pagos de §1: el pago queda en `pagos` con `torneo_inscripcion_id` de la inscripción del menor y **a nombre del representante** (`pagos.jugador_id` = representante).
 - **El representante tiene que tener cuenta en la app** (registro normal de usuario; no entra al escalafón). Así su pago cabe en `pagos.jugador_id` sin cambiar la tabla. El admin puede inscribir a un menor en nombre de un representante con cuenta. Sin cuenta no se puede inscribir (mejora futura en §14.6).
-- **Solo socios** (`torneos.solo_socios`, por defecto `false`, **decisión pendiente**): si se activa, el menor debe tener `numero_accion`.
+- **Solo socios** (`torneos.solo_socios = true`, aprobado 20-oct-2026): un menor sin `numero_accion` se inscribe, pero necesita la autorización del admin como invitado / wild card (§2.1).
 - La inscripción se confirma cuando el pago del representante está validado **y** el admin certificó la categoría.
 
 ### 14.3 Datos del menor (`torneo_menores`)
@@ -339,16 +349,11 @@ Decisión del 20-oct-2026: el horario escuela **no es fijo**. El profesor o el a
    - El admin registra el pago desde la pestaña Torneo, como en Delegación.
    - Antes, revisar los consumidores de `pagos.jugador_id` (recibos, reportes, cierre de temporada).
    - Descartado: crear fichas "sin acceso" en `jugadores`, porque ensucian el escalafón y los listados.
-2. **[CONFIRMAR]:** si Infantil y Juvenil tienen inscritos suficientes para ir separados, y "solo socios". (El horario escuela ya no es un [CONFIRMAR]: son franjas que libera la academia, §14.5.)
+2. Resuelto el 20-oct-2026: Infantil y Juvenil separados, solo socios con invitados / wild card (§2.1) y horario escuela por franjas (§14.5).
 
 ## 15. [CONFIRMAR] abiertos (al 20-oct-2026)
 
-1. Fecha de cierre y premiación (¿sábado 12-dic?) — §0.
-2. Triple empate en el grupo: orden diferencia de sets → games y desempate final por sorteo del admin — §0, §7.
-3. Súper tie-break en la tabla: cuenta como 1 set y 1-0 en games — §7.
-4. Doble WO: ninguna suma; en llave, el rival pasa por WO — §6.
-5. Retiro durante el partido: se completa el partido al ganador para la tabla — §7 (`conteoPartido`).
-6. Tabla del festival (Pelota Naranja): partidos ganados, después games — §14.1.
-7. Si Infantil y Juvenil van separados por género o se fusionan — §14.1.
-8. "Solo socios" para los menores — §14.2.
-9. Categoría de adultos con menos confirmadas que el cupo (algún grupo quedaría con menos de 3): hoy el sorteo se bloquea — §3.
+1. Doble WO: ninguna suma; en llave, el rival pasa por WO — §6.
+2. Tabla del festival (Pelota Naranja): partidos ganados, después games — §14.1.
+
+Resueltos el 20-oct-2026: premiación (11-dic), triple empate, súper tie-break, retiro, Infantil/Juvenil separados, solo socios con invitados / wild card y categoría incompleta.
