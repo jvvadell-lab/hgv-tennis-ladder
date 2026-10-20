@@ -2043,11 +2043,10 @@ export default function AdminPage() {
 
   const fetchPlayers = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide')
-      .order('created_at', { ascending: false })
-    if (!error) setPlayers(data || [])
+    // Correo, teléfono, verificación... ya no se leen con la clave anónima.
+    const res = await fetch('/api/admin/jugadores').catch(() => null)
+    const data = res?.ok ? await res.json() : null
+    if (data?.ok) setPlayers(data.jugadores)
     await fetchInscritosTempActiva()
     setLoading(false)
   }
