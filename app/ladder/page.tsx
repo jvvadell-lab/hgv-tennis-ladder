@@ -1515,6 +1515,11 @@ export default function LadderPage() {
           }}>
             🎾 Reservar Cancha
           </Link>
+          <div style={{ marginTop: '12px' }}>
+            <Link href="/torneo" style={{ color: 'var(--color-ball)', fontWeight: 700, fontSize: '15px', textDecoration: 'underline' }}>
+              🎄 Torneo Navidad: grupos, calendario y llaves
+            </Link>
+          </div>
         </div>
 
         {!temporadaId && (
