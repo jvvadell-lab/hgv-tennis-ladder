@@ -2,6 +2,7 @@
 
 Documento para implementar en Claude Code. Reglas aprobadas por la Comisión de Tenis (16-oct-2026).
 Los puntos marcados **[CONFIRMAR]** son supuestos razonables que la Comisión aún no ha ratificado.
+Decisiones del 20-oct-2026: sorteo por bombos o serpentina (§3), WO (§6), handicap del Mixto (§4.1) y horario de la academia por franjas liberadas (§14.5). Lista de [CONFIRMAR] abiertos en §15.
 
 ## 0. Reglas del torneo (fuente de verdad)
 
@@ -15,7 +16,8 @@ Los puntos marcados **[CONFIRMAR]** son supuestos razonables que la Comisión a�
 | Formato de partido | 2 sets. Si quedan 1-1, súper tie-break (a 10, diferencia de 2) |
 | Empate entre 2 en el grupo | Resultado entre ellos (head-to-head) |
 | Empate entre 3 en el grupo | Por score: diferencia de sets, luego diferencia de games **[CONFIRMAR orden y desempate final por sorteo]** |
-| No presentación | Se declara WO a favor del rival |
+| No presentación | Se declara WO a favor del rival tras **15 min de tolerancia** (aprobado 20-oct-2026). Cuenta 2-0 en sets y 12-0 en games |
+| Mixto con handicap | 15-0 al inicio de **cada game** para la pareja que el admin marque en cada partido (§4.1) |
 | Inscripción | 15 € por jugador por categoría, pagadero en Bs. a tasa BCV del euro del día |
 | Un jugador puede jugar | Hasta 2 categorías |
 | Duración del turno | 90 min (dobles y single) |
@@ -83,7 +85,17 @@ RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas 
 
 ## 3. Sorteo y generación de grupos
 
-Admin fija la `siembra` 1..N de cada inscripción confirmada y pulsa "Realizar sorteo".
+Aprobado 20-oct-2026. El admin elige el método al sortear: **bombos** (por defecto) o **serpentina**.
+
+- El torneo tiene que estar en `inscripcion`; al publicar el sorteo pasa a `sorteado`.
+- Solo entran las inscripciones **confirmadas**.
+- Si una categoría tiene **menos de 3** inscripciones confirmadas, el sorteo se bloquea con un aviso (hay que fusionarla o retirarla antes).
+- **Vista previa:** el admin puede repetir el sorteo cuantas veces quiera; nada se guarda hasta que lo publica. Al publicar queda fijo y se guarda quién lo hizo, cuándo y con qué método (`torneos.sorteo_metodo`, `sorteo_publicado_por`, `sorteo_publicado_at`). Si entre la vista previa y la publicación cambian las inscripciones confirmadas, la publicación se rechaza y hay que repetir el sorteo.
+- Todo se escribe en una transacción (función Postgres `torneo_publicar_sorteo`, como `retirar_de_escalafon`).
+
+**Bombos** (`torneo_inscripciones.bombo`, lo asigna el admin): con G grupos, las siembras 1..G forman el bombo 1 y quedan fijas como cabezas de A..G (siembra 1 → A, 2 → B…). Cada bombo siguiente se sortea al azar, uno por grupo; un bombo puede tener como máximo G inscripciones. Las inscripciones sin bombo van, en orden aleatorio, a bombos adicionales de G al final. Si un bombo tiene menos de G, sus inscripciones van a los grupos con menos miembros (al azar entre los empatados), así los grupos nunca difieren en más de 1.
+
+**Serpentina:** las inscripciones con siembra van en su orden y las que no tienen, en orden aleatorio detrás. Se reparten en zigzag:
 
 **Distribución en zigzag (serpentina)** con G grupos:
 - fila 0: siembras 1..G → grupos A..G
@@ -101,9 +113,30 @@ Resultado esperado (tests):
 - Dobles: C1 = 1A vs 2B · C2 = 1C vs 2D · C3 = 1B vs 2A · C4 = 1D vs 2C · S1 = G:C1 vs G:C2 · S2 = G:C3 vs G:C4 · F = G:S1 vs G:S2
 - Single: S1 = 1A vs 2B · S2 = 1B vs 2A · F = G:S1 vs G:S2
 
-Toda la operación en una transacción (función Postgres, como `retirar_de_escalafon`).
+Pelota Naranja (`sin_llave`): solo grupos.
+
+**Categorías infantiles con menos inscritos que el cupo** (aprobado 20-oct-2026, `formatoSorteo` en `lib/torneoSorteo.ts`), con N confirmadas:
+
+| N | Con llave (Verde, Infantil, Juvenil) | Pelota Naranja (festival) |
+|---|---|---|
+| < 3 | Sorteo bloqueado | Sorteo bloqueado |
+| 3–4 | 1 grupo, todos contra todos, **sin llave**: el 1º es el campeón | 1 grupo |
+| 5–7 | 1 grupo + **final** 1A vs 2A | 1 grupo (4 a 6 partidos por niño) |
+| ≥ 8 | Grupos de la categoría (`num_grupos`); si algún grupo quedaría con menos de 3, se baja a 2 grupos y la llave empieza en semis | `num_grupos`, reducido para que cada grupo tenga al menos 4 (mínimo 3 partidos por niño) |
+
+Pelota Naranja con 3 inscritos solo da 2 partidos por niño: el sorteo lo permite y avisa.
+
+Adultos: siempre `num_grupos` de la categoría. Si con los confirmados algún grupo quedaría con menos de 3, el sorteo se bloquea con un aviso. **[CONFIRMAR qué hacer con una categoría de adultos incompleta]**
 
 ## 4. Programación de partidos
+
+Aprobado 20-oct-2026:
+- **Adultos:** plantilla de turnos nocturnos (tabla de abajo).
+- **Infantiles:** solo dentro de las **franjas liberadas por la academia** (§14.5).
+- El **asistente** propone fecha, hora y cancha de cada partido, en orden de fase, respetando: `horaValidaParaCancha` (adultos), franjas liberadas (niños), la duración de cada categoría, las limitaciones de horario del jugador (`torneo_disponibilidad`), que un jugador (o menor) en 2 categorías no tenga partidos solapados ni dos partidos el mismo día, que un partido de llave vaya **en un día posterior** a los partidos de los que depende, que no choque con bloqueos del club, reservas ni retos ya agendados, y las 4 finales de adultos el viernes 11-dic. Lo que no encaje queda **sin horario** para que el admin lo asigne a mano, con aviso de conflictos.
+- La propuesta no se guarda hasta que el admin la **confirma**: entonces se crea un `bloqueos_cancha` por partido (reprogramar mueve el bloqueo; quitar el horario lo borra).
+- Al **publicar** la programación (`torneos.programacion_publicada_at/_por`) se notifica a cada jugador o representante (campana y correo) con sus partidos. Después de publicada, cada cambio de horario avisa a los afectados.
+- Al asignar a mano, son errores (no se guarda): fuera del horario/franja, cancha ocupada, jugador con dos partidos solapados, partido de llave antes de lo que depende. Son avisos (el admin puede forzar): dos partidos el mismo día, limitación de horario del jugador y final de adultos fuera del 11-dic.
 
 Plantilla de turnos por día (hora Caracas, usar `lib/tiempo.ts`):
 
@@ -120,6 +153,12 @@ Plantilla de turnos por día (hora Caracas, usar `lib/tiempo.ts`):
 - Asistente de programación (admin): propone automáticamente llenar los turnos libres en orden de fase (grupos → cuartos → semis → final) respetando las reglas; el admin ajusta a mano. Las 4 finales van fijas el viernes 11-dic (último día del torneo).
 - Cambio de horario: el jugador lo solicita; el admin reprograma (reutilizar el patrón de `reagendar-reto` y `retos_historial_reagendado`).
 
+### 4.1 Handicap del Mixto (aprobado 20-oct-2026)
+
+- La pareja con handicap empieza **cada game** con 15-0 a su favor.
+- Lo marca el admin **en cada partido**: `torneo_partidos.handicap_inscripcion_id` (null = sin handicap). Solo en la categoría Mixto y solo una de las dos inscripciones del partido (lo valida la base).
+- La ficha del partido en /torneo lo muestra ("Handicap 15-0 para …"). No cambia la validación del marcador.
+
 ## 5. Resultados
 
 Reutilizar `lib/resultados.ts` (`validarSets`, `calcularGanador`, formato `sets` con `games_j1`/`games_j2`/`es_super_tiebreak`), donde j1 = inscripcion_a y j2 = inscripcion_b.
@@ -135,9 +174,9 @@ Flujo: un jugador de cualquiera de las dos inscripciones reporta → el admin va
 ## 6. WO (no presentación)
 
 - El admin marca WO indicando la inscripción ausente → `estado = 'wo'`, `ganador` = la otra.
-- Para la tabla, el WO cuenta como victoria **2-0 en sets y 12-0 en games (6-0, 6-0)** para el presente. **[CONFIRMAR]**
+- Para la tabla, el WO cuenta como victoria **2-0 en sets y 12-0 en games (6-0, 6-0)** para el presente (aprobado 20-oct-2026).
 - Si no se presenta ninguna → `doble_wo`: ninguna suma partido ganado. En llave, la Comisión decide (por defecto, el partido siguiente queda con un solo clasificado que pasa por WO). **[CONFIRMAR]**
-- Tolerancia de espera antes de declarar WO: **[CONFIRMAR, p. ej. 15 min]**.
+- Tolerancia de espera antes de declarar WO: **15 minutos** desde la hora programada (aprobado 20-oct-2026).
 
 ## 7. Tabla de posiciones del grupo
 
@@ -163,7 +202,7 @@ Implementar como función pura `ordenarGrupo(partidos, inscripciones)` en `lib/t
 
 ## 9. Pantallas
 
-**Públicas (/torneo):** grupos con tabla en vivo, llaves por categoría, calendario por día (con cancha y hora), resultados.
+**Públicas (/torneo):** pestañas Adultos | Infantil y una por categoría: tabla de grupos en vivo, calendario por día (cancha y hora) y llave gráfica (serie 1 arriba, serie 2 abajo; "1º grupo A" hasta que se conozca el clasificado, después nombre y marcador; en el celular se desliza por rondas). Resalta la inscripción del usuario con sesión (o de sus representados). En el Mixto, el handicap en la ficha del partido. De los menores solo se muestra `menor_nombre_publico`, nunca datos del representante. Acceso desde la home, /ladder y Mi Perfil.
 **Jugador:** mis partidos, reportar resultado, pedir cambio de horario, estado de pago.
 **Admin (pestaña Torneo):** categorías y cupos, inscripciones y pagos, siembra y sorteo, programación (asistente + ajuste manual), validación de resultados, WO, reprogramación, exportar calendario a Excel. En una fase posterior, "Ajustar llave" (sección 13).
 
@@ -280,14 +319,16 @@ Una ficha por niño, reutilizable en torneos futuros ("Mis representados"). Camp
 - **Certificación del admin:** `torneo_inscripciones.categoria_certificada_por/_at`. El admin revisa la fecha de nacimiento y puede pasar al niño a otra categoría infantil compatible con su edad. Equivale a la `categoria_torneo` de los adultos.
 - Los endpoints validan todo con mensajes claros, y el trigger `torneo_inscripciones_validar` repite edad, categoría, duplicado, máximo 2 y cupo como red de seguridad.
 
-### 14.5 Horario "escuela"
+### 14.5 Horario de la academia (franjas liberadas)
 
-- Los turnos infantiles van en el **horario escuela**: por ahora, **lunes a viernes de 15:00 a 18:00, en HGV1 y HGV2** **[CONFIRMAR con el profesor qué días y qué cancha se ceden]**.
-- La plantilla se configura **desde el admin** (pestaña Torneo, por categoría infantil): días, canchas y ventana horaria. Guardarla **no bloquea nada**: las canchas solo se bloquean cuando se programa cada partido.
-- El horario es **solo para turnos de categorías infantiles**. `horaValidaParaCancha` **no cambia** y las reservas normales siguen con su horario.
-- Cada categoría infantil lleva su plantilla en `torneo_categorias.plantilla_turnos` (jsonb `{dias, desde, hasta, canchas}`; `null` = plantilla adulta de §4). Los turnos se generan cada `duracion_min` dentro de la ventana; Naranja, por ejemplo, tiene turnos de 40 min.
-- La validación de un turno infantil es `turnoInfantilValido` (lib/torneoInfantil.ts), en lugar de `horaValidaParaCancha`.
-- Cada turno infantil programado crea su fila en `bloqueos_cancha`, igual que los demás partidos (§4). Las reglas de "dos partidos la misma noche" se aplican por menor, en el mismo día.
+Decisión del 20-oct-2026: el horario escuela **no es fijo**. El profesor o el admin **liberan franjas concretas** para el torneo: fecha, cancha, hora de inicio y hora de fin, dentro de **15:00–18:00** (tabla `torneo_franjas_academia`).
+
+- Pantalla **"Horario academia"** para liberar, ver y retirar franjas. No se puede retirar una franja que ya tenga un partido programado (lo valida la API y un trigger).
+- Nuevo nivel de admin **`academia`** (`administradores.nivel`): entra con su PIN y solo ve esa pantalla (`/academia`). En la sesión tiene rol propio (`role: 'academia'`), así no pasa ningún chequeo de admin del resto de la app. El admin completo también ve la pantalla, en la pestaña Torneo.
+- Liberar una franja **no bloquea** la cancha: la cancha se bloquea al confirmar la programación de cada partido (§4). Las franjas no se solapan entre sí en la misma cancha.
+- Los turnos infantiles solo van dentro de una franja liberada: empiezan y terminan dentro de ella. `horaValidaParaCancha` **no cambia** y las reservas normales siguen con su horario.
+- La regla de "dos partidos el mismo día" se aplica por menor.
+- `torneo_categorias.plantilla_turnos` (la plantilla fija del 19-oct) queda sin uso: el asistente no la lee y la pestaña Torneo ya no la edita. Se borrará la columna en una migración posterior.
 
 ### 14.6 Pendientes y mejoras futuras
 
@@ -298,4 +339,16 @@ Una ficha por niño, reutilizable en torneos futuros ("Mis representados"). Camp
    - El admin registra el pago desde la pestaña Torneo, como en Delegación.
    - Antes, revisar los consumidores de `pagos.jugador_id` (recibos, reportes, cierre de temporada).
    - Descartado: crear fichas "sin acceso" en `jugadores`, porque ensucian el escalafón y los listados.
-2. **[CONFIRMAR]:** días y cancha del horario escuela (con el profesor), si Infantil y Juvenil tienen inscritos suficientes para ir separados, y "solo socios".
+2. **[CONFIRMAR]:** si Infantil y Juvenil tienen inscritos suficientes para ir separados, y "solo socios". (El horario escuela ya no es un [CONFIRMAR]: son franjas que libera la academia, §14.5.)
+
+## 15. [CONFIRMAR] abiertos (al 20-oct-2026)
+
+1. Fecha de cierre y premiación (¿sábado 12-dic?) — §0.
+2. Triple empate en el grupo: orden diferencia de sets → games y desempate final por sorteo del admin — §0, §7.
+3. Súper tie-break en la tabla: cuenta como 1 set y 1-0 en games — §7.
+4. Doble WO: ninguna suma; en llave, el rival pasa por WO — §6.
+5. Retiro durante el partido: se completa el partido al ganador para la tabla — §7 (`conteoPartido`).
+6. Tabla del festival (Pelota Naranja): partidos ganados, después games — §14.1.
+7. Si Infantil y Juvenil van separados por género o se fusionan — §14.1.
+8. "Solo socios" para los menores — §14.2.
+9. Categoría de adultos con menos confirmadas que el cupo (algún grupo quedaría con menos de 3): hoy el sorteo se bloquea — §3.
