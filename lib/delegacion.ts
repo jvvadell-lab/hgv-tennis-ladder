@@ -97,30 +97,35 @@ export function etiquetaPrenda(item: { tipo_prenda: string; manga?: string | nul
 // que no es socio (es_socio = false).
 export const ETIQUETA_SOCIO_NO_REGISTRADO = 'Socio (no registrado en la app)'
 export const ETIQUETA_INVITADO = 'Invitado'
+// N.º de acción que se muestra para un invitado (no socio, sin acción).
+export const ACCION_INVITADO = 'INV'
 
 export type PersonaDelegacion = {
-  jugadores: { nombre: string; telefono?: string | null; numero_accion?: string | null } | null
+  // es_invitado: jugador registrado como invitado (no socio, lib/invitados.ts).
+  jugadores: { nombre: string; telefono?: string | null; numero_accion?: string | null; es_invitado?: boolean | null } | null
   nombre_externo: string | null
   telefono_externo?: string | null
   numero_accion_externo?: string | null
   es_socio?: boolean | null
 }
 
-// null si es un jugador registrado.
+// null si es un jugador registrado socio; 'Invitado' si se registró como invitado.
 export function etiquetaExterno(p: PersonaDelegacion): string | null {
-  if (p.jugadores) return null
+  if (p.jugadores) return p.jugadores.es_invitado ? ETIQUETA_INVITADO : null
   return p.es_socio === false ? ETIQUETA_INVITADO : ETIQUETA_SOCIO_NO_REGISTRADO
 }
 
 // "Ana Pérez" (jugador) o "Ana Pérez — Socio (no registrado en la app)".
 export function nombrePersonaDelegacion(p: PersonaDelegacion): string {
-  if (p.jugadores) return p.jugadores.nombre
+  if (p.jugadores) return etiquetaExterno(p) ? `${p.jugadores.nombre} — ${etiquetaExterno(p)}` : p.jugadores.nombre
   return p.nombre_externo ? `${p.nombre_externo} — ${etiquetaExterno(p)}` : '—'
 }
 
 // Teléfono y N.º de acción: de la ficha del jugador, o los cargados a mano.
+// Un jugador invitado sin acción muestra 'INV'.
 export const telefonoDe = (p: PersonaDelegacion) => (p.jugadores ? p.jugadores.telefono : p.telefono_externo) || null
-export const numeroAccionDe = (p: PersonaDelegacion) => (p.jugadores ? p.jugadores.numero_accion : p.numero_accion_externo) || null
+export const numeroAccionDe = (p: PersonaDelegacion) =>
+  (p.jugadores ? p.jugadores.numero_accion || (p.jugadores.es_invitado ? ACCION_INVITADO : null) : p.numero_accion_externo) || null
 
 // Socio con nombre libre sin N.º de acción (los registros de antes de pedirlo).
 export const faltaNumeroAccion = (p: PersonaDelegacion) => !p.jugadores && p.es_socio !== false && !p.numero_accion_externo
