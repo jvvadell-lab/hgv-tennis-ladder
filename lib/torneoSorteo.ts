@@ -45,7 +45,7 @@ export function tamanosGrupos(n: number, g: number): number[] {
 // aprobado 20-oct-2026):
 //  * < 3: no se puede sortear.
 //  * Adultos: siempre los grupos de la categoría; si algún grupo quedaría
-//    con menos de 3, se bloquea.
+//    con menos de 3, se bloquea: se completa con invitados o wild card.
 //  * Infantil con llave: 3–4 → 1 grupo sin llave · 5–7 → 1 grupo + final ·
 //    ≥ 8 → los grupos de la categoría; si algún grupo quedaría con menos de
 //    3, 2 grupos y semis.
@@ -62,7 +62,7 @@ export function formatoSorteo(c: CategoriaParaSorteo, n: number): { ok: false; e
   if (!c.es_infantil) {
     if (c.llave_desde === 'sin_llave') return { ok: false, error: `${c.nombre}: una categoría de adultos necesita llave` }
     if (minimoGrupo(c.num_grupos) < 3) {
-      return { ok: false, error: `${c.nombre}: con ${n} inscripciones confirmadas algún grupo quedaría con menos de 3. Completa la categoría o ajusta los grupos antes del sorteo.` }
+      return { ok: false, error: `${c.nombre}: con ${n} inscripciones confirmadas algún grupo quedaría con menos de 3. Complétala con invitados o wild card antes del sorteo.` }
     }
     return { ok: true, formato: { numGrupos: c.num_grupos, llave: c.llave_desde, avisos } }
   }

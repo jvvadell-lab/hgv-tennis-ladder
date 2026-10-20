@@ -202,6 +202,13 @@ describe('ordenarGrupo', () => {
     expect(tabla.every((f) => f.pg === 1 && !f.requiere_sorteo)).toBe(true)
   })
 
+  it('súper tie-break: vale 1 set y 1-0 en games; sus puntos se registran aparte para revisar empates', () => {
+    const tabla = ordenarGrupo([jugado('C', 'A', [set(1, 6, 4), set(2, 4, 6), st(10, 6)])], miembros('C', 'A'))
+    const c = tabla.find((f) => f.inscripcion_id === 'C')!
+    expect([c.sets_favor, c.sets_contra, c.games_favor, c.games_contra]).toEqual([2, 1, 11, 10])
+    expect([c.stb_puntos_favor, c.stb_puntos_contra]).toEqual([10, 6])
+  })
+
   it('triple empate resuelto por diferencia de games', () => {
     const partidos = [
       g2_0('A', 'B', 6, 0), // A 12-0

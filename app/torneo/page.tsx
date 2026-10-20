@@ -12,7 +12,7 @@ import type { SetJugado } from '@/lib/resultados'
 // "Nombre I.").
 
 type Categoria = { id: string; nombre: string; modalidad: string; genero: string; es_infantil: boolean; orden: number; llave_desde: string; inscritas: number }
-type Fila = { inscripcion_id: string; posicion: number; pj: number; pg: number; pp: number; sets_favor: number; sets_contra: number; games_favor: number; games_contra: number; requiere_sorteo: boolean }
+type Fila = { inscripcion_id: string; posicion: number; pj: number; pg: number; pp: number; sets_favor: number; sets_contra: number; games_favor: number; games_contra: number; stb_puntos_favor: number; stb_puntos_contra: number; requiere_sorteo: boolean }
 type Grupo = { id: string; categoria_id: string; letra: string; tabla: Fila[] }
 type Partido = {
   id: string; categoria_id: string; fase: Fase; grupo: string | null; orden: number
@@ -210,7 +210,14 @@ function Grupos({ grupos, nombre, mias }: { grupos: Grupo[]; nombre: (id: string
                 ))}
               </tbody>
             </table>
-            {g.tabla.some((f) => f.requiere_sorteo) && <p style={{ fontSize: '11px', color: '#888', margin: '6px 0 0 0' }}>* Empate pendiente de sorteo.</p>}
+            {g.tabla.some((f) => f.requiere_sorteo) && (
+              <p style={{ fontSize: '11px', color: '#888', margin: '6px 0 0 0' }}>
+                * Empate pendiente de revisión.
+                {g.tabla.some((f) => f.requiere_sorteo && f.stb_puntos_favor + f.stb_puntos_contra > 0) && (
+                  <> Puntos de súper tie-break: {g.tabla.filter((f) => f.requiere_sorteo).map((f) => `${nombre(f.inscripcion_id)} ${f.stb_puntos_favor}-${f.stb_puntos_contra}`).join(' · ')}.</>
+                )}
+              </p>
+            )}
           </div>
         ))}
       </div>

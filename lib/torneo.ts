@@ -364,24 +364,30 @@ export type FilaTabla = {
   sets_contra: number
   games_favor: number
   games_contra: number
+  // Puntos de los súper tie-breaks jugados: no cuentan para el orden (el
+  // STB vale 1 set y 1-0 en games), quedan para revisar un empate (SPEC §7).
+  stb_puntos_favor: number
+  stb_puntos_contra: number
   // true si quedó empatada con otra(s) en todos los criterios y falta el
   // sorteo del admin (desempate_manual) — la posición mostrada es provisional.
   requiere_sorteo: boolean
 }
 
-type Conteo = { setsA: number; setsB: number; gamesA: number; gamesB: number }
+type Conteo = { setsA: number; setsB: number; gamesA: number; gamesB: number; stbA: number; stbB: number }
 
 // Sets y games de un partido validado, desde el lado de inscripcion_a.
 //  * WO: el presente gana 2-0 en sets y 12-0 en games (6-0, 6-0). [CONFIRMAR]
 //  * Doble WO: no suma sets ni games a nadie.
-//  * Súper tie-break: 1 set y 1-0 en games para quien lo gana — no se
-//    suman sus puntos. [CONFIRMAR]
+//  * Súper tie-break: 1 set y 1-0 en games para quien lo gana — sus puntos
+//    no se suman a los games; se registran aparte (stb_puntos_*) para
+//    revisar los empates (aprobado 20-oct-2026).
 //  * Retiro: se cuenta lo jugado y se le completa el partido al ganador:
 //    el set interrumpido lo cierra él (6-x, o 7-5 / 7-6 si el rival ya
 //    tenía 5 o 6), y los sets que falten van 6-0 (o Súper tie-break 1-0
-//    si ya estaban 1-1). [CONFIRMAR con la Comisión]
+//    si ya estaban 1-1). Aprobado 20-oct-2026: el partido va a favor de la
+//    otra dupla, con lo jugado + lo que falta completado.
 function conteoPartido(p: PartidoParaTabla): Conteo {
-  const c: Conteo = { setsA: 0, setsB: 0, gamesA: 0, gamesB: 0 }
+  const c: Conteo = { setsA: 0, setsB: 0, gamesA: 0, gamesB: 0, stbA: 0, stbB: 0 }
   if (p.estado === 'doble_wo') return c
   if (p.estado === 'wo') {
     if (p.ganador_inscripcion_id === p.inscripcion_a) { c.setsA = 2; c.gamesA = 12 } else { c.setsB = 2; c.gamesB = 12 }
@@ -396,6 +402,8 @@ function conteoPartido(p: PartidoParaTabla): Conteo {
     if (s.es_super_tiebreak) {
       if (ganaA) c.gamesA++
       else c.gamesB++
+      c.stbA += s.games_j1
+      c.stbB += s.games_j2
     } else {
       c.gamesA += s.games_j1
       c.gamesB += s.games_j2
@@ -446,6 +454,7 @@ export function ordenarGrupo(partidos: PartidoParaTabla[], miembros: MiembroPara
     filas.set(m.inscripcion_id, {
       inscripcion_id: m.inscripcion_id, pj: 0, pg: 0, pp: 0,
       sets_favor: 0, sets_contra: 0, games_favor: 0, games_contra: 0,
+      stb_puntos_favor: 0, stb_puntos_contra: 0,
     })
   }
 
@@ -465,6 +474,8 @@ export function ordenarGrupo(partidos: PartidoParaTabla[], miembros: MiembroPara
     else { a.pp++; b.pp++ }
     a.sets_favor += c.setsA; a.sets_contra += c.setsB; a.games_favor += c.gamesA; a.games_contra += c.gamesB
     b.sets_favor += c.setsB; b.sets_contra += c.setsA; b.games_favor += c.gamesB; b.games_contra += c.gamesA
+    a.stb_puntos_favor += c.stbA; a.stb_puntos_contra += c.stbB
+    b.stb_puntos_favor += c.stbB; b.stb_puntos_contra += c.stbA
   }
 
   const manual = new Map(miembros.map((m) => [m.inscripcion_id, m.desempate_manual]))

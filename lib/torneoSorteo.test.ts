@@ -55,6 +55,8 @@ describe('formatoSorteo', () => {
     expect(formato(single, 8)).toBe('2/semis')
     expect(formato(single, 7)).toBe('2/semis')      // 4,3
     expect(formato(single, 5)).toBe('bloqueado')    // 3,2
+    const r = formatoSorteo(dobles, 11)
+    expect(!r.ok && r.error).toContain('invitados o wild card')
   })
 
   it('infantil con llave: 3–4 sin llave, 5–7 grupo único + final, 8+ grupos', () => {
