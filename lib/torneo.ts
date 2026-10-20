@@ -97,6 +97,8 @@ export type Torneo = {
   sorteo_metodo: 'bombos' | 'serpentina' | null
   sorteo_publicado_por: string | null
   sorteo_publicado_at: string | null
+  programacion_publicada_at: string | null
+  programacion_publicada_por: string | null
   created_at: string
 }
 
@@ -177,6 +179,7 @@ export type TorneoPartido = {
   validado_at: string | null
   validado_por: string | null
   bloqueo_id: string | null
+  handicap_inscripcion_id: string | null   // Mixto: pareja que empieza cada game 15-0 (SPEC §4.1)
   created_at: string
 }
 

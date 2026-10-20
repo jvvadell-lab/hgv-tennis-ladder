@@ -21,6 +21,7 @@ import {
   type Parentesco,
 } from '@/lib/torneoInfantil'
 import TorneoSorteo from './TorneoSorteo'
+import TorneoProgramacion from './TorneoProgramacion'
 import HorarioAcademia from '@/app/components/HorarioAcademia'
 
 // Pestaña Torneo del admin (Torneo Navidad, fase 3): inscripciones por
@@ -136,7 +137,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [categoriaSel, setCategoriaSel] = useState<string>('todas')
   const [verRetiradas, setVerRetiradas] = useState(false)
-  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'academia'>('inscripciones')
+  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'programacion' | 'academia'>('inscripciones')
 
   const cargar = async () => {
     try {
@@ -229,8 +230,8 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       </div>
 
       {esAdminCompleto && (
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd' }}>
-          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['academia', '🧒 Horario academia']] as const).map(([id, etiqueta]) => (
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd', overflowX: 'auto' }}>
+          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['programacion', '📅 Programación'], ['academia', '🧒 Horario academia']] as const).map(([id, etiqueta]) => (
             <button
               key={id}
               onClick={() => setVista(id)}
@@ -254,6 +255,8 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           onCambio={cargar}
         />
       )}
+
+      {vista === 'programacion' && esAdminCompleto && <TorneoProgramacion />}
 
       {vista === 'academia' && esAdminCompleto && (
         <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
