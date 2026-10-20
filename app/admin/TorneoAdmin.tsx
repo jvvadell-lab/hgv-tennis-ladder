@@ -1,7 +1,7 @@
 'use client'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { formatearFechaConAnio, formatearFechaHora, instanteEnCaracas } from '@/lib/tiempo'
-import { CANCHAS_TORNEO, ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type CanchaTorneo, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
+import { ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
 import {
   DIAS_TORNEO,
   ETIQUETA_GENERO_JUGADOR,
@@ -16,14 +16,12 @@ import {
   ETIQUETA_GENERO_MENOR,
   ETIQUETA_PARENTESCO,
   PARENTESCOS,
-  HORARIO_ESCUELA,
   categoriasParaMenor,
   edadAlCorte,
-  parsearPlantillaTurnos,
   type Parentesco,
-  type PlantillaTurnosInfantil,
 } from '@/lib/torneoInfantil'
 import TorneoSorteo from './TorneoSorteo'
+import HorarioAcademia from '@/app/components/HorarioAcademia'
 
 // Pestaña Torneo del admin (Torneo Navidad, fase 3): inscripciones por
 // categoría con su estado, pagos (validar / rechazar), categoría oficial de
@@ -138,7 +136,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [categoriaSel, setCategoriaSel] = useState<string>('todas')
   const [verRetiradas, setVerRetiradas] = useState(false)
-  const [vista, setVista] = useState<'inscripciones' | 'sorteo'>('inscripciones')
+  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'academia'>('inscripciones')
 
   const cargar = async () => {
     try {
@@ -232,7 +230,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
 
       {esAdminCompleto && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd' }}>
-          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo']] as const).map(([id, etiqueta]) => (
+          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['academia', '🧒 Horario academia']] as const).map(([id, etiqueta]) => (
             <button
               key={id}
               onClick={() => setVista(id)}
@@ -255,6 +253,12 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           publicadoPor={datos.sorteoPublicadoPor}
           onCambio={cargar}
         />
+      )}
+
+      {vista === 'academia' && esAdminCompleto && (
+        <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+          <HorarioAcademia />
+        </div>
       )}
 
       {vista === 'inscripciones' && <>
@@ -295,14 +299,6 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
             <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#666' }}>
               {c.modalidad === 'doble' ? 'Dobles' : 'Single'} · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}
             </p>
-            {c.es_infantil && (
-              <HorarioCategoria
-                categoria={c}
-                editable={esAdminCompleto}
-                ocupado={ocupado === `plantilla-${c.id}`}
-                onGuardar={(plantilla) => accion(`plantilla-${c.id}`, 'infantil/plantilla', { categoriaId: c.id, plantilla }, `${c.nombre}: horario guardado`)}
-              />
-            )}
             {lista.length === 0 && <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Sin inscripciones todavía.</p>}
 
             {lista.map((ins, idx) => (
@@ -730,63 +726,5 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
         <button type="button" onClick={() => setAbierto(false)} style={boton('#777')}>Cancelar</button>
       </div>
     </form>
-  )
-}
-
-const DIAS_SEMANA = [
-  { n: 1, etiqueta: 'Lun' }, { n: 2, etiqueta: 'Mar' }, { n: 3, etiqueta: 'Mié' }, { n: 4, etiqueta: 'Jue' },
-  { n: 5, etiqueta: 'Vie' }, { n: 6, etiqueta: 'Sáb' }, { n: 0, etiqueta: 'Dom' },
-]
-
-const resumenPlantilla = (p: PlantillaTurnosInfantil) =>
-  `${DIAS_SEMANA.filter((d) => p.dias.includes(d.n)).map((d) => d.etiqueta).join(', ')} · ${p.desde}–${p.hasta} · ${p.canchas.join(' y ')}`
-
-// Horario escuela de una categoría infantil (SPEC §14.5): días, canchas y
-// ventana. Guardarlo no bloquea canchas; eso pasa al programar cada partido.
-function HorarioCategoria({ categoria, editable, ocupado, onGuardar }: {
-  categoria: Categoria
-  editable: boolean
-  ocupado: boolean
-  onGuardar: (plantilla: PlantillaTurnosInfantil) => Promise<boolean>
-}) {
-  const actual = parsearPlantillaTurnos(categoria.plantilla_turnos)
-  const [editando, setEditando] = useState(false)
-  const [p, setP] = useState<PlantillaTurnosInfantil>(actual ?? HORARIO_ESCUELA)
-  const alternar = <T,>(lista: T[], v: T) => (lista.includes(v) ? lista.filter((x) => x !== v) : [...lista, v])
-
-  if (!editando) {
-    return (
-      <p style={{ margin: '-8px 0 14px 0', fontSize: '12px', color: '#555', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-        🕒 Horario escuela: <strong>{actual ? resumenPlantilla(actual) : 'sin definir'}</strong>
-        {editable && <button onClick={() => { setP(actual ?? HORARIO_ESCUELA); setEditando(true) }} style={boton('var(--color-court)')}>Editar horario</button>}
-      </p>
-    )
-  }
-
-  return (
-    <div style={{ background: 'white', borderRadius: '8px', padding: '12px', margin: '-4px 0 14px 0', fontSize: '12px', border: '1px solid #e5e5e5' }}>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
-        <strong>Días:</strong>
-        {DIAS_SEMANA.map((d) => (
-          <label key={d.n}><input type="checkbox" checked={p.dias.includes(d.n)} onChange={() => setP({ ...p, dias: alternar(p.dias, d.n).sort() })} /> {d.etiqueta}</label>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
-        <strong>Canchas:</strong>
-        {CANCHAS_TORNEO.map((c) => (
-          <label key={c}><input type="checkbox" checked={p.canchas.includes(c)} onChange={() => setP({ ...p, canchas: alternar<CanchaTorneo>(p.canchas, c).sort() })} /> {c}</label>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
-        <strong>Desde</strong><input type="time" value={p.desde} onChange={(e) => setP({ ...p, desde: e.target.value })} style={{ ...campoAdmin, width: 'auto' }} />
-        <strong>hasta</strong><input type="time" value={p.hasta} onChange={(e) => setP({ ...p, hasta: e.target.value })} style={{ ...campoAdmin, width: 'auto' }} />
-        <span style={{ color: '#777' }}>(turnos de {categoria.duracion_min} min)</span>
-      </div>
-      <p style={{ color: '#777', margin: '0 0 8px 0' }}>Guardar el horario no bloquea canchas: se bloquean al programar cada partido.</p>
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <button disabled={ocupado} onClick={async () => { if (await onGuardar(p)) setEditando(false) }} style={boton('var(--color-court)', true)}>Guardar</button>
-        <button onClick={() => setEditando(false)} style={boton('#777')}>Cancelar</button>
-      </div>
-    </div>
   )
 }

@@ -42,7 +42,7 @@ function LoginForm() {
 
       setMessage(`✅ ¡Bienvenido ${data.nombre}!`)
       setTimeout(() => {
-        router.push(data.role === 'admin' ? '/admin' : destinoDespuesDeLogin)
+        router.push(data.role === 'admin' ? '/admin' : data.role === 'academia' ? '/academia' : destinoDespuesDeLogin)
       }, 1000)
     } catch {
       setMessage('❌ Error al iniciar sesión. Intenta de nuevo.')

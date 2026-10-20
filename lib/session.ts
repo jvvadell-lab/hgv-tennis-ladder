@@ -8,13 +8,16 @@ import { getIronSession } from 'iron-session'
 // (vieja, o forjada) simplemente no abre — iron-session la trata como
 // sesión vacía en vez de tirar error, así que no hace falta manejar el
 // caso de cookies viejas colgando en navegadores de antes de este cambio.
+// role 'academia' = administrador de nivel "academia" (el profesor): tiene
+// rol propio para que ningún chequeo de admin (role === 'admin') lo deje
+// pasar; solo entra a /academia (franjas del horario de la academia).
 export type SessionData = {
-  role: 'admin' | 'jugador'
+  role: 'admin' | 'jugador' | 'academia'
   id: string
   nombre: string
   categoria?: string
   genero?: string
-  nivel?: 'completo' | 'pagos'
+  nivel?: 'completo' | 'pagos' | 'academia'
 }
 
 export type Session = SessionData | null
@@ -77,4 +80,10 @@ export async function destruirSession(): Promise<void> {
 // nivel "completo" (o ausencia del campo, para no romper cuentas viejas).
 export function esAdminCompleto(session: Session): boolean {
   return !!session && session.role === 'admin' && (!session.nivel || session.nivel === 'completo')
+}
+
+// Liberar y retirar franjas del horario de la academia (Torneo Navidad,
+// SPEC §14.5): el profesor (nivel academia) o un admin completo.
+export function puedeGestionarFranjas(session: Session): boolean {
+  return esAdminCompleto(session) || (!!session && session.role === 'academia')
 }
