@@ -34,7 +34,7 @@ export async function GET() {
     const { data: inscripciones, error: errIns } = categoriaIds.length
       ? await db
           .from('torneo_inscripciones')
-          .select('id, categoria_id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, categoria_certificada_at, siembra, estado, inscrita_por, inscrita_por_admin, created_at')
+          .select('id, categoria_id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, categoria_certificada_at, siembra, bombo, estado, inscrita_por, inscrita_por_admin, created_at')
           .in('categoria_id', categoriaIds)
           .order('created_at')
       : { data: [], error: null }
@@ -73,6 +73,11 @@ export async function GET() {
     if (errJug) throw errJug
     if (errPag) throw errPag
     if (errDisp) throw errDisp
+
+    const { data: publicador, error: errPub } = torneo.sorteo_publicado_por
+      ? await db.from('administradores').select('nombre').eq('id', torneo.sorteo_publicado_por).maybeSingle()
+      : { data: null, error: null }
+    if (errPub) throw errPub
 
     const jugadorPorId = new Map((jugadores || []).map((j: any) => [j.id, j]))
     const catPorId = new Map((categorias || []).map((c) => [c.id, c]))
@@ -129,6 +134,7 @@ export async function GET() {
       inscripciones: filas,
       disponibilidad: disponibilidad || [],
       jugadoresActivos: activos || [],
+      sorteoPublicadoPor: publicador?.nombre ?? null,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al cargar el torneo' }, { status: 500 })

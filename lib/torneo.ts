@@ -94,6 +94,9 @@ export type Torneo = {
   monto_inscripcion_eur: number
   fecha_corte_edad: string | null  // edad de los menores; null = 31-dic del año de fecha_inicio
   solo_socios: boolean
+  sorteo_metodo: 'bombos' | 'serpentina' | null
+  sorteo_publicado_por: string | null
+  sorteo_publicado_at: string | null
   created_at: string
 }
 
@@ -131,6 +134,7 @@ export type TorneoInscripcion = {
   categoria_certificada_at: string | null
   inscrita_por_admin: string | null
   siembra: number | null
+  bombo: number | null          // sorteo por bombos (SPEC §3)
   estado: EstadoInscripcion
   inscrita_por: string | null
   created_at: string
@@ -268,14 +272,16 @@ const FASES_LLAVE: FaseLlave[] = ['cuartos', 'semis', 'final']
 // a los ganadores en orden (S1 = G:C1 vs G:C2…).
 //   4 grupos (cuartos): C1 = 1A-2B · C2 = 1C-2D · C3 = 1B-2A · C4 = 1D-2C
 //   2 grupos (semis):   S1 = 1A-2B · S2 = 1B-2A
-export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde): PartidoLlave[] {
-  const esperados: Record<LlaveDesde, number> = { cuartos: 4, semis: 2 }
+//   1 grupo (final):    F1 = 1A-2A (categoría infantil con 5–7 inscritos, SPEC §3)
+export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde | 'final'): PartidoLlave[] {
+  const esperados: Record<LlaveDesde | 'final', number> = { cuartos: 4, semis: 2, final: 1 }
   if (numGrupos !== esperados[llaveDesde]) {
     throw new Error(`Una llave desde ${llaveDesde} necesita ${esperados[llaveDesde]} grupos (con 1º y 2º clasificados); hay ${numGrupos}`)
   }
 
   const primera: [string, string][] = []
-  for (const puestoA of [0, 1]) {
+  if (llaveDesde === 'final') primera.push(['1A', '2A'])
+  else for (const puestoA of [0, 1]) {
     for (let g = 0; g < numGrupos; g += 2) {
       // puestoA = 0: 1(par) vs 2(impar) · puestoA = 1: 1(impar) vs 2(par)
       const uno = letraGrupo(g + puestoA)

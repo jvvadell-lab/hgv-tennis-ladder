@@ -1,0 +1,222 @@
+'use client'
+import { useState } from 'react'
+import { formatearFechaHora } from '@/lib/tiempo'
+import { ETIQUETA_FASE, type EstadoTorneo } from '@/lib/torneo'
+import { ETIQUETA_METODO_SORTEO, METODOS_SORTEO, type FormatoSorteo, type MetodoSorteo } from '@/lib/torneoSorteo'
+
+// Sorteo del torneo (SPEC §3), dentro de la pestaña Torneo del admin:
+// siembra y bombo de cada inscripción confirmada, vista previa (repetible,
+// no guarda nada) y publicación. Por /api/admin/torneo/siembra y
+// /api/admin/torneo/sorteo/...
+
+type InscripcionSorteo = { id: string; categoria_id: string; estado: string; siembra: number | null; bombo: number | null; nombre: string }
+type CategoriaSorteo = { id: string; nombre: string; es_infantil: boolean }
+
+type CategoriaPrevia =
+  | { categoriaId: string; nombre: string; inscritas: number; error: string }
+  | {
+      categoriaId: string; nombre: string; inscritas: number; formato: FormatoSorteo; grupos: string[][]
+      gruposDetalle: { letra: string; miembros: { id: string; nombre: string; siembra: number | null; bombo: number | null }[] }[]
+      partidosGrupo: number
+      llave: { fase: string; orden: number; origen_a: string; origen_b: string }[]
+    }
+
+type Previa = { metodo: MetodoSorteo; bloqueado: boolean; errores: string[]; avisos: string[]; categorias: CategoriaPrevia[] }
+
+const tarjeta: React.CSSProperties = { background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }
+const btn = (color: string, relleno = false): React.CSSProperties => ({
+  padding: '8px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer',
+  border: `1px solid ${color}`, background: relleno ? color : 'white', color: relleno ? 'white' : color,
+})
+
+export default function TorneoSorteo({
+  torneo,
+  categorias,
+  inscripciones,
+  publicadoPor,
+  onCambio,
+}: {
+  torneo: { id: string; estado: EstadoTorneo; sorteo_metodo: MetodoSorteo | null; sorteo_publicado_at: string | null }
+  categorias: CategoriaSorteo[]
+  inscripciones: InscripcionSorteo[]
+  publicadoPor: string | null
+  onCambio: () => Promise<void>
+}) {
+  const [metodo, setMetodo] = useState<MetodoSorteo>('bombos')
+  const [previa, setPrevia] = useState<Previa | null>(null)
+  const [ocupado, setOcupado] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [mensaje, setMensaje] = useState('')
+
+  const post = async (ruta: string, body: object) => {
+    const res = await fetch(`/api/admin/torneo/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'No se pudo completar la acción')
+    return data
+  }
+
+  const ejecutar = async (clave: string, fn: () => Promise<void>) => {
+    setOcupado(clave); setError(''); setMensaje('')
+    try { await fn() } catch (err: any) { setError(err.message) } finally { setOcupado(null) }
+  }
+
+  if (torneo.sorteo_publicado_at) {
+    return (
+      <div style={tarjeta}>
+        <h4 style={{ margin: '0 0 6px 0', color: 'var(--color-ink)' }}>🎲 Sorteo publicado</h4>
+        <p style={{ margin: 0, fontSize: '14px', color: '#555' }}>
+          {formatearFechaHora(torneo.sorteo_publicado_at)} · {publicadoPor || 'admin'} · método {ETIQUETA_METODO_SORTEO[torneo.sorteo_metodo!] || torneo.sorteo_metodo}. Queda fijo.
+        </p>
+        <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}><a href="/torneo" style={{ color: 'var(--color-court)', fontWeight: 'bold' }}>Ver grupos y llaves en /torneo →</a></p>
+      </div>
+    )
+  }
+
+  const editable = torneo.estado === 'borrador' || torneo.estado === 'inscripcion'
+  const guardar = (ins: InscripcionSorteo, campo: 'siembra' | 'bombo', valor: string) => {
+    const n = valor.trim() === '' ? null : Number(valor)
+    if (n === ins[campo]) return
+    ejecutar(`${campo}-${ins.id}`, async () => {
+      await post('siembra', { inscripcionId: ins.id, siembra: campo === 'siembra' ? n : ins.siembra, bombo: campo === 'bombo' ? n : ins.bombo })
+      setPrevia(null)
+      await onCambio()
+    })
+  }
+
+  const sortear = () => ejecutar('previa', async () => {
+    setPrevia(await post('sorteo/vista-previa', { metodo }))
+  })
+
+  const publicar = () => {
+    if (!previa || previa.bloqueado) return
+    if (!confirm('¿Publicar este sorteo? Queda fijo: se crean los grupos, los partidos y la llave, el torneo pasa a "Sorteado" y se avisa a cada jugador y representante.')) return
+    ejecutar('publicar', async () => {
+      const grupos = Object.fromEntries(previa.categorias.filter((c) => 'grupos' in c).map((c) => [c.categoriaId, (c as any).grupos]))
+      await post('sorteo/publicar', { metodo: previa.metodo, grupos })
+      setPrevia(null)
+      setMensaje('Sorteo publicado')
+      await onCambio()
+    })
+  }
+
+  return (
+    <div>
+      <div style={tarjeta}>
+        <h4 style={{ margin: '0 0 6px 0', color: 'var(--color-ink)' }}>🎲 Sorteo de grupos</h4>
+        <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555' }}>
+          Solo entran las inscripciones <strong>confirmadas</strong>. <strong>Bombos:</strong> las siembras 1..G son cabezas fijas de A..G; cada bombo siguiente se sortea uno por grupo; las inscripciones sin bombo van al final. <strong>Serpentina:</strong> zigzag por siembra; las que no tienen siembra van detrás, al azar.
+          La vista previa no guarda nada: repítela las veces que quieras y publica cuando estés de acuerdo.
+        </p>
+        {torneo.estado !== 'inscripcion' && (
+          <p style={{ margin: '0 0 12px 0', fontSize: '13px', background: '#fff4d6', color: '#8a5a00', padding: '8px 12px', borderRadius: '8px' }}>
+            El sorteo se hace con el torneo en <strong>inscripción</strong>. Puedes ir asignando siembras y bombos.
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {METODOS_SORTEO.map((m) => (
+            <label key={m} style={{ fontSize: '14px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input type="radio" checked={metodo === m} onChange={() => { setMetodo(m); setPrevia(null) }} />
+              {ETIQUETA_METODO_SORTEO[m]}{m === 'bombos' ? ' (por defecto)' : ''}
+            </label>
+          ))}
+          <button disabled={torneo.estado !== 'inscripcion' || ocupado === 'previa'} onClick={sortear} style={btn('var(--color-court)', true)}>
+            {ocupado === 'previa' ? 'Sorteando…' : previa ? '🔁 Repetir sorteo' : '🎲 Vista previa del sorteo'}
+          </button>
+          {previa && !previa.bloqueado && (
+            <button disabled={ocupado === 'publicar'} onClick={publicar} style={btn('#c0392b', true)}>
+              {ocupado === 'publicar' ? 'Publicando…' : '📣 Publicar sorteo'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {mensaje && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{mensaje}</p>}
+      {error && <p style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</p>}
+
+      {previa && (
+        <div style={tarjeta}>
+          <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-ink)' }}>Vista previa — {ETIQUETA_METODO_SORTEO[previa.metodo]} (sin guardar)</h4>
+          {previa.errores.length > 0 && (
+            <div style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '10px' }}>
+              <strong>⛔ El sorteo está bloqueado:</strong>
+              <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>{previa.errores.map((e) => <li key={e}>{e}</li>)}</ul>
+            </div>
+          )}
+          {previa.avisos.length > 0 && (
+            <div style={{ background: '#fff4d6', color: '#8a5a00', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '10px' }}>
+              <ul style={{ margin: 0, paddingLeft: '18px' }}>{previa.avisos.map((a) => <li key={a}>{a}</li>)}</ul>
+            </div>
+          )}
+          {previa.categorias.filter((c) => 'gruposDetalle' in c).map((c: any) => (
+            <div key={c.categoriaId} style={{ borderTop: '1px solid #e5e5e5', padding: '12px 0' }}>
+              <strong style={{ color: 'var(--color-ink)' }}>{c.nombre}</strong>
+              <span style={{ fontSize: '12px', color: '#666' }}>
+                {' '}· {c.inscritas} inscritas · {c.partidosGrupo} partidos de grupo ·{' '}
+                {c.llave.length ? `llave desde ${ETIQUETA_FASE[c.llave[0].fase as keyof typeof ETIQUETA_FASE].toLowerCase()} (${c.llave.map((p: any) => `${p.origen_a}-${p.origen_b}`).slice(0, 4).join(', ')}${c.llave.length > 4 ? '…' : ''})` : 'sin llave'}
+              </span>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
+                {c.gruposDetalle.map((g: any) => (
+                  <div key={g.letra} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '8px 12px', minWidth: '170px', background: 'white' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Grupo {g.letra}</div>
+                    {g.miembros.map((m: any, k: number) => (
+                      <div key={m.id} style={{ fontSize: '13px' }}>
+                        {k === 0 && c.gruposDetalle.length > 1 ? '⭐ ' : ''}{m.nombre}
+                        {m.siembra ? <span style={{ color: '#888', fontSize: '11px' }}> (s{m.siembra})</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {categorias.map((c) => {
+        const confirmadas = inscripciones.filter((i) => i.categoria_id === c.id && i.estado === 'confirmada')
+        const pendientes = inscripciones.filter((i) => i.categoria_id === c.id && i.estado === 'pendiente_pago').length
+        const ordenadas = [...confirmadas].sort((a, b) => (a.siembra ?? 999) - (b.siembra ?? 999) || a.nombre.localeCompare(b.nombre))
+        return (
+          <div key={c.id} style={tarjeta}>
+            <h4 style={{ margin: '0 0 4px 0', color: 'var(--color-ink)' }}>{c.nombre}</h4>
+            <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: confirmadas.length < 3 ? '#c0392b' : '#666' }}>
+              {confirmadas.length} confirmadas{pendientes ? ` · ${pendientes} pendientes (no entran al sorteo)` : ''}
+              {confirmadas.length < 3 ? ' · menos de 3: bloquea el sorteo' : ''}
+            </p>
+            {ordenadas.length > 0 && (
+              <table style={{ borderCollapse: 'collapse', fontSize: '13px', width: '100%', maxWidth: '560px' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: '#666' }}>
+                    <th style={{ padding: '4px 6px' }}>Inscripción</th>
+                    <th style={{ padding: '4px 6px', width: '80px' }}>Siembra</th>
+                    {metodo === 'bombos' && <th style={{ padding: '4px 6px', width: '80px' }}>Bombo</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordenadas.map((i) => (
+                    <tr key={i.id} style={{ borderTop: '1px solid #eee' }}>
+                      <td style={{ padding: '4px 6px' }}>{i.nombre}</td>
+                      {(['siembra', 'bombo'] as const).filter((campo) => campo === 'siembra' || metodo === 'bombos').map((campo) => (
+                        <td key={campo} style={{ padding: '4px 6px' }}>
+                          <input
+                            type="number"
+                            min={1}
+                            defaultValue={i[campo] ?? ''}
+                            key={`${campo}-${i[campo]}`}
+                            disabled={!editable || ocupado === `${campo}-${i.id}`}
+                            onBlur={(e) => guardar(i, campo, e.target.value)}
+                            style={{ width: '60px', padding: '4px', border: '1px solid #ccc', borderRadius: '6px' }}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}

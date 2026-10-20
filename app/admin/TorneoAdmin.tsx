@@ -23,6 +23,7 @@ import {
   type Parentesco,
   type PlantillaTurnosInfantil,
 } from '@/lib/torneoInfantil'
+import TorneoSorteo from './TorneoSorteo'
 
 // Pestaña Torneo del admin (Torneo Navidad, fase 3): inscripciones por
 // categoría con su estado, pagos (validar / rechazar), categoría oficial de
@@ -79,6 +80,8 @@ type Inscripcion = {
   created_at: string
   categoria_certificada_at: string | null
   menor_nombre_publico: string | null
+  siembra: number | null
+  bombo: number | null
   jugadores: Jugador[]
   menor: Menor | null
   pagos: Pago[]
@@ -96,6 +99,7 @@ type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: strin
 type TorneoAdminDatos = {
   id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number
   fecha_corte_edad: string | null; solo_socios: boolean
+  sorteo_metodo: 'bombos' | 'serpentina' | null; sorteo_publicado_at: string | null
 }
 
 type Datos = {
@@ -105,6 +109,7 @@ type Datos = {
   inscripciones: Inscripcion[]
   disponibilidad: Disponibilidad[]
   jugadoresActivos: { id: string; nombre: string }[]
+  sorteoPublicadoPor: string | null
 }
 
 // Nombre para mostrar de una inscripción (pareja, jugador o menor).
@@ -133,6 +138,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [categoriaSel, setCategoriaSel] = useState<string>('todas')
   const [verRetiradas, setVerRetiradas] = useState(false)
+  const [vista, setVista] = useState<'inscripciones' | 'sorteo'>('inscripciones')
 
   const cargar = async () => {
     try {
@@ -224,6 +230,34 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
         </div>
       </div>
 
+      {esAdminCompleto && (
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd' }}>
+          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo']] as const).map(([id, etiqueta]) => (
+            <button
+              key={id}
+              onClick={() => setVista(id)}
+              style={{
+                padding: '10px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px',
+                color: vista === id ? 'var(--color-ink)' : '#888', borderBottom: vista === id ? '3px solid var(--color-court)' : '3px solid transparent', marginBottom: '-2px',
+              }}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {vista === 'sorteo' && esAdminCompleto && (
+        <TorneoSorteo
+          torneo={torneo}
+          categorias={categorias}
+          inscripciones={inscripciones.map((i) => ({ id: i.id, categoria_id: i.categoria_id, estado: i.estado, siembra: i.siembra, bombo: i.bombo, nombre: nombreInscripcion(i) }))}
+          publicadoPor={datos.sorteoPublicadoPor}
+          onCambio={cargar}
+        />
+      )}
+
+      {vista === 'inscripciones' && <>
       {mensaje && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{mensaje}</p>}
       {error && <p style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</p>}
 
@@ -421,6 +455,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           onEnviar={(body) => accion('menor-nuevo', 'infantil/inscribir', body, 'Menor inscrito')}
         />
       )}
+      </>}
     </div>
   )
 }

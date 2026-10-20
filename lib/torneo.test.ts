@@ -82,7 +82,7 @@ describe('crucesTodosContraTodos', () => {
 // --- Llave -----------------------------------------------------------------
 
 describe('generarLlave', () => {
-  const resumen = (n: number, desde: 'cuartos' | 'semis') =>
+  const resumen = (n: number, desde: 'cuartos' | 'semis' | 'final') =>
     generarLlave(n, desde).map((p) => `${p.codigo}=${p.origen_a}/${p.origen_b}`)
 
   it('dobles: 4 grupos desde cuartos', () => {
@@ -102,7 +102,12 @@ describe('generarLlave', () => {
     expect(llave.map((p) => [p.fase, p.orden])).toEqual([['semis', 1], ['semis', 2], ['final', 1]])
   })
 
+  it('infantil de 5–7: 1 grupo y final directa 1A-2A', () => {
+    expect(resumen(1, 'final')).toEqual(['F1=1A/2A'])
+  })
+
   it('rechaza grupos que no cuadran con la llave', () => {
+    expect(() => generarLlave(2, 'final')).toThrow()
     expect(() => generarLlave(2, 'cuartos')).toThrow()
     expect(() => generarLlave(4, 'semis')).toThrow()
   })
