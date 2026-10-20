@@ -182,7 +182,13 @@ export default function InscripcionInfantil() {
             )}
 
             {torneo?.estado === 'inscripcion' && datos.representados.length > 0 && <FormInscribir datos={datos} onCambio={cargar} />}
-            {torneo && torneo.estado === 'borrador' && <Aviso tipo="info">Las inscripciones abrirán pronto. Ya puedes dejar lista la ficha de tu hijo/a.</Aviso>}
+            {torneo && torneo.estado === 'borrador' && (
+              <Aviso tipo="info">
+                {datos.representados.some((m: any) => m.inscripciones?.some((i: any) => i.estado !== 'retirada'))
+                  ? 'Las inscripciones están cerradas. Si te falta, todavía puedes reportar el pago.'
+                  : 'Las inscripciones abrirán pronto. Ya puedes dejar lista la ficha de tu hijo/a.'}
+              </Aviso>
+            )}
             {!torneo && <Aviso tipo="info">No hay un torneo en organización por ahora.</Aviso>}
           </>
         )}

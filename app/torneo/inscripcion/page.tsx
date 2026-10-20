@@ -137,11 +137,14 @@ export default function InscripcionTorneo() {
 
         {!torneo ? (
           <p style={{ textAlign: 'center', color: '#555' }}>No hay un torneo en organización por ahora.</p>
-        ) : torneo.estado === 'borrador' ? (
+        ) : torneo.estado === 'borrador' && !datos?.misInscripciones.length ? (
           <p style={{ textAlign: 'center', color: '#555' }}>Las inscripciones abrirán pronto. Te avisaremos.</p>
         ) : (
           datos && (
             <>
+              {torneo.estado === 'borrador' && (
+                <Aviso tipo="info">Las inscripciones están cerradas. Si te falta, todavía puedes reportar tu pago.</Aviso>
+              )}
               <MisInscripciones datos={datos} onCambio={cargar} />
               {torneo.estado === 'inscripcion' && <FormInscripcion datos={datos} onCambio={cargar} />}
               <Limitaciones datos={datos} />

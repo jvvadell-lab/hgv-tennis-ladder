@@ -38,8 +38,11 @@ export async function POST(request: Request) {
 
     const db = supabaseServer()
     const torneo = await torneoVigente(db)
-    if (!torneo || torneo.estado === 'borrador') {
-      return NextResponse.json({ error: 'No hay un torneo con inscripciones abiertas' }, { status: 400 })
+    // El pago se puede reportar con las inscripciones cerradas y después del
+    // sorteo (entran sin pagar, decisión del 20-oct-2026): basta con tener
+    // una inscripción viva en el torneo vigente.
+    if (!torneo) {
+      return NextResponse.json({ error: 'No hay un torneo en organización' }, { status: 400 })
     }
 
     const { data: ins, error: errIns } = await db
