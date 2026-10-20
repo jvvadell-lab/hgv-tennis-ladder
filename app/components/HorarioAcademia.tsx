@@ -19,6 +19,8 @@ type Datos = {
 const input: React.CSSProperties = { padding: '8px', border: '1px solid rgba(15,27,38,0.25)', borderRadius: '6px', fontSize: '14px', background: 'white' }
 const etiqueta: React.CSSProperties = { display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-ink)', marginBottom: '4px' }
 
+const mayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
+
 export default function HorarioAcademia() {
   const [datos, setDatos] = useState<Datos | null>(null)
   const [error, setError] = useState('')
@@ -106,8 +108,8 @@ export default function HorarioAcademia() {
       {datos.franjas.length === 0 && <p style={{ fontSize: '14px', color: '#666' }}>Todavía no hay franjas liberadas.</p>}
       {[...porFecha.entries()].map(([dia, franjas]) => (
         <div key={dia} style={{ marginBottom: '14px' }}>
-          <h4 style={{ margin: '0 0 6px 0', color: 'var(--color-ink)', fontSize: '14px', textTransform: 'capitalize' }}>
-            {formatearFechaLarga(instanteEnCaracas(dia, '12:00'))}
+          <h4 style={{ margin: '0 0 6px 0', color: 'var(--color-ink)', fontSize: '14px' }}>
+            {mayuscula(formatearFechaLarga(instanteEnCaracas(dia, '12:00')))}
           </h4>
           {franjas.map((f) => {
             const partidos = datos.partidos[f.id] || []

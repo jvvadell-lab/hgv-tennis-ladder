@@ -64,6 +64,8 @@ const origenTexto = (o: string) => {
 }
 const turnoTexto = (t: TurnoOpcion) => `${formatearFechaHora(t.inicio)} · ${t.cancha}`
 
+const mayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
+
 export default function TorneoProgramacion() {
   const [datos, setDatos] = useState<Datos | null>(null)
   const [error, setError] = useState('')
@@ -194,7 +196,7 @@ export default function TorneoProgramacion() {
             }, {}),
           ).sort(([a], [b]) => a.localeCompare(b)).map(([dia, lista]) => (
             <div key={dia} style={{ marginBottom: '8px' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'capitalize' }}>{formatearFechaLarga(lista[0].inicio)}</div>
+              <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{mayuscula(formatearFechaLarga(lista[0].inicio))}</div>
               {lista.sort((a, b) => a.inicio.localeCompare(b.inicio) || a.cancha.localeCompare(b.cancha)).map((a) => {
                 const p = porId.get(a.partidoId)
                 return (
