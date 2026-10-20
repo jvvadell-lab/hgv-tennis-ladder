@@ -2045,7 +2045,7 @@ export default function AdminPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide')
+      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide, es_invitado, invitado_habilitado_at')
       .order('created_at', { ascending: false })
     if (!error) setPlayers(data || [])
     await fetchInscritosTempActiva()
@@ -2104,6 +2104,28 @@ export default function AdminPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jugadorId, estado }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar')
+      fetchPlayers()
+    } catch (err: any) {
+      alert('❌ ' + err.message)
+    } finally {
+      setVerificando(null)
+    }
+  }
+
+  // Invitado (no socio): sin habilitar solo juega torneos; habilitado entra a escalera, retos y reservas.
+  const habilitarInvitado = async (jugadorId: string, habilitar: boolean) => {
+    if (!confirm(habilitar
+      ? '¿Habilitar a este invitado para la escalera, los retos y las reservas?'
+      : '¿Quitarle la habilitación? Solo podrá jugar los torneos a los que lo invite el club.')) return
+    setVerificando(jugadorId)
+    try {
+      const res = await fetch('/api/admin/habilitar-invitado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId, habilitar }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al actualizar')
@@ -2564,7 +2586,21 @@ export default function AdminPage() {
                             </td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>{player.telefono}</td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>
-                              {player.numero_accion || '—'}
+                              {player.es_invitado ? (
+                                <div>
+                                  <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#5b2a86', background: '#efe3ff', padding: '2px 8px', borderRadius: '8px' }}>
+                                    Invitado{player.invitado_habilitado_at ? ' · habilitado' : ''}
+                                  </span>
+                                  <button
+                                    onClick={() => habilitarInvitado(player.id, !player.invitado_habilitado_at)}
+                                    disabled={verificando === player.id}
+                                    title="Habilitado: puede entrar a la escalera, retar y reservar. Sin habilitar: solo torneos a los que lo invite el club."
+                                    style={{ display: 'block', marginTop: '4px', background: 'none', border: '1px solid #5b2a86', color: '#5b2a86', padding: '2px 6px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}
+                                  >
+                                    {player.invitado_habilitado_at ? 'Quitar habilitación' : 'Habilitar escalera y reservas'}
+                                  </button>
+                                </div>
+                              ) : (player.numero_accion || '—')}
                               {player.numero_accion_coincide === false && (
                                 <span
                                   title={`La IA leyó "${player.numero_accion_ocr}" en el carné, pero el jugador escribió "${player.numero_accion}" — revisa la foto antes de verificarlo.`}

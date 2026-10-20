@@ -7,6 +7,7 @@ import { cooldownPausado } from '@/lib/cooldownReto'
 import { temporadaCerradaParaRetos, fechaDespuesDelCierre, mensajeTemporadaCerrada, mensajeFechaDespuesDelCierre } from '@/lib/cierreTemporada'
 import { buscarChoqueCancha, buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
 import { DURACION_RETO_MIN } from '@/lib/reservas'
+import { bloqueoPorInvitado } from '@/lib/invitados'
 
 const RANGO_RETO = 3 // puedes retar hasta 3 posiciones arriba de ti — debe coincidir con ladder/page.tsx
 const CANCHAS_VALIDAS = ['HGV1', 'HGV2', 'FORANEA']
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
     }
 
     const db = supabaseServer()
+
+    // Invitado sin habilitar: solo torneos (escalera, retos y reservas son para socios).
+    const bloqueoInvitado = await bloqueoPorInvitado(db, session.id)
+    if (bloqueoInvitado) return NextResponse.json({ error: bloqueoInvitado }, { status: 403 })
 
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')

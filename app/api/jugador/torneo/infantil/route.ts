@@ -37,7 +37,7 @@ export async function GET() {
     const { data: inscripciones, error: errIns } = categoriaIds.length
       ? await db
           .from('torneo_inscripciones')
-          .select('id, categoria_id, menor_id, estado, categoria_certificada_at, created_at')
+          .select('id, categoria_id, menor_id, estado, categoria_certificada_at, invitado_autorizado_at, created_at')
           .in('categoria_id', categoriaIds)
           .neq('estado', 'retirada')
       : { data: [], error: null }
@@ -71,6 +71,9 @@ export async function GET() {
             representanteJugadorId: session.id,
             certificada: !!i.categoria_certificada_at,
             pagos: suyos.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+            soloSocios: torneo.solo_socios,
+            menorConAccion: !!m.numero_accion?.trim(),
+            invitadoAutorizado: !!i.invitado_autorizado_at,
           })
           return {
             id: i.id,

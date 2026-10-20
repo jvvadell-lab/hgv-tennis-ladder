@@ -140,7 +140,7 @@ export function normalizarFichaMenor(entrada: any, hoy: string): { error: string
 
 export type DatosInscripcionMenor = {
   estadoTorneo: EstadoTorneo
-  soloSocios: boolean
+  soloSocios: boolean            // un no socio se inscribe igual; queda pendiente de autorización
   fechaCorte: string
   categoria: CategoriaInfantil & Pick<TorneoCategoria, 'cupo' | 'es_infantil'>
   menor: { nombre: string; genero: string; fecha_nacimiento: string; numero_accion: string | null }
@@ -166,7 +166,6 @@ export function validarInscripcionMenor(d: DatosInscripcionMenor): { ok: false; 
   if (!generoAdmitido(categoria.genero, menor.genero)) {
     return { ok: false, error: categoria.genero === 'damas' ? `${categoria.nombre} es solo para niñas` : `${categoria.nombre} es solo para niños` }
   }
-  if (d.soloSocios && !menor.numero_accion) return { ok: false, error: 'El torneo es solo para socios: indica el N.º de acción' }
 
   if (d.categoriasDelMenor.includes(categoria.id)) return { ok: false, error: `${menor.nombre} ya está inscrito en ${categoria.nombre}` }
   if (d.categoriasDelMenor.length >= MAX_CATEGORIAS_POR_JUGADOR) {
@@ -187,6 +186,11 @@ export type DatosEstadoInscripcionMenor = {
   representanteJugadorId: string
   certificada: boolean
   pagos: { jugador_id: string; validado: boolean }[]
+  // Torneo solo para socios: un menor sin N.º de acción entra como invitado
+  // / wild card con la autorización del admin.
+  soloSocios: boolean
+  menorConAccion: boolean
+  invitadoAutorizado: boolean
 }
 
 export function pendientesInscripcionMenor(d: DatosEstadoInscripcionMenor): Pendiente[] {
@@ -196,6 +200,7 @@ export function pendientesInscripcionMenor(d: DatosEstadoInscripcionMenor): Pend
     pendientes.push({ tipo: suyos.length ? 'pago_por_validar' : 'pago', jugadorId: d.representanteJugadorId })
   }
   if (!d.certificada) pendientes.push({ tipo: 'categoria_por_certificar', jugadorId: d.menorId })
+  if (d.soloSocios && !d.menorConAccion && !d.invitadoAutorizado) pendientes.push({ tipo: 'invitado_por_autorizar', jugadorId: d.menorId })
   return pendientes
 }
 

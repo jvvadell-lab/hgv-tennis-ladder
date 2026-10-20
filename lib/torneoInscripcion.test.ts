@@ -148,8 +148,10 @@ describe('estado de la inscripción', () => {
   const base = {
     estado: 'pendiente_pago' as const,
     nivelCategoria: 'sexta' as const,
-    jugadores: [{ id: 'ana', categoria_torneo: 'sexta' }, { id: 'beto', categoria_torneo: 'sexta_novatos' }],
+    jugadores: [{ id: 'ana', categoria_torneo: 'sexta', es_invitado: false }, { id: 'beto', categoria_torneo: 'sexta_novatos', es_invitado: false }],
     pagos: [{ jugador_id: 'ana', validado: true }, { jugador_id: 'beto', validado: true }],
+    soloSocios: true,
+    invitadoAutorizado: false,
   }
 
   it('confirmada con los dos pagos validados y categoría oficial compatible', () => {
@@ -172,19 +174,27 @@ describe('estado de la inscripción', () => {
   })
 
   it('pagos al día pero sin categoría oficial: no se confirma', () => {
-    const d = { ...base, jugadores: [{ id: 'ana', categoria_torneo: 'sexta' }, { id: 'beto', categoria_torneo: null }] }
+    const d = { ...base, jugadores: [{ id: 'ana', categoria_torneo: 'sexta', es_invitado: false }, { id: 'beto', categoria_torneo: null, es_invitado: false }] }
     expect(pendientesInscripcion(d)).toEqual([{ tipo: 'categoria', jugadorId: 'beto' }])
     expect(estadoInscripcionCalculado(d)).toBe('pendiente_pago')
   })
 
   it('categoría oficial incompatible: vuelve a pendiente', () => {
-    const d = { ...base, estado: 'confirmada' as const, jugadores: [{ id: 'ana', categoria_torneo: 'quinta' }, { id: 'beto', categoria_torneo: 'sexta' }] }
+    const d = { ...base, estado: 'confirmada' as const, jugadores: [{ id: 'ana', categoria_torneo: 'quinta', es_invitado: false }, { id: 'beto', categoria_torneo: 'sexta', es_invitado: false }] }
     expect(pendientesInscripcion(d)).toEqual([{ tipo: 'categoria_incompatible', jugadorId: 'ana' }])
     expect(estadoInscripcionCalculado(d)).toBe('pendiente_pago')
   })
 
   it('una retirada sigue retirada', () => {
     expect(estadoInscripcionCalculado({ ...base, estado: 'retirada' })).toBe('retirada')
+  })
+
+  it('solo socios: la pareja con un invitado no se confirma sin la autorización del admin', () => {
+    const conInvitado = { ...base, jugadores: [base.jugadores[0], { ...base.jugadores[1], es_invitado: true }] }
+    expect(pendientesInscripcion(conInvitado)).toEqual([{ tipo: 'invitado_por_autorizar', jugadorId: 'beto' }])
+    expect(estadoInscripcionCalculado(conInvitado)).toBe('pendiente_pago')
+    expect(estadoInscripcionCalculado({ ...conInvitado, invitadoAutorizado: true })).toBe('confirmada')
+    expect(estadoInscripcionCalculado({ ...conInvitado, soloSocios: false })).toBe('confirmada')
   })
 })
 

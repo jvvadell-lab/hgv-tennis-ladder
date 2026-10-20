@@ -23,7 +23,7 @@ export async function GET() {
 
     const { data: yo, error: errYo } = await db
       .from('jugadores')
-      .select('id, nombre, genero, categoria, categoria_torneo')
+      .select('id, nombre, genero, categoria, categoria_torneo, es_invitado')
       .eq('id', session.id)
       .single()
     if (errYo) throw errYo
@@ -40,7 +40,7 @@ export async function GET() {
     const { data: inscripciones, error: errIns } = categoriaIds.length
       ? await db
           .from('torneo_inscripciones')
-          .select('id, categoria_id, jugador1_id, jugador2_id, estado, created_at')
+          .select('id, categoria_id, jugador1_id, jugador2_id, estado, invitado_autorizado_at, created_at')
           .in('categoria_id', categoriaIds)
           .neq('estado', 'retirada')
       : { data: [], error: null }
@@ -55,7 +55,7 @@ export async function GET() {
     const [{ data: parejas, error: errPar }, { data: pagos, error: errPag }, { data: disponibilidad, error: errDisp }, { data: candidatos, error: errCand }] =
       await Promise.all([
         parejaIds.length
-          ? db.from('jugadores').select('id, nombre, categoria_torneo').in('id', parejaIds)
+          ? db.from('jugadores').select('id, nombre, categoria_torneo, es_invitado').in('id', parejaIds)
           : Promise.resolve({ data: [] as any[], error: null }),
         mias.length
           ? db
@@ -80,6 +80,7 @@ export async function GET() {
 
     const nombreDe = new Map<string, string>([[yo.id, yo.nombre], ...(parejas || []).map((p: any) => [p.id, p.nombre] as [string, string])])
     const categoriaTorneoDe = new Map<string, string | null>([[yo.id, yo.categoria_torneo], ...(parejas || []).map((p: any) => [p.id, p.categoria_torneo] as [string, string | null])])
+    const esInvitadoDe = new Map<string, boolean>([[yo.id, !!yo.es_invitado], ...(parejas || []).map((p: any) => [p.id, !!p.es_invitado] as [string, boolean])])
     const catPorId = new Map((categorias || []).map((c) => [c.id, c]))
 
     const misInscripciones = mias.map((i) => {
@@ -89,8 +90,10 @@ export async function GET() {
       const pendientes = i.estado === 'retirada' ? [] : pendientesInscripcion({
         estado: i.estado,
         nivelCategoria: categoria.categoria_nivel as Nivel | null,
-        jugadores: jugadorIds.map((id) => ({ id, categoria_torneo: categoriaTorneoDe.get(id) ?? null })),
+        jugadores: jugadorIds.map((id) => ({ id, categoria_torneo: categoriaTorneoDe.get(id) ?? null, es_invitado: esInvitadoDe.get(id) ?? false })),
         pagos: suyos.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+        soloSocios: torneo.solo_socios,
+        invitadoAutorizado: !!i.invitado_autorizado_at,
       })
       const parejaId = i.jugador1_id === session.id ? i.jugador2_id : i.jugador1_id
       return {

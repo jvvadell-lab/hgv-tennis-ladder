@@ -325,7 +325,7 @@ function FormFicha({ ficha, onCancelar, onListo }: { ficha: Representado | null;
             {PARENTESCOS.map((p) => <option key={p} value={p}>{ETIQUETA_PARENTESCO[p]}</option>)}
           </select>
         </div>
-        <div><label style={labelStyle}>N.º de acción (opcional)</label><input {...campo('numero_accion')} style={inputStyle} /></div>
+        <div><label style={labelStyle}>N.º de acción del socio (sin acción entra como invitado, si el admin lo autoriza)</label><input {...campo('numero_accion')} style={inputStyle} /></div>
       </div>
       <p style={{ ...labelStyle, margin: '14px 0 6px 0' }}>Contacto de emergencia</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>

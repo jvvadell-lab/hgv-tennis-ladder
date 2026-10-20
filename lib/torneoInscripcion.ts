@@ -144,7 +144,7 @@ export function mensajeErrorBaseInscripcion(mensaje: string): string | null {
     'Una inscripción de single no lleva pareja',
     'La edad del menor no corresponde a la categoría',
     'El género del menor no corresponde a la categoría',
-    'El torneo es solo para socios: falta el N.º de acción del menor',
+    'El torneo es solo para socios: falta la autorización del admin como invitado / wild card',
     'El menor ya está inscrito en esta categoría',
     'Un menor puede inscribirse en máximo 2 categorías del torneo',
     'Un menor solo puede inscribirse en una categoría infantil',
@@ -165,12 +165,17 @@ export type Pendiente =
   | { tipo: 'categoria_incompatible'; jugadorId: string } // la oficial no admite esta categoría
   // Infantil (lib/torneoInfantil.ts): jugadorId = id del menor.
   | { tipo: 'categoria_por_certificar'; jugadorId: string }
+  // Torneo solo para socios: un invitado (o menor sin N.º de acción) necesita
+  // la autorización del admin como invitado / wild card.
+  | { tipo: 'invitado_por_autorizar'; jugadorId: string }
 
 export type DatosEstadoInscripcion = {
   estado: EstadoInscripcion
   nivelCategoria: Nivel | null
-  jugadores: { id: string; categoria_torneo: string | null }[]
+  jugadores: { id: string; categoria_torneo: string | null; es_invitado: boolean }[]
   pagos: { jugador_id: string; validado: boolean }[]
+  soloSocios: boolean
+  invitadoAutorizado: boolean   // torneo_inscripciones.invitado_autorizado_at
 }
 
 export function pendientesInscripcion(d: DatosEstadoInscripcion): Pendiente[] {
@@ -182,6 +187,7 @@ export function pendientesInscripcion(d: DatosEstadoInscripcion): Pendiente[] {
     }
     if (!j.categoria_torneo) pendientes.push({ tipo: 'categoria', jugadorId: j.id })
     else if (!nivelAdmitido(d.nivelCategoria, j.categoria_torneo)) pendientes.push({ tipo: 'categoria_incompatible', jugadorId: j.id })
+    if (d.soloSocios && j.es_invitado && !d.invitadoAutorizado) pendientes.push({ tipo: 'invitado_por_autorizar', jugadorId: j.id })
   }
   return pendientes
 }
@@ -201,6 +207,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
       case 'categoria': return 'Falta que el admin confirme tu categoría'
       case 'categoria_incompatible': return 'Tu categoría oficial no corresponde a esta categoría'
       case 'categoria_por_certificar': return 'Falta que el admin certifique la categoría'
+      case 'invitado_por_autorizar': return 'Eres invitado: falta que el admin te autorice (invitado / wild card)'
     }
   }
   switch (p.tipo) {
@@ -209,6 +216,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
     case 'categoria': return `Falta confirmar la categoría de ${nombre}`
     case 'categoria_incompatible': return `La categoría oficial de ${nombre} no corresponde a esta categoría`
     case 'categoria_por_certificar': return `Falta certificar la categoría de ${nombre}`
+    case 'invitado_por_autorizar': return `${nombre} no es socio: falta autorizarlo como invitado / wild card`
   }
 }
 

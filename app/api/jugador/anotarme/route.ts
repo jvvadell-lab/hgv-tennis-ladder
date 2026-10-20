@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { hoyEnCaracas } from '@/lib/tiempo'
+import { bloqueoPorInvitado } from '@/lib/invitados'
 
 export async function POST(request: Request) {
   try {
@@ -17,6 +18,10 @@ export async function POST(request: Request) {
     if (!temporadaId) return NextResponse.json({ error: 'Falta el id de la temporada' }, { status: 400 })
 
     const db = supabaseServer()
+
+    // Invitado sin habilitar: solo torneos (escalera, retos y reservas son para socios).
+    const bloqueoInvitado = await bloqueoPorInvitado(db, session.id)
+    if (bloqueoInvitado) return NextResponse.json({ error: bloqueoInvitado }, { status: 403 })
 
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')

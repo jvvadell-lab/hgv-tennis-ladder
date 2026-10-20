@@ -67,6 +67,9 @@ function RegisterForm() {
     pin: '',
     numeroAccion: ''
   })
+  // Invitado (no socio): cuenta sin N.º de acción, solo para los torneos a
+  // los que lo invite el club, salvo que un admin lo habilite (lib/invitados.ts).
+  const [esInvitado, setEsInvitado] = useState(false)
   const [fotoCarnet, setFotoCarnet] = useState<File | null>(null)
   const [previewCarnet, setPreviewCarnet] = useState<string | null>(null)
   const [fotoCarnetError, setFotoCarnetError] = useState('')
@@ -122,7 +125,7 @@ function RegisterForm() {
       // Si el jugador adjuntó la foto de su carné, la subimos primero al bucket
       // "fotos-partidos" (carpeta carnets/) y guardamos la URL pública resultante.
       let fotoCarnetUrl: string | null = null
-      if (fotoCarnet) {
+      if (fotoCarnet && !esInvitado) {
         const extension = fotoCarnet.name.split('.').pop() || 'jpg'
         const nombreArchivo = `carnets/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
         const { error: errorSubida } = await supabase.storage
@@ -150,7 +153,8 @@ function RegisterForm() {
           categoria: formData.categoria,
           genero: formData.genero,
           pin: formData.pin,
-          numero_accion: formData.numeroAccion,
+          numero_accion: esInvitado ? null : formData.numeroAccion,
+          es_invitado: esInvitado,
           foto_carnet_url: fotoCarnetUrl,
           activo: true,
           token_verificacion: tokenVerificacion,
@@ -171,7 +175,7 @@ function RegisterForm() {
 
         // Verificación automática del carné (si subieron foto) — también en
         // segundo plano, no bloquea el registro.
-        fetch('/api/registro/verificar-carnet', {
+        if (!esInvitado) fetch('/api/registro/verificar-carnet', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jugadorId: nuevoJugador.id }),
@@ -182,6 +186,7 @@ function RegisterForm() {
       setEmailRegistrado(emailNormalizado)
       setRegistroExitoso(true)
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
+      setEsInvitado(false)
       quitarFotoCarnet()
     } catch (err: any) {
       if (err.message?.includes('jugadores_email_key')) {
@@ -317,6 +322,17 @@ function RegisterForm() {
             </div>
           </div>
 
+          <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '18px', fontSize: '14px', color: 'var(--color-ink)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={esInvitado} onChange={(e) => setEsInvitado(e.target.checked)} style={{ marginTop: '3px' }} />
+            <span>
+              <strong>No soy socio: me registro como invitado</strong>
+              <span style={{ display: 'block', fontSize: '12px', color: 'var(--color-line)', marginTop: '2px' }}>
+                Podrás jugar los torneos a los que te invite el club. La escalera, los retos y las reservas son para socios, salvo que un administrador te habilite.
+              </span>
+            </span>
+          </label>
+
+          {!esInvitado && <>
           <div style={{ marginBottom: '18px' }}>
             <label style={labelStyle}>Número de acción (socio) *</label>
             <input
@@ -367,6 +383,7 @@ function RegisterForm() {
               </div>
             )}
           </div>
+          </>}
 
           <div style={{ marginBottom: '18px' }}>
             <label style={labelStyle}>Género *</label>

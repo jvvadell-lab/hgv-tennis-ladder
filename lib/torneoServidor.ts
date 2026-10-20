@@ -47,17 +47,17 @@ export type MenorConRepresentante = {
 export async function recalcularInscripcion(db: SupabaseClient, inscripcionId: string): Promise<ResultadoRecalculo> {
   const { data: ins, error } = await db
     .from('torneo_inscripciones')
-    .select('id, estado, jugador1_id, jugador2_id, menor_id, categoria_certificada_at, torneo_categorias:categoria_id(nombre, categoria_nivel, torneos:torneo_id(nombre))')
+    .select('id, estado, jugador1_id, jugador2_id, menor_id, categoria_certificada_at, invitado_autorizado_at, torneo_categorias:categoria_id(nombre, categoria_nivel, torneos:torneo_id(nombre, solo_socios))')
     .eq('id', inscripcionId)
     .single()
   if (error) throw error
 
-  const categoria = ins.torneo_categorias as unknown as { nombre: string; categoria_nivel: Nivel | null; torneos: { nombre: string } }
+  const categoria = ins.torneo_categorias as unknown as { nombre: string; categoria_nivel: Nivel | null; torneos: { nombre: string; solo_socios: boolean } }
   if (ins.menor_id) return recalcularInscripcionMenor(db, ins, categoria)
   const jugadorIds = [ins.jugador1_id, ins.jugador2_id].filter(Boolean) as string[]
 
   const [{ data: jugadores, error: errJ }, { data: pagos, error: errP }] = await Promise.all([
-    db.from('jugadores').select('id, categoria_torneo').in('id', jugadorIds),
+    db.from('jugadores').select('id, categoria_torneo, es_invitado').in('id', jugadorIds),
     db.from('pagos').select('jugador_id, validado').eq('torneo_inscripcion_id', inscripcionId),
   ])
   if (errJ) throw errJ
@@ -66,8 +66,10 @@ export async function recalcularInscripcion(db: SupabaseClient, inscripcionId: s
   const datos = {
     estado: ins.estado as EstadoInscripcion,
     nivelCategoria: categoria.categoria_nivel,
-    jugadores: jugadores || [],
+    jugadores: (jugadores || []).map((j) => ({ id: j.id, categoria_torneo: j.categoria_torneo, es_invitado: !!j.es_invitado })),
     pagos: (pagos || []).map((p) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+    soloSocios: !!categoria.torneos.solo_socios,
+    invitadoAutorizado: !!ins.invitado_autorizado_at,
   }
   const despues = estadoInscripcionCalculado(datos)
   if (despues !== ins.estado) {
@@ -90,11 +92,11 @@ export async function recalcularInscripcion(db: SupabaseClient, inscripcionId: s
 // y la categoría certificada por el admin (SPEC §14.2).
 async function recalcularInscripcionMenor(
   db: SupabaseClient,
-  ins: { id: string; estado: string; menor_id: string; categoria_certificada_at: string | null },
-  categoria: { nombre: string; torneos: { nombre: string } }
+  ins: { id: string; estado: string; menor_id: string; categoria_certificada_at: string | null; invitado_autorizado_at: string | null },
+  categoria: { nombre: string; torneos: { nombre: string; solo_socios: boolean } }
 ): Promise<ResultadoRecalculo> {
   const [{ data: menor, error: errM }, { data: pagos, error: errP }] = await Promise.all([
-    db.from('torneo_menores').select('id, nombre, apellido, representante_jugador_id').eq('id', ins.menor_id).single(),
+    db.from('torneo_menores').select('id, nombre, apellido, representante_jugador_id, numero_accion').eq('id', ins.menor_id).single(),
     db.from('pagos').select('jugador_id, validado').eq('torneo_inscripcion_id', ins.id),
   ])
   if (errM) throw errM
@@ -106,6 +108,9 @@ async function recalcularInscripcionMenor(
     representanteJugadorId: menor.representante_jugador_id,
     certificada: !!ins.categoria_certificada_at,
     pagos: (pagos || []).map((p) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+    soloSocios: !!categoria.torneos.solo_socios,
+    menorConAccion: !!menor.numero_accion?.trim(),
+    invitadoAutorizado: !!ins.invitado_autorizado_at,
   }
   const despues = estadoInscripcionMenorCalculado(datos)
   if (despues !== ins.estado) {
@@ -120,7 +125,7 @@ async function recalcularInscripcionMenor(
     antes: ins.estado as EstadoInscripcion,
     despues,
     pendientes: pendientesInscripcionMenor(datos),
-    menor: menor as MenorConRepresentante,
+    menor: { id: menor.id, nombre: menor.nombre, apellido: menor.apellido, representante_jugador_id: menor.representante_jugador_id },
   }
 }
 

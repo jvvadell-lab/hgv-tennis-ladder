@@ -34,7 +34,7 @@ export async function GET() {
     const { data: inscripciones, error: errIns } = categoriaIds.length
       ? await db
           .from('torneo_inscripciones')
-          .select('id, categoria_id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, categoria_certificada_at, siembra, bombo, estado, inscrita_por, inscrita_por_admin, created_at')
+          .select('id, categoria_id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, categoria_certificada_at, invitado_autorizado_at, siembra, bombo, estado, inscrita_por, inscrita_por_admin, created_at')
           .in('categoria_id', categoriaIds)
           .order('created_at')
       : { data: [], error: null }
@@ -56,7 +56,7 @@ export async function GET() {
 
     const [{ data: jugadores, error: errJug }, { data: pagos, error: errPag }, { data: disponibilidad, error: errDisp }, { data: activos, error: errAct }] = await Promise.all([
       jugadorIds.length
-        ? db.from('jugadores').select('id, nombre, genero, categoria, categoria_torneo, telefono, email').in('id', jugadorIds)
+        ? db.from('jugadores').select('id, nombre, genero, categoria, categoria_torneo, telefono, email, es_invitado').in('id', jugadorIds)
         : Promise.resolve({ data: [] as any[], error: null }),
       inscripcionIds.length
         ? db
@@ -93,6 +93,9 @@ export async function GET() {
           representanteJugadorId: m.representante_jugador_id,
           certificada: !!i.categoria_certificada_at,
           pagos: suyos.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+          soloSocios: torneo.solo_socios,
+          menorConAccion: !!m.numero_accion?.trim(),
+          invitadoAutorizado: !!i.invitado_autorizado_at,
         })
         return {
           ...i,
@@ -114,8 +117,10 @@ export async function GET() {
       const pendientes = i.estado === 'retirada' ? [] : pendientesInscripcion({
         estado: i.estado,
         nivelCategoria: catPorId.get(i.categoria_id)!.categoria_nivel as Nivel | null,
-        jugadores: ids.map((id) => ({ id, categoria_torneo: jugadorPorId.get(id)?.categoria_torneo ?? null })),
+        jugadores: ids.map((id) => ({ id, categoria_torneo: jugadorPorId.get(id)?.categoria_torneo ?? null, es_invitado: !!jugadorPorId.get(id)?.es_invitado })),
         pagos: suyos.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+        soloSocios: torneo.solo_socios,
+        invitadoAutorizado: !!i.invitado_autorizado_at,
       })
       return {
         ...i,

@@ -42,6 +42,7 @@ type Jugador = {
   categoria_torneo: string | null
   telefono: string | null
   email: string | null
+  es_invitado: boolean
 }
 
 type Pago = {
@@ -81,6 +82,7 @@ type Inscripcion = {
   menor_nombre_publico: string | null
   siembra: number | null
   bombo: number | null
+  invitado_autorizado_at: string | null
   jugadores: Jugador[]
   menor: Menor | null
   pagos: Pago[]
@@ -337,6 +339,29 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                   </ul>
                 )}
 
+                {ins.estado !== 'retirada' && (ins.invitado_autorizado_at || ins.pendientes.some((p) => p.tipo === 'invitado_por_autorizar')) && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12px', margin: '0 0 8px 0' }}>
+                    {ins.invitado_autorizado_at
+                      ? <span style={{ color: '#1e6b34', fontWeight: 'bold' }}>🎟️ Autorizado como invitado / wild card el {formatearFechaHora(ins.invitado_autorizado_at)}</span>
+                      : <span style={{ color: '#8a5a00', fontWeight: 'bold' }}>🎟️ No socio: el torneo es solo para socios</span>}
+                    {esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && (
+                      <button
+                        disabled={ocupado === `invitado-${ins.id}`}
+                        onClick={() => {
+                          const autorizar = !ins.invitado_autorizado_at
+                          if (!confirm(autorizar
+                            ? `¿Autorizar a ${nombreInscripcion(ins)} como invitado / wild card en ${c.nombre}?`
+                            : `¿Quitar la autorización de invitado / wild card a ${nombreInscripcion(ins)}? La inscripción vuelve a quedar pendiente.`)) return
+                          accion(`invitado-${ins.id}`, 'autorizar-invitado', { inscripcionId: ins.id, autorizar }, autorizar ? 'Invitado / wild card autorizado' : 'Autorización quitada')
+                        }}
+                        style={boton(ins.invitado_autorizado_at ? '#c0392b' : '#1e6b34', !ins.invitado_autorizado_at)}
+                      >
+                        {ins.invitado_autorizado_at ? 'Quitar autorización' : 'Autorizar invitado / wild card'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {ins.menor ? (
                   <FichaMenorAdmin
                     ins={ins}
@@ -370,7 +395,10 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                         return (
                           <tr key={j.id} style={{ borderTop: '1px solid #eee', verticalAlign: 'top' }}>
                             <td style={td}>
-                              <div style={{ fontWeight: 'bold' }}>{j.nombre}</div>
+                              <div style={{ fontWeight: 'bold' }}>
+                                {j.nombre}
+                                {j.es_invitado && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 6px', borderRadius: '999px', background: '#efe3ff', color: '#5b2a86' }}>Invitado</span>}
+                              </div>
                               <div style={{ color: '#777' }}>
                                 {ETIQUETA_GENERO_JUGADOR[j.genero] || j.genero} · escalera: {ETIQUETA_NIVEL[j.categoria as Nivel] || j.categoria}
                               </div>
