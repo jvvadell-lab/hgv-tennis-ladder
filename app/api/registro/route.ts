@@ -10,7 +10,7 @@ const MENSAJE_EMAIL_DUPLICADO =
 // service role solo los campos que devuelve validarRegistro (lib/registro.ts)
 // — el estado de verificación, el correo verificado, la categoría de torneo,
 // etc. nunca vienen del cliente. La clave anónima ya no puede insertar en
-// jugadores (migración 20261020130000_jugadores_cerrar_columnas_anon).
+// jugadores (migración 20261022124304_jugadores_cerrar_columnas_anon).
 export async function POST(request: Request) {
   try {
     const entrada = await request.json().catch(() => null)
