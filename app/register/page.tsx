@@ -3,6 +3,7 @@ import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import CropperCarnet from './CropperCarnet'
+import { formatTelefonoLocal } from '@/lib/registro'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,30 +26,6 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
   color: 'var(--color-ink)',
   fontSize: '14px',
-}
-
-// Convierte "juan garcía" o "JUAN GARCÍA" a "Juan García"
-function toTitleCase(str: string) {
-  return str
-    .toLowerCase()
-    .split(' ')
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-}
-
-// Da formato (XXX)-XXX-XXXX a los 10 dígitos del teléfono, mientras se escribe
-function formatTelefonoLocal(digits: string) {
-  const d = digits.replace(/\D/g, '').slice(0, 10)
-  const area = d.slice(0, 3)
-  const medio = d.slice(3, 6)
-  const final = d.slice(6, 10)
-  let out = ''
-  if (area) out += `(${area}`
-  if (area.length === 3) out += ')'
-  if (medio) out += `-${medio}`
-  if (final) out += `-${final}`
-  return out
 }
 
 function RegisterForm() {
@@ -136,59 +113,32 @@ function RegisterForm() {
         fotoCarnetUrl = publicUrlData.publicUrl
       }
 
-      // El correo debe quedar verificado antes de poder iniciar sesión — generamos
-      // el token ya mismo y lo guardamos junto con el resto de los datos del registro.
-      const tokenVerificacion = crypto.randomUUID()
-      const emailNormalizado = formData.email.trim().toLowerCase()
-
-      const { data: nuevoJugador, error } = await supabase
-        .from('jugadores')
-        .insert([{
-          nombre: toTitleCase(formData.name.trim()),
-          email: emailNormalizado,
-          telefono: `+58 ${formatTelefonoLocal(formData.phone)}`,
+      // El registro lo hace el servidor (/api/registro): valida los datos,
+      // genera el token de verificación y manda el correo de bienvenida.
+      const res = await fetch('/api/registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: formData.name,
+          email: formData.email,
+          telefono: formData.phone,
           categoria: formData.categoria,
           genero: formData.genero,
           pin: formData.pin,
-          numero_accion: formData.numeroAccion,
-          foto_carnet_url: fotoCarnetUrl,
-          activo: true,
-          token_verificacion: tokenVerificacion,
-        }])
-        .select('id')
-        .single()
-
-      if (error) throw error
-
-      // Correo de bienvenida (con el enlace de verificación) en segundo plano —
-      // si falla, no afecta el registro ya hecho; el jugador puede reenviarlo después.
-      if (nuevoJugador?.id) {
-        fetch('/api/registro/bienvenida', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jugadorId: nuevoJugador.id }),
-        }).catch(() => {})
-
-        // Verificación automática del carné (si subieron foto) — también en
-        // segundo plano, no bloquea el registro.
-        fetch('/api/registro/verificar-carnet', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jugadorId: nuevoJugador.id }),
-        }).catch(() => {})
-      }
+          numeroAccion: formData.numeroAccion,
+          fotoCarnetUrl,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Error al registrar — intenta de nuevo.')
 
       // Ya no lo dejamos logueado de una vez — primero debe confirmar su correo.
-      setEmailRegistrado(emailNormalizado)
+      setEmailRegistrado(data.email)
       setRegistroExitoso(true)
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
       quitarFotoCarnet()
     } catch (err: any) {
-      if (err.message?.includes('jugadores_email_key')) {
-        setError('❌ Ya existe un jugador registrado con ese correo. Si es tuyo, usa "¿Olvidaste tu PIN?" en la página de inicio de sesión.')
-      } else {
-        setError('❌ Error al registrar: ' + err.message)
-      }
+      setError('❌ ' + err.message)
     } finally {
       setLoading(false)
     }

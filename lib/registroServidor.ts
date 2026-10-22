@@ -1,0 +1,161 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { enviarCorreo } from '@/lib/email'
+import { verificarNumeroAccion } from '@/lib/verificarAccion'
+
+// Lo que pasa después de un registro nuevo (/api/registro), en segundo plano:
+// el correo de bienvenida con el enlace de verificación y la lectura del
+// carné. Antes eran rutas públicas (/api/registro/bienvenida y
+// /verificar-carnet) que aceptaban cualquier jugadorId; ahora solo las llama
+// el servidor con el id que acaba de insertar.
+
+export async function enviarCorreoBienvenida(db: SupabaseClient, jugadorId: string): Promise<void> {
+  const { data: jugador, error } = await db
+    .from('jugadores')
+    .select('nombre, email, token_verificacion')
+    .eq('id', jugadorId)
+    .maybeSingle()
+  if (error) throw error
+  if (!jugador?.email) return
+
+  const enlaceVerificacion = jugador.token_verificacion
+    ? `https://hgv-tennis-ladder.vercel.app/verificar-correo?token=${jugador.token_verificacion}`
+    : null
+
+  const bloqueVerificacion = enlaceVerificacion
+    ? `
+      <div style="background: #f0f7fc; border: 2px solid #1c7ec4; border-radius: 8px; padding: 18px 20px; margin: 20px 0; text-align: center;">
+        <p style="margin: 0 0 12px 0; font-weight: bold; color: #0c5460; font-size: 15px;">📬 Un último paso: confirma tu correo</p>
+        <p style="margin: 0 0 16px 0; font-size: 14px; color: #333;">Antes de poder iniciar sesión, necesitamos que verifiques que este correo es tuyo.</p>
+        <a href="${enlaceVerificacion}" style="display: inline-block; background: #1c7ec4; color: #ffffff; text-decoration: none; font-weight: bold; padding: 12px 28px; border-radius: 6px; font-size: 15px;">
+          ✅ Verificar mi correo
+        </a>
+        <p style="margin: 14px 0 0 0; font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br />${enlaceVerificacion}</p>
+      </div>
+    `
+    : ''
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
+      <p style="font-size: 28px; margin: 0 0 10px 0;">🎾</p>
+      <h2 style="color: #1c7ec4; margin: 0 0 4px 0;">¡Bienvenidos a una nueva era del tenis en HGV!</h2>
+      <p>Estimados socios,</p>
+      <p>Hoy nos llena de orgullo anunciarles algo que nunca antes habíamos hecho en la historia de nuestro club: el <strong>Torneo Escalera Retos HGV</strong>.</p>
+      <p>Esto no se trata solo de ganar o perder. Se trata de competir con nobleza, medirnos con respeto, y fortalecer los lazos que nos hacen, ante todo, una hermandad. Cada reto que lances es una oportunidad para crecer como jugador — y para escribir, junto a todos nosotros, la primera página de esta escalera.</p>
+      <p>Ahora te toca a ti, <strong>${jugador.nombre || ''}</strong>. Anótate, reta, compite — y hazte parte de esta primera escalera que esperamos se convierta en tradición.</p>
+      <p>¡Nos vemos en cancha! 🎾🏆</p>
+
+      ${bloqueVerificacion}
+
+      <div style="background: #fdf6d8; border: 1px solid #d4e157; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+        <p style="margin: 0 0 10px 0; font-weight: bold; color: #1c7ec4; font-size: 15px;">✅ Para quedar listo, solo necesitas:</p>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
+          <tr>
+            <td style="padding: 4px 8px 4px 0; vertical-align: top; width: 24px;">💳</td>
+            <td style="padding: 4px 0; font-size: 14px;">Hacer tu pago de inscripción</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 8px 4px 0; vertical-align: top;">🪪</td>
+            <td style="padding: 4px 0; font-size: 14px;">Cargar la foto de tu carné de socio</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 8px 4px 0; vertical-align: top;">📝</td>
+            <td style="padding: 4px 0; font-size: 14px;">Reportar tu pago en el sistema</td>
+          </tr>
+        </table>
+        <p style="margin: 0 0 4px 0; font-size: 14px;">¡Y listo! Solo acompáñanos el día del sorteo:</p>
+        <p style="margin: 0; font-size: 17px; font-weight: bold; color: #0f1b26;">
+          🗓️ 5 de agosto · 🕖 7:00 pm<br />
+          📍 Canchas del Club HGV
+        </p>
+      </div>
+
+      <hr style="border: none; border-top: 1px solid #eee; margin: 26px 0;" />
+
+      <h3 style="color: #1c7ec4; margin: 0 0 14px 0;">Reglas de la Escalera de Retos HGV</h3>
+
+      <p style="margin: 0 0 4px 0;"><strong>● Para participar</strong></p>
+      <p style="margin: 0 0 18px 0;">
+        Debes anotarte a la temporada activa — es gratis, pero para que te incluyan en el sorteo de posiciones necesitas: un pago validado de la inscripción de esa temporada, y tu membresía verificada por un administrador.
+      </p>
+
+      <p style="margin: 0 0 4px 0;"><strong>● A quién puedes retar</strong></p>
+      <ul style="margin: 0 0 18px 0; padding-left: 18px;">
+        <li>Solo a quienes estén hasta 3 posiciones por encima de ti en el ranking.</li>
+        <li>El sorteo de la temporada debe haberse realizado antes de que se puedan lanzar retos.</li>
+        <li>No puedes retar a alguien que ya tenga un reto pendiente o aceptado con otra persona (aparece "ocupado").</li>
+        <li>Solo puedes tener un reto activo a la vez — ni tú ni tu rival pueden tener otro pendiente o aceptado al mismo tiempo.</li>
+      </ul>
+
+      <p style="margin: 0 0 4px 0;"><strong>● Reservar cancha para el partido</strong></p>
+      <ul style="margin: 0 0 18px 0; padding-left: 18px;">
+        <li>Cada partido de escalera bloquea la cancha por 1 hora y 30 minutos.</li>
+        <li>El sistema no te deja proponer un horario que choque con otro partido de escalera o con las clases de la Academia de Tenis.</li>
+        <li>Horarios de cancha (fines de semana, sin restricción en ambas): HGV 1, lunes a jueves de 8:00pm a 12:00am, viernes desde las 2:00pm. HGV 2, lunes a viernes de 6:00am a 2:00pm y de 7:00pm a 12:00am. Cancha foránea, sin restricción de horario del club.</li>
+      </ul>
+
+      <p style="margin: 0 0 4px 0;"><strong>● Aceptar o rechazar</strong></p>
+      <ul style="margin: 0 0 18px 0; padding-left: 18px;">
+        <li>Cuando alguien te reta, puedes aceptar (queda confirmado el partido) o rechazar (ambos quedan libres para retar de nuevo).</li>
+      </ul>
+
+      <p style="margin: 0 0 4px 0;"><strong>● Cargar el resultado</strong></p>
+      <ul style="margin: 0 0 18px 0; padding-left: 18px;">
+        <li>No puedes cargar el resultado antes de la fecha/hora programada del partido, salvo que un administrador autorice la carga anticipada.</li>
+        <li>Cualquiera de los dos jugadores puede cargar el resultado.</li>
+        <li>Si tu rival no se presentó, no cargas marcador — reportas directamente "no se presentó", y ganas por walkover una vez que un admin lo aprueba.</li>
+        <li>Todo resultado (normal o walkover) queda pendiente de validación — el ranking no se actualiza hasta que un administrador lo apruebe.</li>
+      </ul>
+
+      <p style="margin: 0 0 4px 0;"><strong>● Cómo cambia tu posición</strong></p>
+      <ul style="margin: 0 0 18px 0; padding-left: 18px;">
+        <li>Si ganas, tomas la posición de tu rival (intercambio de posiciones).</li>
+        <li>Si pierdes, te quedas donde estabas.</li>
+      </ul>
+
+      <p style="margin: 0 0 4px 0;"><strong>● Si te vas de viaje: modo standby</strong></p>
+      <ul style="margin: 0 0 18px 0; padding-left: 18px;">
+        <li>Desde "Mi Perfil" puedes activar el modo standby por 3 o 5 días — mientras dure, no te pueden retar y tú tampoco puedes retar a nadie.</li>
+        <li>Es una <strong>única vez por temporada</strong>: si eliges 3 días, no puedes pedir después otros 5 (ni viceversa). Elige bien antes de confirmar.</li>
+        <li>Solo se puede activar después de que se haya hecho el sorteo de la temporada.</li>
+      </ul>
+
+      <p style="margin: 24px 0 0 0;">Si tienes alguna duda, contacta a <strong>Johan Contreras</strong> al WhatsApp <strong>0424-4032313</strong> o escríbenos a <a href="mailto:hgvtennisclub@gmail.com" style="color: #1c7ec4;">hgvtennisclub@gmail.com</a>.</p>
+
+      <p style="margin-top: 20px;">Con cariño y espíritu deportivo,<br /><strong>Comisión de Tenis HGV</strong></p>
+
+      <hr style="border: none; border-top: 1px solid #eee; margin: 26px 0 16px 0;" />
+
+      <p style="text-align: center; font-size: 11px; color: #999; letter-spacing: 0.05em; text-transform: uppercase; margin: 0 0 10px 0;">Con el apoyo de nuestros patrocinantes</p>
+      <p style="text-align: center; margin: 0 0 20px 0;">
+        <img src="https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/Patrocinio%201.png" alt="Patrocinantes HGV Tennis Club" style="max-width: 100%; height: auto; display: inline-block;" />
+      </p>
+
+      <p style="color: #888; font-size: 13px; margin-top: 8px;">— HGV Tennis Club 🎾</p>
+    </div>
+  `
+
+  await enviarCorreo(jugador.email, '🎾 ¡Bienvenido a HGV Tennis Club! — Conoce la Escalera de Retos', html)
+}
+
+export async function verificarCarnetRegistro(db: SupabaseClient, jugadorId: string): Promise<void> {
+  const { data: jugador, error } = await db
+    .from('jugadores')
+    .select('foto_carnet_url, numero_accion, estado_verificacion')
+    .eq('id', jugadorId)
+    .maybeSingle()
+  if (error) throw error
+  if (!jugador?.foto_carnet_url) return // no hay foto, nada que verificar
+
+  const { ocr, coincide } = await verificarNumeroAccion(jugador.foto_carnet_url, jugador.numero_accion || '')
+
+  const updateData: any = { numero_accion_ocr: ocr, numero_accion_coincide: coincide }
+  // Si la IA confirma que el número coincide con la foto, verificamos la membresía
+  // automáticamente — así el admin no tiene que revisarlo a mano. Nunca reescribimos
+  // un "no_permitido" que un admin haya puesto a propósito.
+  if (coincide === true && jugador.estado_verificacion !== 'no_permitido') {
+    updateData.estado_verificacion = 'verificado'
+  }
+
+  const { error: errUpdate } = await db.from('jugadores').update(updateData).eq('id', jugadorId)
+  if (errUpdate) throw errUpdate
+}

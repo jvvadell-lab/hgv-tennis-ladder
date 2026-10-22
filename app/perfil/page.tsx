@@ -263,12 +263,9 @@ export default function PerfilPage() {
 
   useEffect(() => {
     if (!session || session.role !== 'jugador') return
-    supabase
-      .from('jugadores')
-      .select('nombre, email, telefono, numero_accion, categoria, genero, foto_carnet_url')
-      .eq('id', session.id)
-      .maybeSingle()
-      .then(({ data }) => {
+    fetch('/api/jugador/perfil')
+      .then((r) => r.json())
+      .then(({ jugador: data }) => {
         if (data) {
           setForm({
             nombre: data.nombre || '',
@@ -283,6 +280,7 @@ export default function PerfilPage() {
         }
         setLoading(false)
       })
+      .catch(() => setLoading(false))
   }, [session])
 
   async function guardar(e: React.FormEvent) {
