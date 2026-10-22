@@ -5,9 +5,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ESTADOS_RETO_OCUPAN_CANCHA } from '@/lib/choquesCancha'
 import { DURACION_RETO_MIN, DURACION_SINGLE_MIN, ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
-import { formatearFechaHora, instanteEnCaracas, sumarDiasEnCaracas } from '@/lib/tiempo'
-import { ETIQUETA_FASE, crucesTodosContraTodos, type CanchaTorneo, type EstadoPartido, type Fase, type Torneo } from '@/lib/torneo'
-import { codigoPartido, type ContextoProgramacion, type Franja, type Horario, type Ocupacion, type PartidoProg } from '@/lib/torneoProgramacion'
+import { ahora, formatearFechaHora, instanteEnCaracas, sumarDiasEnCaracas } from '@/lib/tiempo'
+import { CANCHAS_TORNEO, ETIQUETA_FASE, crucesTodosContraTodos, type CanchaTorneo, type EstadoPartido, type Fase, type Torneo } from '@/lib/torneo'
+import { codigoPartido, dependenciasDe, etiquetaPartido, revisarHorario, type ContextoProgramacion, type Franja, type Horario, type Ocupacion, type PartidoProg } from '@/lib/torneoProgramacion'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
 import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 
@@ -195,4 +195,124 @@ export async function avisarProgramacion(
       `,
     })
   }
+}
+
+// --- Guardar y publicar (los usan las rutas .../programacion/guardar y
+// .../publicar, y scripts/simular-torneo.ts) ---------------------------------
+
+export type Asignacion = { partidoId: string; cancha: string | null; inicio: string | null }
+
+export type ResultadoGuardar =
+  | { ok: true; guardados: number; avisos: string[] }
+  | { ok: false; status: number; error: string; errores?: string[]; avisos?: string[]; requiereConfirmar?: boolean }
+
+// Guarda horarios (la propuesta del asistente o una asignación a mano) o
+// los quita (cancha e inicio null). Revisa cada uno contra la programación
+// completa que quedaría: los errores no se guardan nunca; los avisos solo
+// con forzar = true. torneo_programar_partidos crea, mueve o borra el
+// bloqueo de cancha de cada partido en una transacción. Si la programación
+// ya está publicada, avisa a los afectados.
+export async function guardarProgramacion(
+  db: SupabaseClient,
+  torneo: Torneo,
+  asignaciones: Asignacion[],
+  forzar: boolean,
+  adminId: string,
+): Promise<ResultadoGuardar> {
+  if (!['sorteado', 'en_curso'].includes(torneo.estado)) {
+    return { ok: false, status: 400, error: 'La programación se arma después de publicar el sorteo' }
+  }
+  const { ctx, horarios, partidos } = await datosProgramacion(db, torneo)
+  const porId = new Map(partidos.map((p) => [p.id, p]))
+  const nuevos = new Map(horarios)
+  const cambiados: string[] = []
+  for (const a of asignaciones) {
+    const p = porId.get(a?.partidoId)
+    if (!p) return { ok: false, status: 404, error: 'Partido no encontrado' }
+    if (p.cerrado) return { ok: false, status: 400, error: `${etiquetaPartido(p)} ya tiene resultado: no se puede mover` }
+    if (a.cancha === null) {
+      nuevos.delete(p.id)
+    } else {
+      const inicio = typeof a.inicio === 'string' ? new Date(a.inicio).getTime() : NaN
+      if (!(CANCHAS_TORNEO as readonly string[]).includes(a.cancha) || Number.isNaN(inicio)) {
+        return { ok: false, status: 400, error: `Horario no válido para ${etiquetaPartido(p)}` }
+      }
+      nuevos.set(p.id, { cancha: a.cancha as CanchaTorneo, inicio })
+    }
+    cambiados.push(p.id)
+  }
+
+  const errores: string[] = []
+  const avisos: string[] = []
+  for (const id of cambiados) {
+    const h = nuevos.get(id)
+    if (!h) {
+      // Sin horario: ningún partido de llave programado puede depender de él.
+      for (const q of ctx.partidos) {
+        if (nuevos.has(q.id) && dependenciasDe(q, ctx.partidos).some((d) => d.id === id)) {
+          errores.push(`${etiquetaPartido(porId.get(id)!)}: primero quita el horario de ${etiquetaPartido(q)}, que depende de este partido`)
+        }
+      }
+      continue
+    }
+    const resto = new Map<string, Horario>(nuevos)
+    resto.delete(id)
+    const r = revisarHorario(ctx, resto, porId.get(id)!, h)
+    errores.push(...r.errores.map((e) => `${etiquetaPartido(porId.get(id)!)}: ${e}`))
+    avisos.push(...r.avisos.map((e) => `${etiquetaPartido(porId.get(id)!)}: ${e}`))
+  }
+  if (errores.length) return { ok: false, status: 400, error: 'Hay conflictos que impiden guardar', errores, avisos }
+  if (avisos.length && !forzar) return { ok: false, status: 409, error: 'Hay avisos: revisa y confirma para guardar igual', requiereConfirmar: true, errores: [], avisos }
+
+  const { error } = await db.rpc('torneo_programar_partidos', {
+    p_admin_id: adminId,
+    p_asignaciones: cambiados.map((id) => {
+      const h = nuevos.get(id)
+      return { partido_id: id, cancha: h?.cancha ?? null, inicio: h ? new Date(h.inicio).toISOString() : null }
+    }),
+  })
+  if (error) return { ok: false, status: 400, error: error.message }
+
+  if (torneo.programacion_publicada_at) {
+    try {
+      await avisarProgramacion(db, torneo.nombre, cambiados.map((id) => porId.get(id)!), nuevos, { cambio: true })
+    } catch (err: any) {
+      console.error('[torneo] No se pudo avisar el cambio de horario:', err.message)
+    }
+  }
+  return { ok: true, guardados: cambiados.length, avisos }
+}
+
+// Publica la programación (SPEC §4): registra quién y cuándo, y avisa a
+// cada jugador o representante (campana + correo) con sus partidos. Se
+// publica una vez; después, cada cambio de horario avisa a los afectados
+// desde guardarProgramacion.
+export async function publicarProgramacion(
+  db: SupabaseClient,
+  torneo: Torneo,
+  adminId: string,
+): Promise<{ ok: true; sinHorario: number } | { ok: false; status: number; error: string }> {
+  if (!['sorteado', 'en_curso'].includes(torneo.estado)) {
+    return { ok: false, status: 400, error: 'La programación se publica después del sorteo' }
+  }
+  if (torneo.programacion_publicada_at) return { ok: false, status: 400, error: 'La programación ya estaba publicada' }
+
+  const { horarios, partidos } = await datosProgramacion(db, torneo)
+  if (!horarios.size) return { ok: false, status: 400, error: 'Todavía no hay partidos con horario' }
+
+  const { data, error } = await db
+    .from('torneos')
+    .update({ programacion_publicada_at: ahora().toISOString(), programacion_publicada_por: adminId })
+    .eq('id', torneo.id)
+    .is('programacion_publicada_at', null)
+    .select('id')
+  if (error) throw error
+  if (!data?.length) return { ok: false, status: 400, error: 'La programación ya estaba publicada' }
+
+  try {
+    await avisarProgramacion(db, torneo.nombre, partidos.filter((p) => p.avisar.length && !p.cerrado), horarios, { cambio: false })
+  } catch (err: any) {
+    console.error('[torneo] No se pudo avisar la programación:', err.message)
+  }
+  return { ok: true, sinHorario: partidos.filter((p) => !horarios.has(p.id)).length }
 }
