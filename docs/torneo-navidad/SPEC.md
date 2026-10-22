@@ -212,6 +212,11 @@ Implementar como función pura `ordenarGrupo(partidos, inscripciones)` en `lib/t
 - Si el admin corrige un resultado ya validado, recalcular la tabla y los partidos dependientes que aún no se hayan jugado; si ya se jugaron, bloquear la corrección y avisar.
 - Para incidencias que el avance automático no resuelve (puestos vacantes), ver "Ajustar llave" en la sección 13.
 
+**Implementado (fase 6, 22-oct-2026):** `lib/torneoResultados.ts` (lógica pura, con tests) y `lib/torneoResultadosServidor.ts`. El jugador (o el representante de un menor) reporta desde **Mis partidos** (`/torneo/mis-partidos`). El admin valida, corrige y valida, o marca WO / doble WO desde **Torneo → 🏆 Resultados**. Cada validación recalcula el avance de toda la categoría (es idempotente).
+- Doble WO en la llave, según el defecto de §6: el partido siguiente queda con un solo clasificado, que **pasa por WO** (estado `wo` sin ausente, admitido por la migración `torneo_resultados`). Si los dos lados vienen de doble WO, ese partido también queda como doble WO. **[CONFIRMAR]**
+- Un puesto que sigue empatado (falta `desempate_manual`) no se llena en la llave y avisa al admin. El endpoint `…/resultados/desempate` fija el orden; todavía no tiene pantalla.
+- Pendiente: la corrección de un resultado ya validado (§8) y mostrar "ret." en la llave pública.
+
 ## 9. Pantallas
 
 **Públicas (/torneo):** pestañas Adultos | Infantil y una por categoría: tabla de grupos en vivo, calendario por día (cancha y hora) y llave gráfica (serie 1 arriba, serie 2 abajo; "1º grupo A" hasta que se conozca el clasificado, después nombre y marcador; en el celular se desliza por rondas). Resalta la inscripción del usuario con sesión (o de sus representados). En el Mixto, el handicap en la ficha del partido. De los menores solo se muestra `menor_nombre_publico`, nunca datos del representante. Acceso desde la home, /ladder y Mi Perfil.

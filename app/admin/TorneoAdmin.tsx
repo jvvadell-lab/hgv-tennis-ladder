@@ -22,6 +22,7 @@ import {
 } from '@/lib/torneoInfantil'
 import TorneoSorteo from './TorneoSorteo'
 import TorneoProgramacion from './TorneoProgramacion'
+import TorneoResultados from './TorneoResultados'
 import HorarioAcademia from '@/app/components/HorarioAcademia'
 
 // Pestaña Torneo del admin (Torneo Navidad, fase 3): inscripciones por
@@ -139,7 +140,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [categoriaSel, setCategoriaSel] = useState<string>('todas')
   const [verRetiradas, setVerRetiradas] = useState(false)
-  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'programacion' | 'academia'>('inscripciones')
+  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'programacion' | 'resultados' | 'academia'>('inscripciones')
 
   const cargar = async () => {
     try {
@@ -233,7 +234,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
 
       {esAdminCompleto && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd', overflowX: 'auto' }}>
-          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['programacion', '📅 Programación'], ['academia', '🧒 Horario academia']] as const).map(([id, etiqueta]) => (
+          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['programacion', '📅 Programación'], ['resultados', '🏆 Resultados'], ['academia', '🧒 Horario academia']] as const).map(([id, etiqueta]) => (
             <button
               key={id}
               onClick={() => setVista(id)}
@@ -259,6 +260,8 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       )}
 
       {vista === 'programacion' && esAdminCompleto && <TorneoProgramacion />}
+
+      {vista === 'resultados' && esAdminCompleto && <TorneoResultados />}
 
       {vista === 'academia' && esAdminCompleto && (
         <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
