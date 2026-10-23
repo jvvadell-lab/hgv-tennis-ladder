@@ -1,4 +1,4 @@
-// Prueba la migración 20261023180000_torneo_inscripciones_por_categoria en un
+// Prueba la migración 20261023183737_torneo_inscripciones_por_categoria en un
 // Postgres local (PGlite), sobre copias reducidas de las tablas del torneo y
 // el trigger torneo_inscripciones_validar como estaba en producción el
 // 23-oct-2026 (solo las columnas que usa el trigger).
@@ -8,7 +8,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 const MIGRACION = readFileSync(
-  join(__dirname, '../migrations/20261023180000_torneo_inscripciones_por_categoria.sql'),
+  join(__dirname, '../migrations/20261023183737_torneo_inscripciones_por_categoria.sql'),
   'utf8',
 )
 
