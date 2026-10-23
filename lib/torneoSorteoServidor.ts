@@ -5,9 +5,10 @@
 import { randomInt } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EstadoInscripcion, Nivel, Torneo } from '@/lib/torneo'
+import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
 import { pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
 import { pendientesInscripcionMenor } from '@/lib/torneoInfantil'
-import { pendientesQueBloqueanSorteo, type CategoriaParaSorteo, type InscripcionParaSorteo } from '@/lib/torneoSorteo'
+import { pendientesQueBloqueanSorteo, planCategoria, validarGruposSorteo, type CategoriaParaSorteo, type InscripcionParaSorteo, type MetodoSorteo, type PlanCategoria } from '@/lib/torneoSorteo'
 
 // Azar del sorteo con el generador criptográfico del servidor (no Math.random).
 export const azarSorteo = () => randomInt(0, 2 ** 32) / 2 ** 32
@@ -106,4 +107,83 @@ export async function nombresInscripciones(db: SupabaseClient, inscripciones: In
     i.id,
     i.menor_nombre_publico ?? [i.jugador1_id, i.jugador2_id].filter(Boolean).map((id) => nombre.get(id!) || '—').join(' / '),
   ]))
+}
+
+// Publica el sorteo (SPEC §3): vuelve a validar los grupos de la vista
+// previa contra las inscripciones vivas de ahora, regenera los partidos en
+// el servidor y escribe todo en una transacción con torneo_publicar_sorteo
+// (que también pasa el torneo a 'sorteado'). Después avisa a cada jugador.
+// La usan app/api/admin/torneo/sorteo/publicar y scripts/simular-torneo.ts.
+export async function publicarSorteo(
+  db: SupabaseClient,
+  torneo: Torneo,
+  metodo: MetodoSorteo,
+  grupos: unknown,
+  adminId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!['borrador', 'inscripcion'].includes(torneo.estado)) return { ok: false, error: 'El sorteo ya se hizo' }
+  if (!grupos || typeof grupos !== 'object') return { ok: false, error: 'Falta el sorteo a publicar' }
+
+  const categorias = await datosParaSorteo(db, torneo)
+  const bloqueos = categorias.flatMap((c) => c.bloqueos)
+  if (bloqueos.length) return { ok: false, error: `Antes del sorteo falta resolver: ${bloqueos.join(' · ')}` }
+  const planes: PlanCategoria[] = []
+  for (const c of categorias) {
+    const r = validarGruposSorteo(c, c.inscripciones, metodo, (grupos as Record<string, unknown>)[c.id])
+    if (!r.ok) return { ok: false, error: r.error }
+    planes.push(planCategoria(r.sorteo))
+  }
+
+  const { error } = await db.rpc('torneo_publicar_sorteo', {
+    p_torneo_id: torneo.id,
+    p_metodo: metodo,
+    p_admin_id: adminId,
+    p_plan: planes,
+  })
+  if (error) return { ok: false, error: error.message }
+
+  await avisarSorteo(db, torneo.id, torneo.nombre)
+  return { ok: true }
+}
+
+// Aviso a cada jugador (o representante) de su grupo. Informativo: si falla
+// no revierte el sorteo.
+async function avisarSorteo(db: SupabaseClient, torneoId: string, torneoNombre: string) {
+  try {
+    const { data: categorias, error: errCat } = await db.from('torneo_categorias').select('id, nombre').eq('torneo_id', torneoId)
+    if (errCat) throw errCat
+    const nombreCat = new Map((categorias || []).map((c) => [c.id, c.nombre as string]))
+    const { data: grupos, error: errG } = await db.from('torneo_grupos').select('id, letra, categoria_id').in('categoria_id', [...nombreCat.keys()])
+    if (errG) throw errG
+    const grupoPorId = new Map((grupos || []).map((g) => [g.id, g]))
+    const { data: miembros, error: errM } = await db
+      .from('torneo_grupo_miembros')
+      .select('grupo_id, torneo_inscripciones(jugador1_id, jugador2_id, menor_nombre_publico, torneo_menores(representante_jugador_id))')
+      .in('grupo_id', [...grupoPorId.keys()])
+    if (errM) throw errM
+
+    // Un aviso por persona, con todos sus grupos (puede jugar 2 categorías o representar a varios).
+    const porPersona = new Map<string, string[]>()
+    for (const m of (miembros || []) as any[]) {
+      const ins = m.torneo_inscripciones
+      const g = grupoPorId.get(m.grupo_id)!
+      const linea = `${nombreCat.get(g.categoria_id)}: grupo ${g.letra}${ins.menor_nombre_publico ? ` (${ins.menor_nombre_publico})` : ''}`
+      const personas: (string | null)[] = ins.menor_nombre_publico ? [ins.torneo_menores?.representante_jugador_id] : [ins.jugador1_id, ins.jugador2_id]
+      for (const id of personas.filter(Boolean) as string[]) porPersona.set(id, [...(porPersona.get(id) || []), linea])
+    }
+    for (const [id, lineas] of porPersona) {
+      await notificarJugadores(db, [id], {
+        tipo: 'torneo_sorteo',
+        mensaje: `🎲 Sorteo del ${torneoNombre}: ${lineas.join(' · ')}. Mira los grupos en Torneo.`,
+        asunto: `🎲 Sorteo de grupos — ${torneoNombre}`,
+        cuerpoHtml: () => `
+          <p>Ya se hizo el sorteo de los grupos del <strong>${escaparHtml(torneoNombre)}</strong>.</p>
+          <ul>${lineas.map((l) => `<li>${escaparHtml(l)}</li>`).join('')}</ul>
+          <p>Te avisaremos cuando se publique el calendario con tus partidos.</p>
+        `,
+      })
+    }
+  } catch (err: any) {
+    console.error('[torneo] No se pudo avisar el sorteo:', err.message)
+  }
 }

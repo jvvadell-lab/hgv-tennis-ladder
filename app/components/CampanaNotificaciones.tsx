@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
 
 type Notificacion = {
   id: string
@@ -17,38 +16,34 @@ export default function CampanaNotificaciones({ jugadorId }: { jugadorId: string
   const [abierto, setAbierto] = useState(false)
   const contenedorRef = useRef<HTMLSpanElement>(null)
 
+  // Las notificaciones salen de /api/jugador/notificaciones (con la sesión):
+  // la tabla ya no se lee con la clave anónima, así que no hay suscripción
+  // en tiempo real. Se refresca cada minuto y al volver a la pestaña.
   useEffect(() => {
     let cancelado = false
 
-    async function cargarInicial() {
-      const [{ count }, { data: recientes }] = await Promise.all([
-        supabase.from('notificaciones').select('id', { count: 'exact', head: true })
-          .eq('jugador_id', jugadorId).eq('leido', false),
-        supabase.from('notificaciones').select('id, tipo, reto_id, mensaje, leido, created_at')
-          .eq('jugador_id', jugadorId).order('created_at', { ascending: false }).limit(20),
-      ])
-      if (cancelado) return
-      setNoLeidas(count || 0)
-      setNotificaciones(recientes || [])
+    async function cargar() {
+      try {
+        const res = await fetch('/api/jugador/notificaciones', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelado) return
+        setNoLeidas(data.noLeidas || 0)
+        setNotificaciones(data.recientes || [])
+      } catch {
+        // Sin red: se reintenta en el próximo ciclo.
+      }
     }
-    cargarInicial()
+    cargar()
 
-    const canal = supabase
-      .channel(`notificaciones-${jugadorId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notificaciones', filter: `jugador_id=eq.${jugadorId}` },
-        (payload) => {
-          const nueva = payload.new as Notificacion
-          setNotificaciones((prev) => [nueva, ...prev].slice(0, 20))
-          setNoLeidas((prev) => prev + 1)
-        }
-      )
-      .subscribe()
+    const intervalo = setInterval(cargar, 60_000)
+    const alVolver = () => { if (document.visibilityState === 'visible') cargar() }
+    document.addEventListener('visibilitychange', alVolver)
 
     return () => {
       cancelado = true
-      supabase.removeChannel(canal)
+      clearInterval(intervalo)
+      document.removeEventListener('visibilitychange', alVolver)
     }
   }, [jugadorId])
 

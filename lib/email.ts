@@ -15,6 +15,12 @@ function getTransporter() {
 }
 
 export async function enviarCorreo(destinatario: string, asunto: string, html: string) {
+  // Entorno de pruebas local (npm run dev:staging, scripts/simular-torneo.ts):
+  // no sale ningún correo, solo queda en la consola.
+  if (process.env.CORREOS_DESACTIVADOS === '1') {
+    console.info(`[correo desactivado] ${asunto} → ${destinatario}`)
+    return
+  }
   const transporter = getTransporter()
   await transporter.sendMail({
     from: `"HGV Tennis Club" <${process.env.GMAIL_USER}>`,

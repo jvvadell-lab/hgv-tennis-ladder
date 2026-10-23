@@ -18,7 +18,7 @@ type Partido = {
   id: string; categoria_id: string; fase: Fase; grupo: string | null; orden: number
   origen_a: string | null; origen_b: string | null; inscripcion_a: string | null; inscripcion_b: string | null
   cancha: string | null; fecha_hora: string | null; estado: string; sets: SetJugado[] | null; tipo_resultado: string
-  ganador: string | null; wo_ausente: string | null; handicap: string | null
+  ganador: string | null; wo_ausente: string | null; retirada: string | null; handicap: string | null
 }
 type Datos = {
   torneo: { nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; sorteado: boolean; programacion_publicada: boolean } | null
@@ -43,16 +43,19 @@ function origenTexto(o: string | null): string {
   return o
 }
 
-// Marcador desde el lado de `a` (j1) o de `b` (j2): "6-4 3-6 [10-8]".
+// Marcador desde el lado de `a` (j1) o de `b` (j2): "6-4 3-6 [10-8]". En un
+// retiro, la pareja que se retiró lleva "ret." al final.
 function marcador(p: Partido, lado: 'a' | 'b'): string {
-  if (p.estado === 'wo') return p.wo_ausente === (lado === 'a' ? p.inscripcion_a : p.inscripcion_b) ? 'WO' : ''
+  const id = lado === 'a' ? p.inscripcion_a : p.inscripcion_b
+  if (p.estado === 'wo') return p.wo_ausente === id ? 'WO' : ''
   if (p.estado === 'doble_wo') return 'WO'
-  return (p.sets || [])
+  const games = (p.sets || [])
     .map((s) => {
       const [x, y] = lado === 'a' ? [s.games_j1, s.games_j2] : [s.games_j2, s.games_j1]
       return s.es_super_tiebreak ? `[${x}]` : `${x}`
     })
     .join(' ')
+  return p.retirada && p.retirada === id ? `${games} ret.` : games
 }
 
 const mayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)

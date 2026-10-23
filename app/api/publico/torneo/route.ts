@@ -74,6 +74,7 @@ export async function GET() {
       tipo_resultado: p.validado ? p.tipo_resultado : 'normal',
       ganador: p.validado ? p.ganador_inscripcion_id : null,
       wo_ausente: p.validado ? p.wo_ausente_inscripcion_id : null,
+      retirada: p.validado && p.tipo_resultado === 'retiro' ? p.retirada_inscripcion_id : null,
       handicap: p.handicap_inscripcion_id,
     }))
 

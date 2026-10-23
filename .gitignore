@@ -45,3 +45,7 @@ next-env.d.ts
 
 # respaldos locales de scripts de un solo uso (fotos de jugadores, no van a git)
 /backups/
+
+# Entorno de pruebas local (Supabase en Docker) — nunca se versiona
+.env.local.staging
+supabase/staging/esquema-produccion.sql

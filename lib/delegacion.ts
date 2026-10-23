@@ -14,6 +14,16 @@ export type TipoPago = (typeof TIPOS_PAGO)[number]
 export const MONEDAS = ['USD', 'BS'] as const
 export type Moneda = (typeof MONEDAS)[number]
 
+// Línea del uniforme: cada prenda es de la Delegación (azul) o de la
+// Academia (blanco). El color no se guarda: se deriva de la línea, y se
+// muestra siempre junto ("Delegación · Azul"). Todas las prendas existen en
+// ambas líneas con las mismas tallas y precios. Sin valor por defecto: cada
+// prenda nueva tiene que elegirla (la base la exige, columna not null).
+export const LINEAS = ['delegacion', 'academia'] as const
+export type Linea = (typeof LINEAS)[number]
+export const ETIQUETA_LINEA: Record<Linea, string> = { delegacion: 'Delegación · Azul', academia: 'Academia · Blanco' }
+export const etiquetaLinea = (linea: string) => ETIQUETA_LINEA[linea as Linea] || linea
+
 // 'chaqueta' es la de caballero: el valor se conserva porque ya hay prendas
 // registradas (y en lotes) con él; solo cambió la etiqueta.
 export const TIPOS_PRENDA = ['franela_dama', 'franela_caballero', 'chaqueta', 'chaqueta_dama', 'franela_nino'] as const
@@ -51,10 +61,12 @@ export const ETIQUETA_PRENDA: Record<TipoPrenda, string> = {
   franela_nino: 'Franela niño',
 }
 
-// Valida tipo/talla/manga de una prenda; devuelve el error o la prenda
+// Valida línea/tipo/talla/manga de una prenda; devuelve el error o la prenda
 // normalizada (manga null si la prenda no la lleva).
-export function validarPrenda(p: { tipo_prenda?: unknown; talla?: unknown; manga?: unknown }):
-  { error: string } | { tipo_prenda: TipoPrenda; talla: string; manga: Manga | null } {
+export function validarPrenda(p: { linea?: unknown; tipo_prenda?: unknown; talla?: unknown; manga?: unknown }):
+  { error: string } | { linea: Linea; tipo_prenda: TipoPrenda; talla: string; manga: Manga | null } {
+  const linea = p.linea as Linea
+  if (!LINEAS.includes(linea)) return { error: 'Elige el tipo de uniforme (Delegación · Azul o Academia · Blanco)' }
   const tipo = p.tipo_prenda as TipoPrenda
   if (!TIPOS_PRENDA.includes(tipo)) return { error: 'Tipo de prenda no válido' }
   const talla = String(p.talla ?? '')
@@ -62,10 +74,10 @@ export function validarPrenda(p: { tipo_prenda?: unknown; talla?: unknown; manga
   const manga = p.manga === '' || p.manga == null ? null : (p.manga as Manga)
   if (llevaManga(tipo)) {
     if (!manga || !MANGAS.includes(manga)) return { error: 'Elige la manga de la franela dama (manga corta o sin mangas)' }
-    return { tipo_prenda: tipo, talla, manga }
+    return { linea, tipo_prenda: tipo, talla, manga }
   }
   if (manga) return { error: `${ETIQUETA_PRENDA[tipo]} no lleva manga` }
-  return { tipo_prenda: tipo, talla, manga: null }
+  return { linea, tipo_prenda: tipo, talla, manga: null }
 }
 
 // Variantes para resúmenes y PDFs: la franela dama se separa por manga, y
@@ -89,6 +101,9 @@ export function etiquetaPrenda(item: { tipo_prenda: string; manga?: string | nul
   if (!llevaManga(item.tipo_prenda)) return base
   return item.manga ? `${base} · ${ETIQUETA_MANGA[item.manga as Manga].toLowerCase()}` : base
 }
+// "Academia · Blanco · Franela dama · sin mangas".
+export const etiquetaPrendaConLinea = (item: { linea: string; tipo_prenda: string; manga?: string | null }) =>
+  `${etiquetaLinea(item.linea)} · ${etiquetaPrenda(item)}`
 
 // --- Persona del pago: jugador registrado o nombre libre ---
 
@@ -225,6 +240,7 @@ export function validarDatosPago(p: DatosPago): string | null {
 // El precio_unitario que se guarda va en la moneda del pago: el mismo en un
 // pago en US$, o convertido a Bs. con la tasa BCV en un pago en Bs.
 export type ItemUniforme = {
+  linea: Linea
   tipo_prenda: string
   talla: string
   manga: Manga | null
@@ -273,12 +289,17 @@ export function mensajeErrorPostgres(err: { code?: string; message?: string; det
       if (texto.includes('torneo_si_inscripcion')) return 'Una inscripción necesita torneo, y un pedido de uniformes no lleva torneo'
       if (texto.includes('jugador_o_externo')) return 'Elige un jugador o escribe el nombre de la persona'
       if (texto.includes('datos_externo_solo_sin_jugador')) return 'El teléfono y el N.º de acción a mano son solo para personas que no están en la lista'
+      if (texto.includes('linea_fija_en_lote')) return 'Esta prenda ya está en un lote de fabricación; no se puede cambiar el tipo de uniforme'
+      if (texto.includes('linea_valida')) return 'El tipo de uniforme no es válido'
       if (texto.includes('talla_segun_prenda')) return 'Esa talla no existe para esa prenda'
       if (texto.includes('manga_obligatoria_dama')) return 'Elige la manga de la franela dama (manga corta o sin mangas)'
       if (texto.includes('manga_solo_dama')) return 'Solo la franela dama lleva manga'
       if (texto.includes('tipo_prenda_check')) return 'Tipo de prenda no válido'
       if (texto.includes('cantidad_check')) return 'La cantidad de cada prenda debe ser mayor a 0'
       return 'Algún dato del pago no es válido'
+    case '23502':
+      if (texto.includes('linea')) return 'Elige el tipo de uniforme (Delegación · Azul o Academia · Blanco)'
+      return 'Falta un dato obligatorio'
     case '23503':
       return 'El jugador o el torneo indicado no existe'
     case 'P0002': // no_data_found, lanzado por crear_lote_uniforme
