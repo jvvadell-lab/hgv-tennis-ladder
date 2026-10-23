@@ -6,6 +6,7 @@ import { formatearFechaConAnio, instanteEnCaracas } from '@/lib/tiempo'
 import { ETIQUETA_ESTADO_TORNEO, MAX_CATEGORIAS_POR_JUGADOR, type EstadoInscripcion, type EstadoTorneo, type Nivel } from '@/lib/torneo'
 import {
   DIAS_TORNEO,
+  categoriaAbierta,
   ETIQUETA_NIVEL,
   FRANJAS_TORNEO,
   MAX_NOTA_DISPONIBILIDAD,
@@ -28,6 +29,7 @@ type Categoria = {
   genero: 'caballeros' | 'damas' | 'mixto'
   categoria_nivel: Nivel | null
   cupo: number
+  inscripciones_abiertas: boolean
   ocupados: number
 }
 
@@ -239,7 +241,7 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
 // --- Inscripción nueva ---
 
 function FormInscripcion({ datos, onCambio }: { datos: Datos; onCambio: () => Promise<void> }) {
-  const { yo, categorias, misInscripciones, candidatos } = datos
+  const { torneo, yo, categorias, misInscripciones, candidatos } = datos
   const [categoriaId, setCategoriaId] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [parejaId, setParejaId] = useState('')
@@ -273,6 +275,7 @@ function FormInscripcion({ datos, onCambio }: { datos: Datos; onCambio: () => Pr
   // Motivo por el que no puedo elegir una categoría (null = puedo).
   const motivoNo = (c: Categoria): string | null => {
     if (yaInscrito.has(c.id)) return 'ya inscrito'
+    if (!categoriaAbierta(torneo!.estado, c)) return 'cerrada'
     if (c.ocupados >= c.cupo) return 'sin cupo'
     if (c.genero !== 'mixto' && c.genero !== yo.genero) return c.genero === 'damas' ? 'solo damas' : 'solo caballeros'
     if (!nivelAdmitido(c.categoria_nivel, nivelParaTorneo(yo))) return `para ${ETIQUETA_NIVEL[c.categoria_nivel!]}`
@@ -327,8 +330,12 @@ function FormInscripcion({ datos, onCambio }: { datos: Datos; onCambio: () => Pr
                   <span style={{ flex: 1 }}>
                     <strong style={{ fontSize: '14px' }}>{c.nombre}</strong>
                     <span style={{ display: 'block', fontSize: '12px', color: '#666' }}>
-                      {c.modalidad === 'doble' ? `${c.cupo - c.ocupados} de ${c.cupo} parejas disponibles` : `${c.cupo - c.ocupados} de ${c.cupo} cupos disponibles`}
-                      {motivo && ` · ${motivo}`}
+                      {motivo === 'cerrada'
+                        ? 'Inscripciones próximamente'
+                        : <>
+                            {c.modalidad === 'doble' ? `${c.cupo - c.ocupados} de ${c.cupo} parejas disponibles` : `${c.cupo - c.ocupados} de ${c.cupo} cupos disponibles`}
+                            {motivo && ` · ${motivo}`}
+                          </>}
                     </span>
                   </span>
                 </label>

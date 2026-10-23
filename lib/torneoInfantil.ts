@@ -9,7 +9,7 @@
 
 import { diaDeLaSemanaEnCaracas, edadEnFecha, instanteEnCaracas, minutosDesdeMedianocheEnCaracas, fechaISOEnCaracas } from './tiempo'
 import { MAX_CATEGORIAS_POR_JUGADOR, CANCHAS_TORNEO, type CanchaTorneo, type EstadoInscripcion, type EstadoTorneo, type Torneo, type TorneoCategoria } from './torneo'
-import type { Pendiente } from './torneoInscripcion'
+import { categoriaAbierta, ERROR_CATEGORIA_CERRADA, type Pendiente } from './torneoInscripcion'
 
 export const ETIQUETA_GENERO_MENOR: Record<string, string> = {
   caballeros: 'Niño',
@@ -142,7 +142,7 @@ export type DatosInscripcionMenor = {
   estadoTorneo: EstadoTorneo
   soloSocios: boolean
   fechaCorte: string
-  categoria: CategoriaInfantil & Pick<TorneoCategoria, 'cupo' | 'es_infantil'>
+  categoria: CategoriaInfantil & Pick<TorneoCategoria, 'cupo' | 'es_infantil' | 'inscripciones_abiertas'>
   menor: { nombre: string; genero: string; fecha_nacimiento: string; numero_accion: string | null }
   autorizacionParticipacion: boolean
   ocupados: number
@@ -157,6 +157,8 @@ export function validarInscripcionMenor(d: DatosInscripcionMenor): { ok: false; 
   const abiertas = d.porAdmin ? ['borrador', 'inscripcion'] : ['inscripcion']
   if (!abiertas.includes(d.estadoTorneo)) return { ok: false, error: 'Las inscripciones del torneo no están abiertas' }
   if (!categoria.es_infantil) return { ok: false, error: 'Esa no es una categoría infantil' }
+  // El admin inscribe aunque la categoría siga cerrada (igual que con el torneo en borrador).
+  if (!d.porAdmin && !categoriaAbierta(d.estadoTorneo, categoria)) return { ok: false, error: ERROR_CATEGORIA_CERRADA }
   if (!d.autorizacionParticipacion) return { ok: false, error: 'La autorización de participación del representante es obligatoria' }
 
   const edad = edadEnFecha(menor.fecha_nacimiento, d.fechaCorte)

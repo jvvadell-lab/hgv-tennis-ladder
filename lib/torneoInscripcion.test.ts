@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   CELDAS_DISPONIBILIDAD,
+  ERROR_CATEGORIA_CERRADA,
+  categoriaAbierta,
   errorGeneros,
   estadoInscripcionCalculado,
   mensajeErrorBaseInscripcion,
@@ -19,9 +21,9 @@ const jugador = (id: string, genero: string, categoria: string, oficial: string 
   id, nombre: id.toUpperCase(), genero, categoria, categoria_torneo: oficial, activo: true, estado_verificacion: 'verificado',
 })
 
-const dobleMasculinoSexta = { modalidad: 'doble' as const, genero: 'caballeros' as const, categoria_nivel: 'sexta' as const, cupo: 12 }
-const mixto = { modalidad: 'doble' as const, genero: 'mixto' as const, categoria_nivel: null, cupo: 12 }
-const singleQuinta = { modalidad: 'single' as const, genero: 'caballeros' as const, categoria_nivel: 'quinta' as const, cupo: 8 }
+const dobleMasculinoSexta = { modalidad: 'doble' as const, genero: 'caballeros' as const, categoria_nivel: 'sexta' as const, cupo: 12, inscripciones_abiertas: true }
+const mixto = { modalidad: 'doble' as const, genero: 'mixto' as const, categoria_nivel: null, cupo: 12, inscripciones_abiertas: true }
+const singleQuinta = { modalidad: 'single' as const, genero: 'caballeros' as const, categoria_nivel: 'quinta' as const, cupo: 8, inscripciones_abiertas: true }
 
 function datos(parcial: Partial<DatosValidacionInscripcion>): DatosValidacionInscripcion {
   return {
@@ -81,6 +83,22 @@ describe('validarInscripcion', () => {
   it('solo con el torneo en inscripción', () => {
     expect(error(datos({ estadoTorneo: 'borrador' }))).toMatch(/no están abiertas/)
     expect(error(datos({ estadoTorneo: 'sorteado' }))).toMatch(/no están abiertas/)
+  })
+
+  it('rechaza una categoría cerrada aunque el torneo esté en inscripción', () => {
+    expect(error(datos({ categoria: { ...dobleMasculinoSexta, inscripciones_abiertas: false } }))).toBe(ERROR_CATEGORIA_CERRADA)
+    expect(error(datos({ categoria: { ...dobleMasculinoSexta, inscripciones_abiertas: true } }))).toBeNull()
+  })
+
+  it('categoriaAbierta exige torneo en inscripción y categoría abierta', () => {
+    expect(categoriaAbierta('inscripcion', { inscripciones_abiertas: true })).toBe(true)
+    expect(categoriaAbierta('inscripcion', { inscripciones_abiertas: false })).toBe(false)
+    expect(categoriaAbierta('borrador', { inscripciones_abiertas: true })).toBe(false)
+    expect(categoriaAbierta('sorteado', { inscripciones_abiertas: true })).toBe(false)
+  })
+
+  it('traduce el error del trigger de categoría cerrada', () => {
+    expect(mensajeErrorBaseInscripcion('ERROR: Las inscripciones de esta categoría no están abiertas')).toBe(ERROR_CATEGORIA_CERRADA)
   })
 
   it('dobles exige pareja, distinta de uno mismo', () => {

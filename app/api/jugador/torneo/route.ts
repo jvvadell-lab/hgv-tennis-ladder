@@ -30,7 +30,7 @@ export async function GET() {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, duracion_min, orden')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas, duracion_min, orden')
       .eq('torneo_id', torneo.id)
       .eq('es_infantil', false) // las infantiles van por /api/jugador/torneo/infantil
       .order('orden')
