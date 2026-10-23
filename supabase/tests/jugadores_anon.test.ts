@@ -1,4 +1,4 @@
-// Prueba la migración 20261020130000_jugadores_cerrar_columnas_anon en un
+// Prueba la migración 20261022124304_jugadores_cerrar_columnas_anon en un
 // Postgres local (PGlite), sobre una copia de la tabla jugadores con los
 // mismos privilegios y policies que tenía producción el 20-oct-2026.
 import { readFileSync } from 'node:fs'
@@ -7,7 +7,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 const MIGRACION = readFileSync(
-  join(__dirname, '../migrations/20261020130000_jugadores_cerrar_columnas_anon.sql'),
+  join(__dirname, '../migrations/20261022124304_jugadores_cerrar_columnas_anon.sql'),
   'utf8',
 )
 
