@@ -13,12 +13,12 @@ import { escaparHtml, notificarRepresentante, type MenorConRepresentante } from 
 export const COLUMNAS_MENOR =
   'id, nombre, apellido, fecha_nacimiento, genero, numero_accion, representante_jugador_id, parentesco, emergencia_nombre, emergencia_telefono, autorizacion_participacion, autorizacion_participacion_at, autorizacion_imagen, autorizacion_imagen_at, created_at'
 
-export type CategoriaInfantilFila = CategoriaInfantil & { cupo: number; es_infantil: boolean; duracion_min: number; formato_partido: string; orden: number }
+export type CategoriaInfantilFila = CategoriaInfantil & { cupo: number; es_infantil: boolean; inscripciones_abiertas: boolean; duracion_min: number; formato_partido: string; orden: number }
 
 export async function categoriasInfantiles(db: SupabaseClient, torneoId: string): Promise<CategoriaInfantilFila[]> {
   const { data, error } = await db
     .from('torneo_categorias')
-    .select('id, nombre, genero, edad_min, edad_max, cupo, es_infantil, duracion_min, formato_partido, orden')
+    .select('id, nombre, genero, edad_min, edad_max, cupo, es_infantil, inscripciones_abiertas, duracion_min, formato_partido, orden')
     .eq('torneo_id', torneoId)
     .eq('es_infantil', true)
     .order('orden')
