@@ -133,6 +133,7 @@ export async function POST(request: Request) {
     // Precio unitario en la moneda del pago: en US$ tal cual; en Bs.,
     // convertido con la tasa (o vacío si no hay tasa: el monto va a mano).
     const items = itemsRes.items.map((i) => ({
+      linea: i.linea,
       tipo_prenda: i.tipo_prenda,
       talla: i.talla,
       manga: i.manga,

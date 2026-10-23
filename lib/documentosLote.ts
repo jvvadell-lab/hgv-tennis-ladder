@@ -5,9 +5,10 @@
 
 import type { jsPDF } from 'jspdf'
 import { ahora, formatearFechaConAnio } from '@/lib/tiempo'
-import { ETIQUETA_INVITADO, TIPOS_PRENDA, etiquetaExterno, etiquetaPrenda, type PersonaDelegacion } from '@/lib/delegacion'
+import { ETIQUETA_INVITADO, LINEAS, TIPOS_PRENDA, etiquetaExterno, etiquetaPrendaConLinea, type PersonaDelegacion } from '@/lib/delegacion'
 
 export type ItemLote = {
+  linea: string
   tipo_prenda: string
   talla: string
   manga: string | null
@@ -24,16 +25,18 @@ export type PagoLote = PersonaDelegacion & {
 
 export type LogoPdf = { dataUrl: string; ancho: number; alto: number } | null
 
-type Prenda = { tipo_prenda: string; talla: string; manga: string | null; cantidad: number }
+type Prenda = { linea: string; tipo_prenda: string; talla: string; manga: string | null; cantidad: number }
 export type PersonaLote = { nombre: string; etiqueta: string | null; prendas: Prenda[] }
 
 const AZUL: [number, number, number] = [28, 126, 196] // #1c7ec4, --color-court
 const TINTA: [number, number, number] = [15, 27, 38]
 
 const ordenTipo = (t: string) => TIPOS_PRENDA.indexOf(t as (typeof TIPOS_PRENDA)[number])
+const ordenLinea = (l: string) => LINEAS.indexOf(l as (typeof LINEAS)[number])
 
 // Una entrada por persona (jugador o nombre libre), juntando todos sus pagos
-// no anulados con prendas en este lote. Las prendas iguales se suman.
+// no anulados con prendas en este lote. Las prendas iguales (misma línea,
+// tipo, talla y manga) se suman.
 export function personasDelLote(loteId: string, pagos: PagoLote[]): PersonaLote[] {
   const porPersona = new Map<string, PersonaLote>()
   for (const p of pagos) {
@@ -45,17 +48,17 @@ export function personasDelLote(loteId: string, pagos: PagoLote[]): PersonaLote[
     const persona = porPersona.get(clave) ?? { nombre, etiqueta: etiquetaExterno(p), prendas: [] }
     porPersona.set(clave, persona)
     for (const i of items) {
-      const igual = persona.prendas.find((x) => x.tipo_prenda === i.tipo_prenda && x.talla === i.talla && (x.manga || null) === (i.manga || null))
+      const igual = persona.prendas.find((x) => x.linea === i.linea && x.tipo_prenda === i.tipo_prenda && x.talla === i.talla && (x.manga || null) === (i.manga || null))
       if (igual) igual.cantidad += i.cantidad
-      else persona.prendas.push({ tipo_prenda: i.tipo_prenda, talla: i.talla, manga: i.manga || null, cantidad: i.cantidad })
+      else persona.prendas.push({ linea: i.linea, tipo_prenda: i.tipo_prenda, talla: i.talla, manga: i.manga || null, cantidad: i.cantidad })
     }
   }
   const lista = [...porPersona.values()]
-  lista.forEach((p) => p.prendas.sort((a, b) => ordenTipo(a.tipo_prenda) - ordenTipo(b.tipo_prenda)))
+  lista.forEach((p) => p.prendas.sort((a, b) => ordenLinea(a.linea) - ordenLinea(b.linea) || ordenTipo(a.tipo_prenda) - ordenTipo(b.tipo_prenda)))
   return lista.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
 }
 
-const textoPrendas = (p: PersonaLote) => p.prendas.map((x) => `${etiquetaPrenda(x)} ${x.talla} ×${x.cantidad}`).join(', ')
+const textoPrendas = (p: PersonaLote) => p.prendas.map((x) => `${etiquetaPrendaConLinea(x)} ${x.talla} ×${x.cantidad}`).join(', ')
 
 // --- Lista de entrega (para firmar al entregar) ---
 
@@ -137,7 +140,7 @@ type Etiqueta = { nombre: string; prenda: string; talla: string }
 // prendas de cada jugador quedan juntas.
 export function etiquetasDelLote(loteId: string, pagos: PagoLote[]): Etiqueta[] {
   return personasDelLote(loteId, pagos).flatMap((p) =>
-    p.prendas.flatMap((x) => Array.from({ length: x.cantidad }, () => ({ nombre: p.nombre, prenda: etiquetaPrenda(x), talla: x.talla })))
+    p.prendas.flatMap((x) => Array.from({ length: x.cantidad }, () => ({ nombre: p.nombre, prenda: etiquetaPrendaConLinea(x), talla: x.talla })))
   )
 }
 
