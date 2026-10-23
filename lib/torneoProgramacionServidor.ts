@@ -13,6 +13,8 @@ import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 
 export type PartidoDetalle = PartidoProg & {
   estado: EstadoPartido
+  // Jugado, pero terminó por retiro de una de las parejas.
+  retiro: boolean
   esMixto: boolean
   inscripcion_a: string | null
   inscripcion_b: string | null
@@ -40,7 +42,7 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
 
   const [{ data: partidos, error: errP }, { data: grupos, error: errG }, { data: franjas, error: errF }, { data: disp, error: errD }] = await Promise.all([
     db.from('torneo_partidos')
-      .select('id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, inscripcion_a, inscripcion_b, cancha, fecha_hora, estado, bloqueo_id, handicap_inscripcion_id')
+      .select('id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, inscripcion_a, inscripcion_b, cancha, fecha_hora, estado, tipo_resultado, bloqueo_id, handicap_inscripcion_id')
       .in('categoria_id', categoriaIds),
     db.from('torneo_grupos').select('id, letra, torneo_grupo_miembros(inscripcion_id)').in('categoria_id', categoriaIds),
     db.from('torneo_franjas_academia').select('id, fecha, cancha, hora_inicio, hora_fin').eq('torneo_id', torneo.id),
@@ -92,6 +94,7 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
       personas: [...personasDe(p.inscripcion_a), ...personasDe(p.inscripcion_b)],
       cerrado: ['jugado', 'wo', 'doble_wo'].includes(p.estado),
       estado: p.estado as EstadoPartido,
+      retiro: p.estado === 'jugado' && p.tipo_resultado === 'retiro',
       inscripcion_a: p.inscripcion_a,
       inscripcion_b: p.inscripcion_b,
       nombre_a: p.inscripcion_a ? nombres.get(p.inscripcion_a) ?? null : null,

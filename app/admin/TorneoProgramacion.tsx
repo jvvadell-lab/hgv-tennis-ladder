@@ -22,6 +22,7 @@ type Partido = {
   origen_a: string | null
   origen_b: string | null
   estado: EstadoPartido
+  retiro: boolean
   cerrado: boolean
   inscripcion_a: string | null
   inscripcion_b: string | null
@@ -252,7 +253,7 @@ export default function TorneoProgramacion() {
                 <div style={{ fontSize: '13px' }}>
                   <strong>{p.categoriaNombre}</strong> · {etiqueta(p)} · {rivales(p)}
                   <div style={{ fontSize: '12px', color: p.inicio ? '#1e6b34' : '#888' }}>
-                    {p.inicio ? `📅 ${formatearFechaHora(p.inicio)} · ${p.cancha}` : 'Sin horario'} · {ETIQUETA_ESTADO_PARTIDO[p.estado]}
+                    {p.inicio ? `📅 ${formatearFechaHora(p.inicio)} · ${p.cancha}` : 'Sin horario'} · {ETIQUETA_ESTADO_PARTIDO[p.estado]}{p.retiro ? ' (retiro)' : ''}
                   </div>
                 </div>
                 {!p.cerrado && (
