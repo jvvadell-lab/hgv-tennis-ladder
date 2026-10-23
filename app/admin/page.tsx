@@ -712,21 +712,11 @@ export default function AdminPage() {
 
   const fetchPermisosMedicos = async () => {
     setLoadingPermisosMedicos(true)
-    const { data } = await supabase
-      .from('permisos_medicos')
-      .select('id, dias, motivo, informe_url, estado, created_at, jugadores:jugador_id(nombre)')
-      .eq('estado', 'pendiente')
-      .order('created_at', { ascending: true })
-    setPermisosMedicosPendientes(data || [])
-
-    const hoy = hoyEnCaracas()
-    const { data: activos } = await supabase
-      .from('permisos_medicos')
-      .select('id, dias, motivo, informe_url, fecha_inicio, fecha_fin, jugadores:jugador_id(nombre)')
-      .eq('estado', 'aprobado')
-      .gte('fecha_fin', hoy)
-      .order('fecha_fin', { ascending: true })
-    setPermisosMedicosActivos(activos || [])
+    // Motivo e informe médico ya no se leen con la clave anónima: van por el servidor.
+    const res = await fetch('/api/admin/permisos-medicos', { cache: 'no-store' })
+    const permisos = await res.json().catch(() => ({}))
+    setPermisosMedicosPendientes(res.ok ? permisos.pendientes || [] : [])
+    setPermisosMedicosActivos(res.ok ? permisos.activos || [] : [])
 
     const { data: jugadoresActivos } = await supabase
       .from('jugadores')
@@ -2043,11 +2033,10 @@ export default function AdminPage() {
 
   const fetchPlayers = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide, es_invitado, invitado_habilitado_at')
-      .order('created_at', { ascending: false })
-    if (!error) setPlayers(data || [])
+    // Correo, teléfono, verificación... ya no se leen con la clave anónima.
+    const res = await fetch('/api/admin/jugadores').catch(() => null)
+    const data = res?.ok ? await res.json() : null
+    if (data?.ok) setPlayers(data.jugadores)
     await fetchInscritosTempActiva()
     setLoading(false)
   }

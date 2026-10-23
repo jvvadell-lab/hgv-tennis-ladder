@@ -4,7 +4,9 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { mensajeErrorPostgres, tasaDosDecimales, validarPrenda } from '@/lib/delegacion'
 import { obtenerTasaVigente } from '@/lib/tasaBcv'
 
-// PATCH { tipo_prenda, talla, manga, confirmar? } — "Modificar prenda".
+// PATCH { linea, tipo_prenda, talla, manga, confirmar? } — "Modificar prenda".
+// La línea (Delegación ↔ Academia) se puede cambiar con las mismas
+// condiciones, y solo cambiarla no genera diferencia de precio.
 // Admin completo o "solo pagos". Solo prendas que no están en un lote y cuyo
 // pago no está anulado (la función modificar_prenda_uniforme lo verifica con
 // la prenda bloqueada). El monto pagado no cambia: si el precio cambia, la
@@ -33,6 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       p_manga: prenda.manga,
       p_admin: session.id,
       p_confirmar: body?.confirmar === true,
+      p_linea: prenda.linea,
     })
     if (error) {
       const status = error.code === 'P0002' ? 404 : 409

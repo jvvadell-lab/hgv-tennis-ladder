@@ -6,9 +6,11 @@ import TasaBcv, { formatearBs, type TasaBcvVigente } from '@/app/components/Tasa
 import { hoyEnCaracas, instanteEnCaracas, formatearFechaConAnio, formatearFechaHora } from '@/lib/tiempo'
 import {
   ETIQUETA_ESTADO_PRENDA,
+  ETIQUETA_LINEA,
   ETIQUETA_MANGA,
   ETIQUETA_PRENDA,
   ETIQUETA_TIPO_PAGO,
+  LINEAS,
   MANGAS,
   TALLAS_ADULTO,
   TALLAS_NINO,
@@ -19,7 +21,8 @@ import {
   estadoPrenda,
   etiquetaDiferencia,
   etiquetaExterno,
-  etiquetaPrenda,
+  etiquetaLinea,
+  etiquetaPrendaConLinea,
   faltaNumeroAccion,
   nombrePersonaDelegacion,
   numeroAccionDe,
@@ -32,9 +35,11 @@ import {
   tasaDosDecimales,
   validarDatosPago,
   type EstadoPrenda,
+  type Linea,
   type TipoPrenda,
 } from '@/lib/delegacion'
 import { generarPdfInscritos, nombreArchivoInscritos } from '@/lib/reporteInscritos'
+import { generarPdfEtiquetas, generarPdfListaEntrega } from '@/lib/documentosLote'
 
 // Pagos → Delegación: cobros de la delegación HGV en torneos inter-clubes
 // (inscripciones) y compra de uniformes. Separado de los pagos de la
@@ -53,6 +58,7 @@ type Torneo = {
 
 type Item = {
   id: string
+  linea: Linea
   tipo_prenda: TipoPrenda
   talla: string
   manga: 'corta' | 'sin_mangas' | null
@@ -73,8 +79,10 @@ type Lote = {
   enviador: { nombre: string } | null
 }
 
-// Cantidades por variante de prenda (ver VARIANTES_PRENDA) y talla.
-type Matriz = Record<string, Record<string, number>>
+// Cantidades por variante de prenda (ver VARIANTES_PRENDA) y talla, de una
+// línea; y la matriz completa, una por línea (Delegación / Academia).
+type MatrizLinea = Record<string, Record<string, number>>
+type Matriz = Record<Linea, MatrizLinea>
 
 type PagoDelegacion = {
   id: string
@@ -123,8 +131,9 @@ type FormPago = {
 }
 
 // precioCentavos: precio unitario en US$ (pre-llenado desde precios_prendas).
+// linea: Delegación / Academia ('' = sin elegir todavía; no hay valor por defecto).
 // manga: solo franela dama ('' = sin elegir todavía).
-type LineaPrenda = { tipo_prenda: TipoPrenda; talla: string; manga: string; cantidad: string; precioCentavos: string }
+type LineaPrenda = { linea: string; tipo_prenda: TipoPrenda; talla: string; manga: string; cantidad: string; precioCentavos: string }
 
 const formPagoInicial = (tipoPago = 'efectivo'): FormPago => ({
   jugadorId: '',
@@ -141,7 +150,7 @@ const formPagoInicial = (tipoPago = 'efectivo'): FormPago => ({
   notas: '',
 })
 
-const lineaInicial = (): LineaPrenda => ({ tipo_prenda: 'franela_caballero', talla: 'M', manga: '', cantidad: '1', precioCentavos: '' })
+const lineaInicial = (): LineaPrenda => ({ linea: '', tipo_prenda: 'franela_caballero', talla: 'M', manga: '', cantidad: '1', precioCentavos: '' })
 
 // Al cambiar el tipo de prenda: conserva la talla si existe para la nueva
 // prenda (si no, una talla media por defecto) y limpia la manga si no aplica.
@@ -192,20 +201,29 @@ function nombreHoja(base: string, usados: Set<string>): string {
   return limpio
 }
 
-const matrizVacia = (): Matriz =>
+const matrizLineaVacia = (): MatrizLinea =>
   Object.fromEntries(VARIANTES_PRENDA.map((v) => [v.clave, Object.fromEntries(v.tallas.map((s) => [s, 0]))]))
+const matrizVacia = (): Matriz => Object.fromEntries(LINEAS.map((l) => [l, matrizLineaVacia()])) as Matriz
 
-const sumarAMatriz = (m: Matriz, i: { tipo_prenda: string; manga?: string | null; talla: string; cantidad: number }) => {
-  const fila = m[varianteDe(i)]
+const sumarAMatriz = (m: Matriz, i: { linea: string; tipo_prenda: string; manga?: string | null; talla: string; cantidad: number }) => {
+  const fila = m[i.linea as Linea]?.[varianteDe(i)]
   if (fila) fila[i.talla] = (fila[i.talla] || 0) + i.cantidad
 }
-const totalVariante = (m: Matriz, clave: string) => Object.values(m[clave] || {}).reduce((a, b) => a + b, 0)
+const totalVariante = (m: MatrizLinea, clave: string) => Object.values(m[clave] || {}).reduce((a, b) => a + b, 0)
+const totalLinea = (m: MatrizLinea) => VARIANTES_PRENDA.reduce((a, v) => a + totalVariante(m, v.clave), 0)
+
+// Líneas con prendas, en el orden de LINEAS. Sin ninguna, la Delegación
+// (para que el resumen vacío igual muestre sus tablas en cero).
+function lineasConPrendas(m: Matriz): Linea[] {
+  const conPrendas = LINEAS.filter((l) => totalLinea(m[l]) > 0)
+  return conPrendas.length ? conPrendas : ['delegacion']
+}
 
 // Resumen de tallas en dos grupos: adultos (XS–XXXL; las prendas dama sin
 // XXXL y la franela dama separada por manga) y niño (2–16). "Falta definir
 // manga" solo aparece si tiene prendas. Celda null = esa talla no existe para esa prenda.
 type GrupoMatriz = { titulo: string; tallas: readonly string[]; filas: { etiqueta: string; valores: (number | null)[]; total: number }[]; totales: number[] }
-function gruposMatriz(m: Matriz): GrupoMatriz[] {
+function gruposMatriz(m: MatrizLinea): GrupoMatriz[] {
   return [
     { titulo: 'Adultos', tallas: TALLAS_ADULTO, nino: false },
     { titulo: 'Niños', tallas: TALLAS_NINO, nino: true },
@@ -219,6 +237,10 @@ function gruposMatriz(m: Matriz): GrupoMatriz[] {
     return { titulo, tallas, filas, totales }
   })
 }
+
+// El resumen se separa primero por línea ("Delegación · Azul" / "Academia ·
+// Blanco") y dentro de cada una por prenda, manga y talla.
+const seccionesMatriz = (m: Matriz) => lineasConPrendas(m).map((l) => ({ linea: l, titulo: ETIQUETA_LINEA[l], grupos: gruposMatriz(m[l]) }))
 
 const COLOR_ESTADO_PRENDA: Record<EstadoPrenda, { fondo: string; texto: string }> = {
   pendiente: { fondo: '#eee', texto: '#555' },
@@ -239,27 +261,54 @@ async function descargarPdfLote(lote: Lote, m: Matriz) {
   doc.text(`Fecha: ${formatearFechaConAnio(lote.enviado_at)}`, 14, 26)
   if (lote.notas) doc.text(`Notas: ${lote.notas}`, 14, 32)
 
-  // Una tabla por variante (la franela dama separada por manga; la de niño
-  // con sus tallas 2–16), con las tallas como columnas y el total al final.
+  // Primero por línea (un lote puede llevar las dos, cada una con su
+  // encabezado); dentro, una tabla por variante (la franela dama separada por
+  // manga; la de niño con sus tallas 2–16), con las tallas como columnas y el
+  // total al final.
+  const altoPagina = doc.internal.pageSize.getHeight()
+  const lineas = LINEAS.filter((l) => totalLinea(m[l]) > 0)
   let y = lote.notas ? 40 : 34
   let totalGeneral = 0
-  VARIANTES_PRENDA.forEach((v) => {
-    const totalTipo = totalVariante(m, v.clave)
-    if (!totalTipo) return
-    totalGeneral += totalTipo
-    doc.setFontSize(13)
-    doc.text(v.etiqueta, 14, y)
-    autoTable(doc, {
-      startY: y + 3,
-      head: [[...v.tallas, 'Total']],
-      body: [[...v.tallas.map((s) => (m[v.clave][s] ? String(m[v.clave][s]) : '–')), String(totalTipo)]],
-      theme: 'grid',
-      headStyles: { fillColor: [15, 27, 38], halign: 'center' },
-      bodyStyles: { halign: 'center' },
-      columnStyles: { [v.tallas.length]: { fontStyle: 'bold' } },
+  const saltoSiHaceFalta = (alto: number) => {
+    if (y + alto > altoPagina - 15) {
+      doc.addPage()
+      y = 20
+    }
+  }
+  lineas.forEach((l) => {
+    saltoSiHaceFalta(40)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.text(ETIQUETA_LINEA[l], 14, y)
+    doc.setFont('helvetica', 'normal')
+    y += 9
+    let totalLin = 0
+    VARIANTES_PRENDA.forEach((v) => {
+      const totalTipo = totalVariante(m[l], v.clave)
+      if (!totalTipo) return
+      totalLin += totalTipo
+      saltoSiHaceFalta(30)
+      doc.setFontSize(13)
+      doc.text(v.etiqueta, 14, y)
+      autoTable(doc, {
+        startY: y + 3,
+        head: [[...v.tallas, 'Total']],
+        body: [[...v.tallas.map((s) => (m[l][v.clave][s] ? String(m[l][v.clave][s]) : '–')), String(totalTipo)]],
+        theme: 'grid',
+        headStyles: { fillColor: [15, 27, 38], halign: 'center' },
+        bodyStyles: { halign: 'center' },
+        columnStyles: { [v.tallas.length]: { fontStyle: 'bold' } },
+      })
+      y = (doc as any).lastAutoTable.finalY + 12
     })
-    y = (doc as any).lastAutoTable.finalY + 12
+    totalGeneral += totalLin
+    if (lineas.length > 1) {
+      doc.setFontSize(12)
+      doc.text(`Total ${ETIQUETA_LINEA[l]}: ${totalLin} prendas`, 14, y - 4)
+      y += 8
+    }
   })
+  saltoSiHaceFalta(10)
   doc.setFontSize(13)
   doc.text(`Total general: ${totalGeneral} prendas`, 14, y)
   doc.save(`hgv-uniformes-lote-${lote.numero}.pdf`)
@@ -268,6 +317,8 @@ async function descargarPdfLote(lote: Lote, m: Matriz) {
 // --- Lista interna del lote (control del club, con nombres y montos) ---
 
 type FilaListaInterna = {
+  linea: Linea
+  tipo: string // "Delegación · Azul" / "Academia · Blanco"
   persona: string
   accion: string
   prenda: string
@@ -291,31 +342,43 @@ type ListaInterna = {
   bs: number
 }
 
-// Arma la lista a partir de las prendas del lote, agrupadas por pago y
-// ordenadas por nombre. Los totales cuentan cada pago una sola vez.
+// Arma la lista a partir de las prendas del lote: primero por línea, y
+// dentro de cada una agrupadas por pago y ordenadas por nombre. El monto y la
+// diferencia van solo en la primera fila de cada pago (aunque tenga prendas
+// de las dos líneas), así los totales cuentan cada pago una sola vez.
 function armarListaInterna(lote: Lote, pagos: PagoDelegacion[], estadoLote: Record<string, string>): ListaInterna {
-  const aFilas = (lista: PagoDelegacion[]) =>
-    lista
-      .map((p) => ({ p, items: p.items.filter((i) => i.lote_id === lote.id) }))
-      .filter(({ items }) => items.length > 0)
-      .sort((a, b) => nombrePersona(a.p).localeCompare(nombrePersona(b.p), 'es', { sensitivity: 'base' }) || a.p.numero_recibo - b.p.numero_recibo)
-      .flatMap(({ p, items }) =>
-        items.map((i, k) => ({
-          persona: nombrePersona(p),
-          accion: numeroAccionDe(p) || '',
-          prenda: ETIQUETA_PRENDA[i.tipo_prenda],
-          talla: i.talla,
-          manga: i.manga ? ETIQUETA_MANGA[i.manga] : llevaManga(i.tipo_prenda) ? 'Falta definir' : '',
-          cantidad: i.cantidad,
-          monto: k === 0 ? Number(p.monto) : null,
-          diferencia: k === 0 ? etiquetaDiferencia(p.diferencia_usd) || '' : '',
-          moneda: p.moneda === 'USD' ? '$' : 'Bs.',
-          metodo: ETIQUETA_TIPO_PAGO[p.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || p.tipo_pago,
-          referencia: p.referencia || '',
-          recibo: p.numero_recibo,
-          estado: ETIQUETA_ESTADO_PRENDA[estadoPrenda(i, estadoLote[lote.id])],
-        }))
-      )
+  const aFilas = (lista: PagoDelegacion[]) => {
+    const conMonto = new Set<string>()
+    return LINEAS.flatMap((linea) =>
+      lista
+        .map((p) => ({ p, items: p.items.filter((i) => i.lote_id === lote.id && i.linea === linea) }))
+        .filter(({ items }) => items.length > 0)
+        .sort((a, b) => nombrePersona(a.p).localeCompare(nombrePersona(b.p), 'es', { sensitivity: 'base' }) || a.p.numero_recibo - b.p.numero_recibo)
+        .flatMap(({ p, items }) =>
+          items.map((i) => {
+            const primera = !conMonto.has(p.id)
+            conMonto.add(p.id)
+            return {
+              linea,
+              tipo: ETIQUETA_LINEA[linea],
+              persona: nombrePersona(p),
+              accion: numeroAccionDe(p) || '',
+              prenda: ETIQUETA_PRENDA[i.tipo_prenda],
+              talla: i.talla,
+              manga: i.manga ? ETIQUETA_MANGA[i.manga] : llevaManga(i.tipo_prenda) ? 'Falta definir' : '',
+              cantidad: i.cantidad,
+              monto: primera ? Number(p.monto) : null,
+              diferencia: primera ? etiquetaDiferencia(p.diferencia_usd) || '' : '',
+              moneda: p.moneda === 'USD' ? '$' : 'Bs.',
+              metodo: ETIQUETA_TIPO_PAGO[p.tipo_pago as keyof typeof ETIQUETA_TIPO_PAGO] || p.tipo_pago,
+              referencia: p.referencia || '',
+              recibo: p.numero_recibo,
+              estado: ETIQUETA_ESTADO_PRENDA[estadoPrenda(i, estadoLote[lote.id])],
+            }
+          })
+        )
+    )
+  }
   const uniformes = pagos.filter((p) => p.concepto === 'uniforme')
   const validos = uniformes.filter((p) => !p.anulado)
   const filas = aFilas(validos)
@@ -329,7 +392,7 @@ function armarListaInterna(lote: Lote, pagos: PagoDelegacion[], estadoLote: Reco
   }
 }
 
-const COLUMNAS_LISTA_INTERNA = ['Jugador', 'N.º acción', 'Prenda', 'Manga', 'Talla', 'Cant.', 'Monto', 'Moneda', 'Diferencia', 'Método', 'Referencia', 'Recibo', 'Estado', 'Entregado / firma']
+const COLUMNAS_LISTA_INTERNA = ['Jugador', 'N.º acción', 'Tipo', 'Prenda', 'Manga', 'Talla', 'Cant.', 'Monto', 'Moneda', 'Diferencia', 'Método', 'Referencia', 'Recibo', 'Estado', 'Entregado / firma']
 
 async function descargarPdfListaInterna(lote: Lote, lista: ListaInterna) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
@@ -340,7 +403,7 @@ async function descargarPdfListaInterna(lote: Lote, lista: ListaInterna) {
   doc.text(`Lista interna · Fecha: ${formatearFechaConAnio(lote.enviado_at)}`, 14, 23)
 
   const aCeldas = (f: FilaListaInterna) => [
-    f.persona, f.accion, f.prenda, f.manga, f.talla, String(f.cantidad),
+    f.persona, f.accion, f.tipo, f.prenda, f.manga, f.talla, String(f.cantidad),
     f.monto != null ? formatearMontoDelegacion(f.monto, f.moneda === '$' ? 'USD' : 'BS') : '',
     f.moneda, f.diferencia, f.metodo, f.referencia, `#${f.recibo}`, f.estado, '',
   ]
@@ -348,10 +411,17 @@ async function descargarPdfListaInterna(lote: Lote, lista: ListaInterna) {
     theme: 'grid' as const,
     styles: { fontSize: 8, cellPadding: 1.5 },
     headStyles: { fillColor: [15, 27, 38] as [number, number, number] },
-    columnStyles: { 5: { halign: 'center' as const }, 6: { halign: 'right' as const }, 13: { cellWidth: 30 } },
+    columnStyles: { 6: { halign: 'center' as const }, 7: { halign: 'right' as const }, 14: { cellWidth: 30 } },
   }
-  autoTable(doc, { ...estilo, startY: 28, head: [COLUMNAS_LISTA_INTERNA], body: lista.filas.map(aCeldas) })
-  let y = (doc as any).lastAutoTable.finalY + 8
+  // Una tabla por línea, con su encabezado.
+  let y = 28
+  LINEAS.filter((l) => lista.filas.some((f) => f.linea === l)).forEach((l) => {
+    doc.setFontSize(12)
+    doc.text(ETIQUETA_LINEA[l], 14, y + 4)
+    autoTable(doc, { ...estilo, startY: y + 7, head: [COLUMNAS_LISTA_INTERNA], body: lista.filas.filter((f) => f.linea === l).map(aCeldas) })
+    y = (doc as any).lastAutoTable.finalY + 6
+  })
+  y += 2
   doc.setFontSize(11)
   doc.text(`Total prendas: ${lista.totalPrendas}`, 14, y)
   doc.text(`Recaudado: ${formatearMontoDelegacion(lista.usd, 'USD')}  ·  ${formatearMontoDelegacion(lista.bs, 'BS')}`, 14, y + 6)
@@ -378,7 +448,7 @@ const estiloTd: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'to
 const estiloBotonPrimario: React.CSSProperties = { background: 'var(--color-court)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }
 const estiloBotonChico: React.CSSProperties = { background: 'white', border: '1px solid #ddd', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }
 
-// Logo de la Comisión para el reporte de inscritos, como data URL con sus
+// Logo de la Comisión para el reporte de inscritos y los documentos de entrega del lote, como data URL con sus
 // medidas (jspdf necesita la proporción para no deformarlo).
 async function cargarLogo(): Promise<{ dataUrl: string; ancho: number; alto: number } | null> {
   try {
@@ -412,7 +482,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
   const [recibo, setRecibo] = useState<PagoDelegacion | null>(null)
   const [ocupado, setOcupado] = useState<string | null>(null) // id del pago/prenda con acción en curso
   // "Modificar prenda": la prenda que se está editando y sus valores nuevos.
-  const [editando, setEditando] = useState<{ itemId: string; tipo_prenda: TipoPrenda; talla: string; manga: string } | null>(null)
+  const [editando, setEditando] = useState<{ itemId: string; linea: string; tipo_prenda: TipoPrenda; talla: string; manga: string } | null>(null)
   const [editMsg, setEditMsg] = useState('')
 
   // Formulario de inscripción
@@ -659,6 +729,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
           fecha: uniForm.fecha,
           notas: uniForm.notas,
           items: uniLineas.map((l) => ({
+            linea: l.linea,
             tipo_prenda: l.tipo_prenda,
             talla: l.talla,
             manga: llevaManga(l.tipo_prenda) ? l.manga : null,
@@ -901,6 +972,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
           'N° Recibo': p.numero_recibo,
           'Jugador': nombrePersona(p),
           'N.º de acción': numeroAccionDe(p) || '',
+          'Tipo': etiquetaLinea(i.linea),
           'Prenda': ETIQUETA_PRENDA[i.tipo_prenda],
           'Manga': i.manga ? ETIQUETA_MANGA[i.manga] : llevaManga(i.tipo_prenda) ? 'Falta definir' : '',
           'Talla': i.talla,
@@ -927,10 +999,13 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
     const matrizAoa = (titulo: string, m: Matriz) => {
       const filas: (string | number)[][] = [[titulo]]
-      gruposMatriz(m).forEach((g) => {
-        filas.push([g.titulo, ...g.tallas, 'Total'])
-        g.filas.forEach((f) => filas.push([f.etiqueta, ...f.valores.map((v) => (v === null ? '—' : v)), f.total]))
-        filas.push(['Total', ...g.totales, g.totales.reduce((a, b) => a + b, 0)])
+      seccionesMatriz(m).forEach((sec) => {
+        filas.push([sec.titulo])
+        sec.grupos.forEach((g) => {
+          filas.push([g.titulo, ...g.tallas, 'Total'])
+          g.filas.forEach((f) => filas.push([f.etiqueta, ...f.valores.map((v) => (v === null ? '—' : v)), f.total]))
+          filas.push(['Total', ...g.totales, g.totales.reduce((a, b) => a + b, 0)])
+        })
       })
       return filas
     }
@@ -945,17 +1020,20 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
     lotes.slice().reverse().forEach((l) => {
       const lista = armarListaInterna(l, pagos, estadoLote)
-      const aFila = (f: FilaListaInterna) => [f.persona, f.accion, f.prenda, f.manga, f.talla, f.cantidad, f.monto ?? '', f.moneda, f.diferencia, f.metodo, f.referencia, f.recibo, f.estado, '']
+      const aFila = (f: FilaListaInterna) => [f.persona, f.accion, f.tipo, f.prenda, f.manga, f.talla, f.cantidad, f.monto ?? '', f.moneda, f.diferencia, f.metodo, f.referencia, f.recibo, f.estado, '']
       const aoa: (string | number)[][] = [
         [`HGV Tennis Club — Lote #${l.numero}`],
         [`Lista interna · Fecha: ${formatearFechaConAnio(l.enviado_at)}`],
+        ...LINEAS.filter((ln) => lista.filas.some((f) => f.linea === ln)).flatMap((ln) => [
+          [],
+          [ETIQUETA_LINEA[ln]],
+          COLUMNAS_LISTA_INTERNA,
+          ...lista.filas.filter((f) => f.linea === ln).map(aFila),
+        ]),
         [],
-        COLUMNAS_LISTA_INTERNA,
-        ...lista.filas.map(aFila),
-        [],
-        ['Total prendas', '', '', '', '', lista.totalPrendas],
-        ['Recaudado US$', '', '', '', '', '', lista.usd, '$'],
-        ['Recaudado Bs.', '', '', '', '', '', lista.bs, 'Bs.'],
+        ['Total prendas', '', '', '', '', '', lista.totalPrendas],
+        ['Recaudado US$', '', '', '', '', '', '', lista.usd, '$'],
+        ['Recaudado Bs.', '', '', '', '', '', '', lista.bs, 'Bs.'],
         ...(lista.anuladas.length
           ? [[], ['Anulados con prendas ya en fábrica'], COLUMNAS_LISTA_INTERNA, ...lista.anuladas.map(aFila)]
           : []),
@@ -1153,35 +1231,40 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
   const matrizTabla = (titulo: string, m: Matriz) => (
     <div style={{ marginBottom: '16px' }}>
       {titulo && <h4 style={{ margin: '0 0 8px 0', color: 'var(--color-ink)' }}>{titulo}</h4>}
-      {gruposMatriz(m).map((g) => (
-        <div key={g.titulo} style={{ overflowX: 'auto', marginBottom: '10px' }}>
-          <table style={{ borderCollapse: 'collapse', fontSize: '13px', background: 'white', minWidth: '100%' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-ink)', color: 'white' }}>
-                <th style={estiloTh}>{g.titulo}</th>
-                {g.tallas.map((t) => <th key={t} style={{ ...estiloTh, textAlign: 'center' }}>{t}</th>)}
-                <th style={{ ...estiloTh, textAlign: 'center' }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {g.filas.map((f) => (
-                <tr key={f.etiqueta} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ ...estiloTd, whiteSpace: 'nowrap', color: f.etiqueta.includes('falta definir') ? '#b45309' : undefined }}>{f.etiqueta}</td>
-                  {f.valores.map((v, k) => (
-                    <td key={k} style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)', color: v ? 'inherit' : '#ccc' }}>{v === null ? '—' : v}</td>
+      {seccionesMatriz(m).map((sec) => (
+        <div key={sec.linea}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-ink)', margin: '4px 0 6px 0' }}>{sec.titulo}</div>
+          {sec.grupos.map((g) => (
+            <div key={g.titulo} style={{ overflowX: 'auto', marginBottom: '10px' }}>
+              <table style={{ borderCollapse: 'collapse', fontSize: '13px', background: 'white', minWidth: '100%' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-ink)', color: 'white' }}>
+                    <th style={estiloTh}>{g.titulo}</th>
+                    {g.tallas.map((t) => <th key={t} style={{ ...estiloTh, textAlign: 'center' }}>{t}</th>)}
+                    <th style={{ ...estiloTh, textAlign: 'center' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.filas.map((f) => (
+                    <tr key={f.etiqueta} style={{ borderBottom: '1px solid #eee' }}>
+                      <td style={{ ...estiloTd, whiteSpace: 'nowrap', color: f.etiqueta.includes('falta definir') ? '#b45309' : undefined }}>{f.etiqueta}</td>
+                      {f.valores.map((v, k) => (
+                        <td key={k} style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)', color: v ? 'inherit' : '#ccc' }}>{v === null ? '—' : v}</td>
+                      ))}
+                      <td style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>{f.total}</td>
+                    </tr>
                   ))}
-                  <td style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>{f.total}</td>
-                </tr>
-              ))}
-              <tr style={{ borderTop: '2px solid var(--color-ink)', fontWeight: 'bold' }}>
-                <td style={estiloTd}>Total</td>
-                {g.totales.map((v, k) => (
-                  <td key={k} style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>{v}</td>
-                ))}
-                <td style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>{g.totales.reduce((a, b) => a + b, 0)}</td>
-              </tr>
-            </tbody>
-          </table>
+                  <tr style={{ borderTop: '2px solid var(--color-ink)', fontWeight: 'bold' }}>
+                    <td style={estiloTd}>Total</td>
+                    {g.totales.map((v, k) => (
+                      <td key={k} style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>{v}</td>
+                    ))}
+                    <td style={{ ...estiloTd, textAlign: 'center', fontFamily: 'var(--font-mono)' }}>{g.totales.reduce((a, b) => a + b, 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
       ))}
     </div>
@@ -1368,7 +1451,11 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
             <label style={estiloLabel}>Prendas (precio unitario en US$)</label>
             {uniLineas.map((l, idx) => (
-              <div key={idx} style={{ display: 'grid', gridTemplateColumns: `minmax(150px, 2fr)${llevaManga(l.tipo_prenda) ? ' minmax(130px, 1.5fr)' : ''} minmax(80px, 1fr) minmax(70px, 1fr) minmax(110px, 1.5fr) auto`, gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: `minmax(170px, 2fr) minmax(150px, 2fr)${llevaManga(l.tipo_prenda) ? ' minmax(130px, 1.5fr)' : ''} minmax(80px, 1fr) minmax(70px, 1fr) minmax(110px, 1.5fr) auto`, gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                <select value={l.linea} onChange={(e) => setUniLineas(uniLineas.map((x, k) => (k === idx ? { ...x, linea: e.target.value } : x)))} style={{ ...estiloInput, borderColor: l.linea ? '#ddd' : '#f0b400' }} aria-label="Tipo de uniforme">
+                  <option value="">-- Tipo de uniforme --</option>
+                  {LINEAS.map((ln) => <option key={ln} value={ln}>{ETIQUETA_LINEA[ln]}</option>)}
+                </select>
                 <select value={l.tipo_prenda} onChange={(e) => setUniLineas(uniLineas.map((x, k) => (k === idx ? { ...ajustarPrenda(x, e.target.value as TipoPrenda), precioCentavos: precioDe(e.target.value) } : x)))} style={estiloInput} aria-label="Tipo de prenda">
                   {TIPOS_PRENDA.map((t) => <option key={t} value={t}>{ETIQUETA_PRENDA[t]}</option>)}
                 </select>
@@ -1503,6 +1590,8 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                             <button onClick={() => descargarPdfLote(l, matrices.porLote[l.id]).catch((e) => alert(e?.message || 'Error al generar el PDF'))} style={estiloBotonChico}>📄 PDF proveedor</button>
                             <button onClick={() => descargarPdfListaInterna(l, armarListaInterna(l, pagos, estadoLote)).catch((e) => alert(e?.message || 'Error al generar el PDF'))} style={estiloBotonChico}>📋 Lista interna</button>
+                            <button onClick={async () => { try { (await generarPdfListaEntrega(l, pagos, await cargarLogo())).doc.save(`hgv-uniformes-lote-${l.numero}-entrega.pdf`) } catch (e: any) { alert(e?.message || 'Error al generar el PDF') } }} style={estiloBotonChico}>✍️ Lista de entrega</button>
+                            <button onClick={async () => { try { (await generarPdfEtiquetas(l, pagos, await cargarLogo())).doc.save(`hgv-uniformes-lote-${l.numero}-etiquetas.pdf`) } catch (e: any) { alert(e?.message || 'Error al generar el PDF') } }} style={estiloBotonChico}>🏷️ Etiquetas</button>
                             {l.estado === 'en_fabrica' && (
                               <button onClick={() => marcarLoteRecibido(l)} disabled={ocupado === l.id} style={estiloBotonChico}>📥 Marcar recibido</button>
                             )}
@@ -1560,7 +1649,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                                     aria-label="Entregada"
                                     onChange={(e) => marcarEntregado(it, e.target.checked)}
                                   />
-                                  {it.cantidad} × {etiquetaPrenda(it)} {it.talla}
+                                  {it.cantidad} × {etiquetaPrendaConLinea(it)} {it.talla}
                                   {llevaManga(it.tipo_prenda) && !it.manga && (
                                     <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', background: '#fff4d6', color: '#8a5a00', fontWeight: 700 }}>⚠️ Falta definir manga</span>
                                   )}
@@ -1569,7 +1658,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                                   </span>
                                   {modificable && !enEdicion && (
                                     <button
-                                      onClick={() => { setEditMsg(''); setEditando({ itemId: it.id, tipo_prenda: it.tipo_prenda, talla: it.talla, manga: it.manga || '' }) }}
+                                      onClick={() => { setEditMsg(''); setEditando({ itemId: it.id, linea: it.linea, tipo_prenda: it.tipo_prenda, talla: it.talla, manga: it.manga || '' }) }}
                                       style={{ ...estiloBotonChico, fontSize: '11px', padding: '1px 6px' }}
                                     >
                                       ✏️ Modificar prenda
@@ -1578,6 +1667,9 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                                 </div>
                                 {enEdicion && editando && (
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', margin: '4px 0 6px 22px', padding: '6px', background: '#f5f8fb', borderRadius: '6px' }}>
+                                    <select value={editando.linea} onChange={(e) => setEditando({ ...editando, linea: e.target.value })} style={{ ...estiloInput, width: 'auto', padding: '4px' }} aria-label="Tipo de uniforme">
+                                      {LINEAS.map((ln) => <option key={ln} value={ln}>{ETIQUETA_LINEA[ln]}</option>)}
+                                    </select>
                                     <select value={editando.tipo_prenda} onChange={(e) => setEditando(ajustarPrenda(editando, e.target.value as TipoPrenda))} style={{ ...estiloInput, width: 'auto', padding: '4px' }} aria-label="Tipo de prenda">
                                       {TIPOS_PRENDA.map((t) => <option key={t} value={t}>{ETIQUETA_PRENDA[t]}</option>)}
                                     </select>
@@ -1792,7 +1884,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
                   <tbody>
                     {recibo.items.map((it) => (
                       <tr key={it.id}>
-                        <td style={{ padding: '4px 0' }}>{etiquetaPrenda(it)}</td>
+                        <td style={{ padding: '4px 0' }}>{etiquetaPrendaConLinea(it)}</td>
                         <td style={{ padding: '4px 0', textAlign: 'center' }}>{it.talla}</td>
                         <td style={{ padding: '4px 0', textAlign: 'center' }}>{it.cantidad}</td>
                         <td style={{ padding: '4px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
