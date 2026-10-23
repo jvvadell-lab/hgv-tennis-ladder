@@ -1,4 +1,4 @@
-// Prueba la migración 20261022130000_cerrar_notificaciones_permisos_flyer en
+// Prueba la migración 20261023142847_cerrar_notificaciones_permisos_flyer en
 // un Postgres local (PGlite), sobre copias de las tres tablas con las mismas
 // policies y privilegios que tenía producción el 22-oct-2026.
 import { readFileSync } from 'node:fs'
@@ -7,7 +7,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 const MIGRACION = readFileSync(
-  join(__dirname, '../migrations/20261022130000_cerrar_notificaciones_permisos_flyer.sql'),
+  join(__dirname, '../migrations/20261023142847_cerrar_notificaciones_permisos_flyer.sql'),
   'utf8',
 )
 

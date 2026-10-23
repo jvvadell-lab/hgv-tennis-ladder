@@ -38,6 +38,8 @@
 20261019193627 torneo_infantil
 20261019193641 torneo_infantil_datos
 20261022124304 jugadores_cerrar_columnas_anon
+20261023131159 uniformes_linea
+20261023142847 cerrar_notificaciones_permisos_flyer
 # Aplicada a mano desde el SQL Editor (no quedó registrada en prod), pero su
 # efecto sí está en el esquema:
 manual allow_usada_estado_reservas_cancha
