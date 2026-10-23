@@ -275,6 +275,16 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       {mensaje && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{mensaje}</p>}
       {error && <p style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</p>}
 
+      {esAdminCompleto && (
+        <CertificarEscalera
+          ocupado={ocupado === 'certificar-escalera'}
+          onConfirmar={(temporadaId, jugadorIds) =>
+            accion('certificar-escalera', 'certificar-escalera', { temporadaId, jugadorIds },
+              `Categoría oficial certificada a ${jugadorIds.length} jugador${jugadorIds.length === 1 ? '' : 'es'} de la escalera`)
+          }
+        />
+      )}
+
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
         {[{ id: 'todas', nombre: 'Todas', cupo: 0 }, ...categorias].map((c) => {
           const n = vivas.filter((i) => c.id === 'todas' || i.categoria_id === c.id).length
@@ -499,6 +509,116 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
         />
       )}
       </>}
+    </div>
+  )
+}
+
+type VistaCertificacion = {
+  temporadas: { id: string; nombre: string; jugadores: number }[]
+  temporada: { id: string; nombre: string } | null
+  total?: number
+  grupos?: { categoria: Nivel; genero: string; jugadores: { id: string; nombre: string }[] }[]
+  yaCertificados?: number
+  inactivos?: number
+  categoriaInvalida?: { id: string; nombre: string; categoria: string }[]
+}
+
+// Certificar de una vez la categoría oficial de los jugadores de la escalera
+// (la de jugadores.categoria). Primero muestra la vista previa por categoría
+// y género; el admin confirma y solo se certifican los que vio.
+function CertificarEscalera({ ocupado, onConfirmar }: {
+  ocupado: boolean
+  onConfirmar: (temporadaId: string, jugadorIds: string[]) => Promise<boolean>
+}) {
+  const [vista, setVista] = useState<VistaCertificacion | null>(null)
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState('')
+
+  const previsualizar = async (temporadaId?: string) => {
+    setCargando(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/admin/torneo/certificar-escalera${temporadaId ? `?temporadaId=${temporadaId}` : ''}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo preparar la vista previa')
+      setVista(data)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const ids = (vista?.grupos || []).flatMap((g) => g.jugadores.map((j) => j.id))
+
+  return (
+    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '16px 20px', marginBottom: '16px', fontSize: '13px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <strong>Certificar a los jugadores de la escalera</strong>
+          <div style={{ color: '#555', marginTop: '2px' }}>
+            Asigna como categoría oficial la de la escalera a quien todavía no tiene una. Los demás siguen con categoría provisional.
+          </div>
+        </div>
+        {!vista && (
+          <button disabled={cargando} onClick={() => previsualizar()} style={boton('var(--color-court)')}>
+            {cargando ? 'Cargando…' : 'Ver quiénes'}
+          </button>
+        )}
+      </div>
+
+      {error && <p style={{ color: '#842029', margin: '8px 0 0 0' }}>{error}</p>}
+
+      {vista && (
+        <div style={{ marginTop: '12px' }}>
+          {vista.temporadas.length === 0 || !vista.temporada ? (
+            <p style={{ margin: 0 }}>No hay ninguna temporada con jugadores en la escalera.</p>
+          ) : (
+            <>
+              <label>
+                Temporada:{' '}
+                <select value={vista.temporada.id} disabled={cargando || ocupado} onChange={(e) => previsualizar(e.target.value)} style={{ ...campoAdmin, width: 'auto', maxWidth: '100%' }}>
+                  {vista.temporadas.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.jugadores} en la escalera)</option>)}
+                </select>
+              </label>
+
+              <p style={{ margin: '10px 0 6px 0' }}>
+                <strong>{vista.total} jugador{vista.total === 1 ? '' : 'es'}</strong> recibirían su categoría oficial
+                {!!vista.yaCertificados && <> · {vista.yaCertificados} ya la tenían</>}
+                {!!vista.inactivos && <> · {vista.inactivos} inactivo{vista.inactivos === 1 ? '' : 's'} (no se tocan)</>}
+              </p>
+
+              {(vista.grupos || []).map((g) => (
+                <div key={`${g.categoria}-${g.genero}`} style={{ marginBottom: '6px' }}>
+                  <strong>{ETIQUETA_NIVEL[g.categoria]} · {ETIQUETA_GENERO_JUGADOR[g.genero] || g.genero}</strong> ({g.jugadores.length}):{' '}
+                  <span style={{ color: '#555' }}>{g.jugadores.map((j) => j.nombre).join(', ')}</span>
+                </div>
+              ))}
+
+              {!!vista.categoriaInvalida?.length && (
+                <p style={{ color: '#8a5a00', margin: '6px 0' }}>
+                  Sin certificar (su categoría de escalera no es un nivel de torneo):{' '}
+                  {vista.categoriaInvalida.map((j) => `${j.nombre} (${j.categoria})`).join(', ')}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <button
+                  disabled={ocupado || cargando || ids.length === 0}
+                  onClick={async () => {
+                    if (!confirm(`¿Certificar la categoría oficial de ${ids.length} jugador${ids.length === 1 ? '' : 'es'} de ${vista.temporada!.nombre}? Se recalculan sus inscripciones.`)) return
+                    if (await onConfirmar(vista.temporada!.id, ids)) setVista(null)
+                  }}
+                  style={boton('var(--color-court)', true)}
+                >
+                  {ocupado ? 'Certificando…' : `Certificar ${ids.length}`}
+                </button>
+                <button disabled={ocupado} onClick={() => setVista(null)} style={boton('#777')}>Cancelar</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
