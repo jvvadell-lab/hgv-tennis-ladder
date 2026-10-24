@@ -45,3 +45,9 @@
 # efecto sí está en el esquema:
 manual allow_usada_estado_reservas_cancha
 20261023183737 torneo_inscripciones_por_categoria
+20261024033820 torneo_programacion
+20261024033920 invitados_wild_card
+20261024033946 torneo_resultados
+20261024034140 torneo_inscripcion_individual
+20261024034209 torneo_navidad_fechas
+20261024034239 torneo_cierre_y_lista_espera
