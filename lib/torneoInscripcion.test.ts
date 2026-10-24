@@ -29,7 +29,7 @@ function datos(parcial: Partial<DatosValidacionInscripcion>): DatosValidacionIns
   return {
     estadoTorneo: 'inscripcion',
     categoria: dobleMasculinoSexta,
-    jugadores: [jugador('ana', 'caballeros', 'sexta'), jugador('beto', 'caballeros', 'sexta')],
+    jugadores: [jugador('ana', 'caballeros', 'sexta')],
     ocupados: 0,
     categoriasDe: {},
     categoriaId: 'cat-1',
@@ -76,8 +76,9 @@ describe('errorGeneros', () => {
 // --- validarInscripcion ----------------------------------------------------
 
 describe('validarInscripcion', () => {
-  it('acepta una pareja válida', () => {
+  it('en dobles cada jugador se inscribe solo, sin pareja', () => {
     expect(validarInscripcion(datos({}))).toEqual({ ok: true, provisionales: [] })
+    expect(error(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta'), jugador('beto', 'caballeros', 'sexta')] }))).toMatch(/por separado/)
   })
 
   it('solo con el torneo en inscripción', () => {
@@ -101,55 +102,45 @@ describe('validarInscripcion', () => {
     expect(mensajeErrorBaseInscripcion('ERROR: Las inscripciones de esta categoría no están abiertas')).toBe(ERROR_CATEGORIA_CERRADA)
   })
 
-  it('dobles exige pareja, distinta de uno mismo', () => {
-    expect(error(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta')] }))).toMatch(/pareja/)
-    const ana = jugador('ana', 'caballeros', 'sexta')
-    expect(error(datos({ jugadores: [ana, ana] }))).toMatch(/otro jugador/)
-  })
-
-  it('single va sin pareja', () => {
-    const d = datos({ categoria: singleQuinta, jugadores: [jugador('ana', 'caballeros', 'quinta'), jugador('beto', 'caballeros', 'quinta')] })
-    expect(error(d)).toMatch(/sin pareja/)
+  it('single: un jugador', () => {
     expect(error(datos({ categoria: singleQuinta, jugadores: [jugador('ana', 'caballeros', 'quinta')] }))).toBeNull()
   })
 
-  it('pareja inactiva o no permitida', () => {
-    const inactivo = { ...jugador('beto', 'caballeros', 'sexta'), activo: false }
-    expect(error(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta'), inactivo] }))).toMatch(/BETO no está activo/)
-    const vetado = { ...jugador('beto', 'caballeros', 'sexta'), estado_verificacion: 'no_permitido' }
-    expect(error(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta'), vetado] }))).toMatch(/BETO no está activo/)
+  it('jugador inactivo o no permitido', () => {
+    expect(error(datos({ jugadores: [{ ...jugador('beto', 'caballeros', 'sexta'), activo: false }] }))).toMatch(/BETO no está activo/)
+    expect(error(datos({ jugadores: [{ ...jugador('beto', 'caballeros', 'sexta'), estado_verificacion: 'no_permitido' }] }))).toMatch(/BETO no está activo/)
   })
 
-  it('género de la categoría', () => {
-    expect(error(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta'), jugador('eva', 'damas', 'sexta')] }))).toMatch(/solo para caballeros/)
-    expect(error(datos({ categoria: mixto, jugadores: [jugador('ana', 'caballeros', 'cuarta'), jugador('eva', 'damas', 'sexta_novatos')] }))).toBeNull()
+  it('género de la categoría; en el Mixto entran los dos', () => {
+    expect(error(datos({ jugadores: [jugador('eva', 'damas', 'sexta')] }))).toMatch(/solo para caballeros/)
+    expect(error(datos({ categoria: mixto, jugadores: [jugador('eva', 'damas', 'sexta_novatos')] }))).toBeNull()
+    expect(error(datos({ categoria: mixto, jugadores: [jugador('ana', 'caballeros', 'cuarta')] }))).toBeNull()
   })
 
   it('nivel: usa la categoría oficial si la hay', () => {
     // En la escalera es sexta, pero el admin lo certificó quinta.
-    const subido = jugador('beto', 'caballeros', 'sexta', 'quinta')
-    expect(error(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta'), subido] }))).toMatch(/BETO.*oficial de torneo es Quinta/)
+    expect(error(datos({ jugadores: [jugador('beto', 'caballeros', 'sexta', 'quinta')] }))).toMatch(/BETO.*oficial de torneo es Quinta/)
   })
 
   it('nivel: sin oficial, valida con la de la escalera y queda provisional', () => {
-    const sinOficial = jugador('beto', 'caballeros', 'sexta_novatos', null)
-    expect(validarInscripcion(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta'), sinOficial] }))).toEqual({ ok: true, provisionales: ['beto'] })
-    const quintaSinOficial = jugador('beto', 'caballeros', 'quinta', null)
-    expect(error(datos({ jugadores: [jugador('ana', 'caballeros', 'sexta'), quintaSinOficial] }))).toMatch(/su categoría es Quinta/)
+    expect(validarInscripcion(datos({ jugadores: [jugador('beto', 'caballeros', 'sexta_novatos', null)] }))).toEqual({ ok: true, provisionales: ['beto'] })
+    expect(error(datos({ jugadores: [jugador('beto', 'caballeros', 'quinta', null)] }))).toMatch(/su categoría es Quinta/)
   })
 
   it('máximo 2 categorías por jugador, con mensaje claro', () => {
-    expect(error(datos({ categoriasDe: { beto: ['cat-2', 'cat-3'] } }))).toMatch(/BETO ya está inscrito en 2 categorías/)
-    expect(error(datos({ categoriasDe: { beto: ['cat-2'] } }))).toBeNull()
+    expect(error(datos({ categoriasDe: { ana: ['cat-2', 'cat-3'] } }))).toMatch(/ANA ya está inscrito en 2 categorías/)
+    expect(error(datos({ categoriasDe: { ana: ['cat-2'] } }))).toBeNull()
   })
 
   it('no dos veces en la misma categoría', () => {
     expect(error(datos({ categoriasDe: { ana: ['cat-1'] } }))).toMatch(/ANA ya está inscrito en esta categoría/)
   })
 
-  it('cupo', () => {
-    expect(error(datos({ ocupados: 11 }))).toBeNull()
-    expect(error(datos({ ocupados: 12 }))).toMatch(/cupo/)
+  it('cupo: en dobles, parejas × 2 inscripciones', () => {
+    expect(error(datos({ ocupados: 23 }))).toBeNull()
+    expect(error(datos({ ocupados: 24 }))).toMatch(/cupo/)
+    expect(error(datos({ categoria: singleQuinta, jugadores: [jugador('ana', 'caballeros', 'quinta')], ocupados: 7 }))).toBeNull()
+    expect(error(datos({ categoria: singleQuinta, jugadores: [jugador('ana', 'caballeros', 'quinta')], ocupados: 8 }))).toMatch(/cupo/)
   })
 })
 

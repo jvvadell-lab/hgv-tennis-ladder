@@ -3,7 +3,7 @@
 // (endpoints del jugador y del admin, y scripts/simular-torneo.ts). Tests en
 // lib/torneoResultados.test.ts.
 //
-// j1 = inscripcion_a y j2 = inscripcion_b en `sets` (como en lib/torneo.ts).
+// j1 = equipo_a y j2 = equipo_b en `sets` (como en lib/torneo.ts).
 
 import type { SetJugado, TipoResultado } from './resultados'
 import {
@@ -17,9 +17,9 @@ import {
 
 export type PartidoAvance = Pick<
   TorneoPartido,
-  | 'id' | 'fase' | 'grupo_id' | 'orden' | 'origen_a' | 'origen_b' | 'inscripcion_a' | 'inscripcion_b'
-  | 'estado' | 'validado' | 'sets' | 'tipo_resultado' | 'retirada_inscripcion_id'
-  | 'ganador_inscripcion_id' | 'wo_ausente_inscripcion_id'
+  | 'id' | 'fase' | 'grupo_id' | 'orden' | 'origen_a' | 'origen_b' | 'equipo_a' | 'equipo_b'
+  | 'estado' | 'validado' | 'sets' | 'tipo_resultado' | 'retirada_equipo_id'
+  | 'ganador_equipo_id' | 'wo_ausente_equipo_id'
 >
 
 // Código del partido de llave al que se refiere 'G:<codigo>' ('C1', 'S2', 'F1').
@@ -45,10 +45,10 @@ export type DatosReporte = {
 // Valida el reporte contra el partido y devuelve el ganador. Retiro: gana
 // la otra inscripción, con lo jugado (SPEC §7, aprobado 20-oct-2026).
 export function evaluarReporte(
-  partido: Pick<PartidoAvance, 'inscripcion_a' | 'inscripcion_b' | 'estado' | 'validado'>,
+  partido: Pick<PartidoAvance, 'equipo_a' | 'equipo_b' | 'estado' | 'validado'>,
   d: DatosReporte,
 ): { ok: false; error: string } | { ok: true; ganador: string } {
-  const { inscripcion_a: a, inscripcion_b: b } = partido
+  const { equipo_a: a, equipo_b: b } = partido
   if (!a || !b) return { ok: false, error: 'Todavía no se conocen los dos rivales de este partido' }
   if (partido.validado) return { ok: false, error: 'Este partido ya tiene un resultado validado' }
   if (partido.estado === 'wo' || partido.estado === 'doble_wo') return { ok: false, error: 'Este partido se cerró por WO' }
@@ -89,7 +89,7 @@ export type ResultadoAvance = { cambios: CambioAvance[]; avisos: string[] }
 
 const lados: Lado[] = ['a', 'b']
 const origenDe = (p: PartidoAvance, lado: Lado) => (lado === 'a' ? p.origen_a : p.origen_b)
-const inscripcionDe = (p: PartidoAvance, lado: Lado) => (lado === 'a' ? p.inscripcion_a : p.inscripcion_b)
+const inscripcionDe = (p: PartidoAvance, lado: Lado) => (lado === 'a' ? p.equipo_a : p.equipo_b)
 
 // Cuando el grupo está completo (todos sus partidos cerrados), llena los
 // partidos de llave cuyo origen es '1X'/'2X'. Si un puesto que clasifica
@@ -117,8 +117,8 @@ export function avanceGrupo(
         avisos.push(`Grupo ${grupo.letra}: el ${o.puesto}º puesto sigue empatado — falta el desempate del admin`)
         continue
       }
-      if (inscripcionDe(p, lado) !== fila.inscripcion_id) {
-        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: fila.inscripcion_id })
+      if (inscripcionDe(p, lado) !== fila.equipo_id) {
+        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: fila.equipo_id })
       }
     }
   }
@@ -135,8 +135,8 @@ export function avanceLlave(partido: PartidoAvance, llave: PartidoAvance[]): Res
   for (const p of llave) {
     for (const lado of lados) {
       if (origenDe(p, lado) !== `G:${codigo}`) continue
-      if (partido.ganador_inscripcion_id && inscripcionDe(p, lado) !== partido.ganador_inscripcion_id) {
-        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: partido.ganador_inscripcion_id })
+      if (partido.ganador_equipo_id && inscripcionDe(p, lado) !== partido.ganador_equipo_id) {
+        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: partido.ganador_equipo_id })
       }
     }
   }
@@ -161,8 +161,8 @@ export function pasesPorVacante(llave: PartidoAvance[]): CambioAvance[] {
     const va = vacante(p, 'a')
     const vb = vacante(p, 'b')
     if (va && vb) cambios.push({ tipo: 'doble_wo', partidoId: p.id })
-    else if (va && p.inscripcion_b) cambios.push({ tipo: 'pase', partidoId: p.id, ganador: p.inscripcion_b })
-    else if (vb && p.inscripcion_a) cambios.push({ tipo: 'pase', partidoId: p.id, ganador: p.inscripcion_a })
+    else if (va && p.equipo_b) cambios.push({ tipo: 'pase', partidoId: p.id, ganador: p.equipo_b })
+    else if (vb && p.equipo_a) cambios.push({ tipo: 'pase', partidoId: p.id, ganador: p.equipo_a })
   }
   return cambios
 }
@@ -171,12 +171,12 @@ export function pasesPorVacante(llave: PartidoAvance[]): CambioAvance[] {
 // Marcador para mostrar
 // ---------------------------------------------------------------------------
 
-// Texto del marcador desde el lado de inscripcion_a: "6-3 4-6 [10-8]",
+// Texto del marcador desde el lado de equipo_a: "6-3 4-6 [10-8]",
 // "7-6(7-4) 6-2", "6-2 1-3 ret.", "WO", "Doble WO" o "Pasa por WO" (rival
 // vacante por un doble WO). null si no hay resultado.
-export function textoMarcador(p: Pick<PartidoAvance, 'estado' | 'sets' | 'tipo_resultado' | 'wo_ausente_inscripcion_id'>): string | null {
+export function textoMarcador(p: Pick<PartidoAvance, 'estado' | 'sets' | 'tipo_resultado' | 'wo_ausente_equipo_id'>): string | null {
   if (p.estado === 'doble_wo') return 'Doble WO'
-  if (p.estado === 'wo') return p.wo_ausente_inscripcion_id ? 'WO' : 'Pasa por WO'
+  if (p.estado === 'wo') return p.wo_ausente_equipo_id ? 'WO' : 'Pasa por WO'
   if (!p.sets?.length) return null
   const sets = p.sets.map((s) => {
     if (s.es_super_tiebreak) return `[${s.games_j1}-${s.games_j2}]`

@@ -43,7 +43,7 @@ function partidosDe(
     ronda: p.fase === 'grupo' ? crucesTodosContraTodos(plan.grupos.find((g) => g.letra === p.letra)!.miembros.length)[p.orden - 1].ronda : null,
     origen_a: p.origen_a,
     origen_b: p.origen_b,
-    personas: [p.inscripcion_a, p.inscripcion_b].filter(Boolean).flatMap((id) => personasDe.get(id!)!),
+    personas: [p.equipo_a, p.equipo_b].filter(Boolean).flatMap((id) => personasDe.get(id!)!),
     cerrado: false,
   }))
 }

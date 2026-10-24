@@ -85,7 +85,7 @@ export type JugadorParaInscripcion = {
 export type DatosValidacionInscripcion = {
   estadoTorneo: EstadoTorneo
   categoria: Pick<TorneoCategoria, 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo' | 'inscripciones_abiertas'>
-  // [quien se inscribe, pareja] — la pareja solo en dobles.
+  // [quien se inscribe]: también en dobles, cada jugador por separado.
   jugadores: JugadorParaInscripcion[]
   // Inscripciones vivas (no retiradas) en la categoría.
   ocupados: number
@@ -102,17 +102,17 @@ export type ResultadoValidacion =
 // Nivel con el que se valida: el oficial si lo tiene; si no, el de la escalera.
 export const nivelParaTorneo = (j: Pick<JugadorParaInscripcion, 'categoria' | 'categoria_torneo'>) => j.categoria_torneo ?? j.categoria
 
+// Inscripciones que caben en la categoría: en dobles, parejas × 2.
+export const cupoInscripciones = (c: Pick<TorneoCategoria, 'modalidad' | 'cupo'>) => c.cupo * (c.modalidad === 'doble' ? 2 : 1)
+
 export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoValidacion {
   const { categoria, jugadores } = d
   if (d.estadoTorneo !== 'inscripcion') return { ok: false, error: 'Las inscripciones del torneo no están abiertas' }
   if (!categoriaAbierta(d.estadoTorneo, categoria)) return { ok: false, error: ERROR_CATEGORIA_CERRADA }
 
-  if (categoria.modalidad === 'doble') {
-    if (jugadores.length !== 2 || !jugadores[1]) return { ok: false, error: 'Elige a tu pareja para inscribirte en dobles' }
-    if (jugadores[0].id === jugadores[1].id) return { ok: false, error: 'Tu pareja tiene que ser otro jugador' }
-  } else if (jugadores.length !== 1) {
-    return { ok: false, error: 'En single te inscribes sin pareja' }
-  }
+  // Cada jugador se inscribe solo, también en dobles: la pareja se forma
+  // aparte (lib/torneoDobles.ts).
+  if (jugadores.length !== 1) return { ok: false, error: 'Cada jugador se inscribe por separado' }
 
   for (const j of jugadores) {
     if (!j.activo || j.estado_verificacion === 'no_permitido') {
@@ -120,7 +120,8 @@ export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoVali
     }
   }
 
-  const errGenero = errorGeneros(categoria.genero, jugadores.map((j) => j.genero))
+  // En el Mixto entra cualquiera de los dos géneros; la dupla se revisa al formarla.
+  const errGenero = categoria.genero === 'mixto' ? null : errorGeneros(categoria.genero, jugadores.map((j) => j.genero))
   if (errGenero) return { ok: false, error: errGenero }
 
   for (const j of jugadores) {
@@ -140,7 +141,8 @@ export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoVali
     }
   }
 
-  if (d.ocupados >= categoria.cupo) return { ok: false, error: 'La categoría ya no tiene cupo' }
+  // En dobles el cupo es de parejas: cada una ocupa dos inscripciones.
+  if (d.ocupados >= cupoInscripciones(categoria)) return { ok: false, error: 'La categoría ya no tiene cupo' }
 
   return { ok: true, provisionales: jugadores.filter((j) => !j.categoria_torneo).map((j) => j.id) }
 }
@@ -154,8 +156,10 @@ export function mensajeErrorBaseInscripcion(mensaje: string): string | null {
     'La categoría ya no tiene cupo',
     'El jugador ya está inscrito en esta categoría',
     'Un jugador puede inscribirse en máximo 2 categorías del torneo',
-    'Una inscripción de dobles necesita pareja',
-    'Una inscripción de single no lleva pareja',
+    'Cada jugador se inscribe por separado: la pareja se forma aparte',
+    'La categoría ya tiene todas sus parejas',
+    'Uno de los jugadores ya está en una dupla de esta categoría',
+    'El Mixto es para una pareja de un caballero y una dama',
     'La edad del menor no corresponde a la categoría',
     'El género del menor no corresponde a la categoría',
     'El torneo es solo para socios: falta la autorización del admin como invitado / wild card',

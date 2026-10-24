@@ -99,6 +99,9 @@ export type Torneo = {
   sorteo_publicado_at: string | null
   programacion_publicada_at: string | null
   programacion_publicada_por: string | null
+  // Cierre de inscripciones (cuenta regresiva y vencimiento de las
+  // invitaciones de dobles). El cierre en sí lo hace el admin a mano.
+  cierre_inscripciones_at: string | null
   created_at: string
 }
 
@@ -125,6 +128,13 @@ export type TorneoCategoria = {
   inscripciones_abiertas: boolean          // además del torneo en 'inscripcion'
   inscripciones_cambiadas_por: string | null
   inscripciones_cambiadas_at: string | null
+  // Sorteo por categoría; cancelada = no se sortea (fusionada_en = destino).
+  sorteo_metodo: 'bombos' | 'serpentina' | null
+  sorteo_publicado_por: string | null
+  sorteo_publicado_at: string | null
+  cancelada_at: string | null
+  cancelada_por: string | null
+  fusionada_en: string | null
   created_at: string
 }
 
@@ -132,16 +142,28 @@ export type TorneoInscripcion = {
   id: string
   categoria_id: string
   jugador1_id: string | null    // null si es de un menor
-  jugador2_id: string | null    // null en single
+  jugador2_id: string | null    // siempre null: cada jugador se inscribe solo (la dupla es torneo_equipos)
   menor_id: string | null       // inscripción infantil (SPEC §14)
   menor_nombre_publico: string | null
   categoria_certificada_por: string | null
   categoria_certificada_at: string | null
   inscrita_por_admin: string | null
-  siembra: number | null
-  bombo: number | null          // sorteo por bombos (SPEC §3)
   estado: EstadoInscripcion
   inscrita_por: string | null
+  created_at: string
+}
+
+// Competidor del cuadro: la dupla en dobles, una inscripción en single e
+// infantil (se crea sola). Grupos y partidos apuntan aquí.
+export type TorneoEquipo = {
+  id: string
+  categoria_id: string
+  inscripcion1_id: string
+  inscripcion2_id: string | null
+  estado: 'activo' | 'disuelto'
+  origen: 'individual' | 'invitacion' | 'admin'
+  siembra: number | null
+  bombo: number | null          // sorteo por bombos (SPEC §3)
   created_at: string
 }
 
@@ -153,7 +175,7 @@ export type TorneoGrupo = {
 
 export type TorneoGrupoMiembro = {
   grupo_id: string
-  inscripcion_id: string
+  equipo_id: string
   siembra: number
   desempate_manual: number | null
 }
@@ -166,23 +188,23 @@ export type TorneoPartido = {
   orden: number
   origen_a: string | null       // '1A', '2B', 'G:C1'…
   origen_b: string | null
-  inscripcion_a: string | null  // j1 en `sets`
-  inscripcion_b: string | null  // j2 en `sets`
+  equipo_a: string | null  // j1 en `sets`
+  equipo_b: string | null  // j2 en `sets`
   cancha: CanchaTorneo | null
   fecha_hora: string | null
   estado: EstadoPartido
   sets: SetJugado[] | null
   tipo_resultado: TipoResultado
-  retirada_inscripcion_id: string | null
-  ganador_inscripcion_id: string | null
-  wo_ausente_inscripcion_id: string | null
+  retirada_equipo_id: string | null
+  ganador_equipo_id: string | null
+  wo_ausente_equipo_id: string | null
   reportado_por: string | null
   reportado_at: string | null
   validado: boolean
   validado_at: string | null
   validado_por: string | null
   bloqueo_id: string | null
-  handicap_inscripcion_id: string | null   // Mixto: pareja que empieza cada game 15-0 (SPEC §4.1)
+  handicap_equipo_id: string | null   // Mixto: pareja que empieza cada game 15-0 (SPEC §4.1)
   created_at: string
 }
 
@@ -322,7 +344,7 @@ export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde | 'final'
 //  * 1-1 en sets → el 3º es obligatorio y es Super Tiebreak;
 //  * 2-0 → no hay 3º.
 // Con retiro se admite lo realmente jugado hasta el momento del retiro.
-// j1 = inscripcion_a, j2 = inscripcion_b.
+// j1 = equipo_a, j2 = equipo_b.
 export function validarMarcadorTorneo(sets: unknown, tipoResultado: TipoResultado): string | null {
   const error = validarSets(sets, tipoResultado)
   if (error) return error
@@ -351,14 +373,14 @@ export function validarMarcadorTorneo(sets: unknown, tipoResultado: TipoResultad
 
 export type PartidoParaTabla = Pick<
   TorneoPartido,
-  | 'inscripcion_a' | 'inscripcion_b' | 'estado' | 'validado' | 'sets' | 'tipo_resultado'
-  | 'retirada_inscripcion_id' | 'ganador_inscripcion_id' | 'wo_ausente_inscripcion_id'
+  | 'equipo_a' | 'equipo_b' | 'estado' | 'validado' | 'sets' | 'tipo_resultado'
+  | 'retirada_equipo_id' | 'ganador_equipo_id' | 'wo_ausente_equipo_id'
 >
 
-export type MiembroParaTabla = Pick<TorneoGrupoMiembro, 'inscripcion_id' | 'desempate_manual'>
+export type MiembroParaTabla = Pick<TorneoGrupoMiembro, 'equipo_id' | 'desempate_manual'>
 
 export type FilaTabla = {
-  inscripcion_id: string
+  equipo_id: string
   posicion: number
   pj: number
   pg: number
@@ -378,7 +400,7 @@ export type FilaTabla = {
 
 type Conteo = { setsA: number; setsB: number; gamesA: number; gamesB: number; stbA: number; stbB: number }
 
-// Sets y games de un partido validado, desde el lado de inscripcion_a.
+// Sets y games de un partido validado, desde el lado de equipo_a.
 //  * WO: el presente gana 2-0 en sets y 12-0 en games (6-0, 6-0). [CONFIRMAR]
 //  * Doble WO: no suma sets ni games a nadie.
 //  * Súper tie-break: 1 set y 1-0 en games para quien lo gana — sus puntos
@@ -393,7 +415,7 @@ function conteoPartido(p: PartidoParaTabla): Conteo {
   const c: Conteo = { setsA: 0, setsB: 0, gamesA: 0, gamesB: 0, stbA: 0, stbB: 0 }
   if (p.estado === 'doble_wo') return c
   if (p.estado === 'wo') {
-    if (p.ganador_inscripcion_id === p.inscripcion_a) { c.setsA = 2; c.gamesA = 12 } else { c.setsB = 2; c.gamesB = 12 }
+    if (p.ganador_equipo_id === p.equipo_a) { c.setsA = 2; c.gamesA = 12 } else { c.setsB = 2; c.gamesB = 12 }
     return c
   }
 
@@ -415,7 +437,7 @@ function conteoPartido(p: PartidoParaTabla): Conteo {
 
   if (p.tipo_resultado !== 'retiro') return c
 
-  const ganaA = p.ganador_inscripcion_id === p.inscripcion_a
+  const ganaA = p.ganador_equipo_id === p.equipo_a
   const sumar = (setsGanador: number, gamesGanador: number, gamesPerdedor: number) => {
     if (ganaA) { c.setsA += setsGanador; c.gamesA += gamesGanador; c.gamesB += gamesPerdedor }
     else { c.setsB += setsGanador; c.gamesB += gamesGanador; c.gamesA += gamesPerdedor }
@@ -454,8 +476,8 @@ function conteoPartido(p: PartidoParaTabla): Conteo {
 export function ordenarGrupo(partidos: PartidoParaTabla[], miembros: MiembroParaTabla[]): FilaTabla[] {
   const filas = new Map<string, Omit<FilaTabla, 'posicion' | 'requiere_sorteo'>>()
   for (const m of miembros) {
-    filas.set(m.inscripcion_id, {
-      inscripcion_id: m.inscripcion_id, pj: 0, pg: 0, pp: 0,
+    filas.set(m.equipo_id, {
+      equipo_id: m.equipo_id, pj: 0, pg: 0, pp: 0,
       sets_favor: 0, sets_contra: 0, games_favor: 0, games_contra: 0,
       stb_puntos_favor: 0, stb_puntos_contra: 0,
     })
@@ -463,17 +485,17 @@ export function ordenarGrupo(partidos: PartidoParaTabla[], miembros: MiembroPara
 
   const contados = partidos.filter(
     (p) => p.validado && ['jugado', 'wo', 'doble_wo'].includes(p.estado) &&
-      p.inscripcion_a != null && p.inscripcion_b != null &&
-      filas.has(p.inscripcion_a) && filas.has(p.inscripcion_b),
+      p.equipo_a != null && p.equipo_b != null &&
+      filas.has(p.equipo_a) && filas.has(p.equipo_b),
   )
 
   for (const p of contados) {
-    const a = filas.get(p.inscripcion_a!)!
-    const b = filas.get(p.inscripcion_b!)!
+    const a = filas.get(p.equipo_a!)!
+    const b = filas.get(p.equipo_b!)!
     const c = conteoPartido(p)
     a.pj++; b.pj++
-    if (p.ganador_inscripcion_id === p.inscripcion_a) { a.pg++; b.pp++ }
-    else if (p.ganador_inscripcion_id === p.inscripcion_b) { b.pg++; a.pp++ }
+    if (p.ganador_equipo_id === p.equipo_a) { a.pg++; b.pp++ }
+    else if (p.ganador_equipo_id === p.equipo_b) { b.pg++; a.pp++ }
     else { a.pp++; b.pp++ }
     a.sets_favor += c.setsA; a.sets_contra += c.setsB; a.games_favor += c.gamesA; a.games_contra += c.gamesB
     b.sets_favor += c.setsB; b.sets_contra += c.setsA; b.games_favor += c.gamesB; b.games_contra += c.gamesA
@@ -481,15 +503,15 @@ export function ordenarGrupo(partidos: PartidoParaTabla[], miembros: MiembroPara
     b.stb_puntos_favor += c.stbB; b.stb_puntos_contra += c.stbA
   }
 
-  const manual = new Map(miembros.map((m) => [m.inscripcion_id, m.desempate_manual]))
+  const manual = new Map(miembros.map((m) => [m.equipo_id, m.desempate_manual]))
   const sinResolver = new Set<string>()
 
   // Ganador del partido entre dos inscripciones, o null si no hay uno decidido.
   const directo = (x: string, y: string): string | null => {
     const p = contados.find(
-      (q) => (q.inscripcion_a === x && q.inscripcion_b === y) || (q.inscripcion_a === y && q.inscripcion_b === x),
+      (q) => (q.equipo_a === x && q.equipo_b === y) || (q.equipo_a === y && q.equipo_b === x),
     )
-    const g = p?.ganador_inscripcion_id
+    const g = p?.ganador_equipo_id
     return g === x || g === y ? g : null
   }
 

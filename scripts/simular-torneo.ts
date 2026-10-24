@@ -1,7 +1,7 @@
 // Simulación del torneo en el entorno de pruebas LOCAL (Supabase en Docker).
 // Ver scripts/README-simulacion.md.
 //
-//   npm run simular -- preparar        24 jugadoras, 12 parejas en Doble Femenino Sexta, pagos y siembras
+//   npm run simular -- preparar        24 jugadoras inscritas una a una, 12 duplas por invitación o armadas por el admin, pagos y siembras
 //   npm run simular -- sortear         sorteo por bombos + asistente de programación (y la publica)
 //   npm run simular -- jugar <etapa>   grupos-j1 | grupos-j2 | grupos-j3 | cuartos | semis | final
 //   npm run simular -- estado          resumen de lo que hay
@@ -15,15 +15,17 @@
 // registrarWO, que corren el avance automático.
 //
 // La simulación vive en su propio torneo ("SIMULACIÓN — …"), con una copia
-// de la categoría Doble Femenino Sexta: el sorteo real exige al menos 3
-// inscripciones en TODAS las categorías del torneo, y así el Torneo Navidad
-// de los datos base no se toca. Mientras existe es el torneo vigente (empieza
+// de la categoría Doble Femenino Sexta (abierta), y así el Torneo Navidad de
+// los datos base no se toca. Mientras existe es el torneo vigente (empieza
 // un día antes). Marcas para "reset": ese torneo (borra en cascada sus
 // categorías, inscripciones, grupos y partidos), los bloqueos de cancha de
 // sus partidos, los pagos de sus inscripciones y las jugadoras con correo
 // @simulacion.invalid. "Prueba 01" (cuenta de prueba de los datos base) no se borra.
 //
 // Escenarios a propósito (semilla fija, reproducible):
+//   Inscripción: 7 invitaciones aceptadas (4 sin estar inscrita), una
+//   rechazada, una vencida, una por teléfono a alguien sin cuenta, y 4
+//   disponibles con las que el admin arma 2 duplas después del cierre.
 //   Grupo A: triple empate 1-1-1, resuelto por diferencia de sets.
 //   Grupo B: un WO.
 //   Grupo C: un doble WO (no suma a nadie; el 2º se define por games).
@@ -165,15 +167,21 @@ async function preparar(db: Db) {
     monto_inscripcion_eur: base.monto_inscripcion_eur,
     solo_socios: base.solo_socios,
     fecha_corte_edad: base.fecha_corte_edad,
+    // Cierre de inscripciones en 3 días: las invitaciones vencen a las 48 h.
+    cierre_inscripciones_at: new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString(),
   }).select('*').single()
   if (errT) throw errT
 
   const { id: _id, torneo_id: _t, created_at: _c, ...config } = catBase
-  const { data: categoria, error: errCat } = await db.from('torneo_categorias').insert({ ...config, torneo_id: torneo.id }).select('id, nombre').single()
+  const { data: categoria, error: errCat } = await db.from('torneo_categorias')
+    .insert({ ...config, torneo_id: torneo.id, inscripciones_abiertas: true, sorteo_metodo: null, sorteo_publicado_por: null, sorteo_publicado_at: null })
+    .select('id, nombre').single()
   if (errCat) throw errCat
   console.log(`✔ Torneo "${NOMBRE_TORNEO_SIM}" (${torneo.fecha_inicio} → ${torneo.fecha_fin}) con ${categoria.nombre}`)
 
-  // 2. Jugadoras: Prueba 01 (cuenta de prueba) + Prueba 02..24 (sin correo real ni teléfono).
+  // 2. Jugadoras: Prueba 01 (cuenta de prueba) + Prueba 02..24 (sin correo
+  // real). Prueba 20 todavía no tiene cuenta: la invitan por teléfono y se
+  // registra después.
   const { data: p01, error: errP1 } = await db.from('jugadores').select('id').eq('email', CORREO_JUGADORA_PRUEBA).maybeSingle()
   if (errP1) throw errP1
   if (!p01) throw new Error(`No está la jugadora de prueba (${CORREO_JUGADORA_PRUEBA}). Corre: scripts/staging-db.sh base`)
@@ -182,68 +190,116 @@ async function preparar(db: Db) {
   const { error: errU1 } = await db.from('jugadores').update(certificada).eq('id', p01.id)
   if (errU1) throw errU1
 
-  const nuevas = Array.from({ length: 23 }, (_, i) => {
-    const n = String(i + 2).padStart(2, '0')
-    return {
-      nombre: `Prueba ${n}`,
-      telefono: '',
-      email: `prueba${n}${DOMINIO_SIM}`,
-      pin: crypto.randomUUID(),          // nadie entra con estas cuentas
-      categoria: 'sexta',
-      genero: 'damas',
-      numero_accion: `SIM-${n}`,
-      activo: true,
-      estado_verificacion: 'verificado',
-      email_verificado: true,
-      ...certificada,
-    }
+  const ficha = (n: string, telefono = '') => ({
+    nombre: `Prueba ${n}`,
+    telefono,
+    email: `prueba${n}${DOMINIO_SIM}`,
+    pin: crypto.randomUUID(),          // nadie entra con estas cuentas
+    categoria: 'sexta',
+    genero: 'damas',
+    numero_accion: `SIM-${n}`,
+    activo: true,
+    estado_verificacion: 'verificado',
+    email_verificado: true,
+    ...certificada,
   })
-  const { data: creadas, error: errJ } = await db.from('jugadores').insert(nuevas).select('id, nombre')
+  const numeros = Array.from({ length: 23 }, (_, i) => String(i + 2).padStart(2, '0')).filter((n) => n !== '20')
+  const { data: creadas, error: errJ } = await db.from('jugadores').insert(numeros.map((n) => ficha(n))).select('id, nombre')
   if (errJ) throw errJ
-  const jugadoras = [p01.id, ...[...creadas!].sort((a, b) => a.nombre.localeCompare(b.nombre)).map((j) => j.id)]
-  console.log(`✔ 24 jugadoras (Prueba 01 es la cuenta de prueba; 02..24 con correo ${DOMINIO_SIM})`)
+  const id = new Map<number, string>([[1, p01.id], ...creadas!.map((j) => [Number(j.nombre.slice(-2)), j.id] as [number, string])])
+  console.log(`✔ 23 jugadoras (Prueba 01 es la cuenta de prueba; Prueba 20 se registrará después)`)
 
-  // 3. 12 parejas: siembras 1-4 (bombo 1), bombo 2 = parejas 5-8, bombo 3 = parejas 9-12.
-  const filas = Array.from({ length: 12 }, (_, k) => ({
-    categoria_id: categoria.id,
-    jugador1_id: jugadoras[2 * k],
-    jugador2_id: jugadoras[2 * k + 1],
-    inscrita_por: jugadoras[2 * k],
-    siembra: k < 4 ? k + 1 : null,
-    bombo: Math.floor(k / 4) + 1,
-  }))
-  const inscripciones: { id: string }[] = []
-  for (const f of filas) {
-    const { data, error } = await db.from('torneo_inscripciones').insert(f).select('id').single()
-    if (error) throw error
-    inscripciones.push(data)
-  }
-  console.log('✔ 12 parejas inscritas (siembras 1-4 y bombos 1-3)')
-
-  // 4. Pagos validados de cada jugadora a la tasa BCV del euro de hoy, y estado recalculado.
+  // 3. Inscripción individual y pago de cada una, como en la app.
+  const { aceptarInvitacion, armarDuplaAdmin, enviarInvitacion, rechazarInvitacion, vencerInvitaciones, vincularInvitacionesPorTelefono } = await import('../lib/torneoDoblesServidor')
   const hoy = hoyEnCaracas()
   const tasa = await obtenerTasaVigente(db, hoy)
   if (!tasa) throw new Error('No hay tasa BCV de ejemplo para hoy. Corre: scripts/staging-db.sh base')
   const monto = montoInscripcionBs(torneo.monto_inscripcion_eur, tasa.eur)
-  for (const [k, ins] of inscripciones.entries()) {
-    const { error } = await db.from('pagos').insert([filas[k].jugador1_id, filas[k].jugador2_id].map((jugadorId, j) => ({
-      jugador_id: jugadorId,
-      temporada_id: null,
-      torneo_inscripcion_id: ins.id,
-      tipo_pago: 'pago_movil',
-      monto,
-      fecha: hoy,
-      referencia: `SIM-PAGO-${k + 1}-${j + 1}`,
-      tasa_bcv_eur: tasaParaCalculo(tasa.eur),
-      validado: true,
-    })))
-    if (error) throw error
-    const r = await recalcularInscripcion(db, ins.id)
-    if (r.despues !== 'confirmada') {
-      throw new Error(`La pareja ${k + 1} quedó ${r.despues}: ${r.pendientes.map((p) => p.tipo).join(', ')}`)
-    }
+  const inscribir = async (n: number) => {
+    const { data, error } = await db.from('torneo_inscripciones').insert({ categoria_id: categoria.id, jugador1_id: id.get(n), inscrita_por: id.get(n) }).select('id').single()
+    if (error) throw new Error(`Prueba ${n}: ${error.message}`)
+    return data.id as string
   }
-  console.log(`✔ 24 pagos validados (Bs. ${monto} c/u) — las 12 inscripciones quedaron confirmadas`)
+  const pagar = async (n: number) => {
+    const { data: ins } = await db.from('torneo_inscripciones').select('id').eq('categoria_id', categoria.id).eq('jugador1_id', id.get(n)).neq('estado', 'retirada').single()
+    const { error } = await db.from('pagos').insert({
+      jugador_id: id.get(n), temporada_id: null, torneo_inscripcion_id: ins!.id, tipo_pago: 'pago_movil', monto, fecha: hoy,
+      referencia: `SIM-PAGO-${n}`, tasa_bcv_eur: tasaParaCalculo(tasa.eur), validado: true,
+    })
+    if (error) throw error
+    const r = await recalcularInscripcion(db, ins!.id)
+    if (r.despues !== 'confirmada') throw new Error(`Prueba ${n} quedó ${r.despues}: ${r.pendientes.map((p) => p.tipo).join(', ')}`)
+  }
+  const invitar = async (de: number, a: number | { nombre: string; telefono: string }) => {
+    const t = (await torneoSim(db))!
+    const r = await enviarInvitacion(db, t, categoria.id, id.get(de)!, typeof a === 'number' ? { jugadorId: id.get(a)! } : a)
+    if (!r.ok) throw new Error(`Invitación de Prueba ${de}: ${r.error}`)
+    return r.invitacion.id
+  }
+  const aceptar = async (inv: string, n: number) => {
+    const r = await aceptarInvitacion(db, (await torneoSim(db))!, inv, id.get(n)!)
+    if (!r.ok) throw new Error(`Prueba ${n} no pudo aceptar: ${r.error}`)
+  }
+
+  // Parejas 1-7: la que invita se inscribe; las impares de 1-3 invitan a una
+  // ya inscrita, las demás a una que se inscribe al aceptar.
+  for (let k = 0; k < 7; k++) {
+    const a = 2 * k + 1, b = 2 * k + 2
+    await inscribir(a)
+    if (k < 3) await inscribir(b)
+    await aceptar(await invitar(a, b), b)
+  }
+  console.log('✔ Parejas 1-7: invitación aceptada (4 de las invitadas se inscribieron al aceptar)')
+
+  // Pareja 8: Prueba 15 invita a Prueba 17, que rechaza; luego invita a Prueba 16, que acepta.
+  await inscribir(15)
+  const rechazada = await invitar(15, 17)
+  const rr = await rechazarInvitacion(db, rechazada, id.get(17)!)
+  if (!rr.ok) throw new Error(rr.error)
+  await aceptar(await invitar(15, 16), 16)
+  console.log('✔ Pareja 8: una invitación rechazada y otra aceptada')
+
+  // Pareja 9: la invitación de Prueba 17 a Prueba 18 vence (se adelanta su plazo); la repite y Prueba 18 acepta.
+  await inscribir(17)
+  const vieja = await invitar(17, 18)
+  await db.from('torneo_invitaciones').update({ vence_at: new Date(Date.now() - 60_000).toISOString() }).eq('id', vieja)
+  if ((await vencerInvitaciones(db, [categoria.id])) !== 1) throw new Error('La invitación vieja no venció')
+  await aceptar(await invitar(17, 18), 18)
+  console.log('✔ Pareja 9: una invitación vencida (sin cron, al leer) y otra aceptada')
+
+  // Pareja 10: Prueba 19 invita por teléfono a "Prueba 20", que se registra con ese número y acepta.
+  await inscribir(19)
+  const porTelefono = await invitar(19, { nombre: 'Prueba 20', telefono: '0414-555.00.20' })
+  const { data: p20, error: errP20 } = await db.from('jugadores').insert(ficha('20', '+58 414-5550020')).select('id').single()
+  if (errP20) throw errP20
+  id.set(20, p20.id)
+  if ((await vincularInvitacionesPorTelefono(db, p20.id, '+58 414-5550020')) !== 1) throw new Error('No se vinculó la invitación por teléfono')
+  await aceptar(porTelefono, 20)
+  console.log('✔ Pareja 10: invitación por teléfono; Prueba 20 se registró y aceptó')
+
+  // Parejas 11-12: Prueba 21-24 se inscriben sin elegir pareja (disponibles); al cierre el admin arma las duplas.
+  for (const n of [21, 22, 23, 24]) await inscribir(n)
+  const { data: sueltas } = await db.from('torneo_inscripciones').select('id, jugador1_id').eq('categoria_id', categoria.id).in('jugador1_id', [21, 22, 23, 24].map((n) => id.get(n)!))
+  const insDe = (n: number) => sueltas!.find((i) => i.jugador1_id === id.get(n))!.id
+  await db.from('torneos').update({ cierre_inscripciones_at: new Date(Date.now() - 60_000).toISOString() }).eq('id', torneo.id)
+  const tCerrado = (await torneoSim(db))!
+  const tarde = await enviarInvitacion(db, tCerrado, categoria.id, id.get(21)!, { jugadorId: id.get(22)! })
+  if (tarde.ok) throw new Error('Después del cierre no se debería poder invitar')
+  for (const [x, y] of [[21, 24], [22, 23]]) {
+    const r = await armarDuplaAdmin(db, tCerrado, [insDe(x), insDe(y)], admin)
+    if (!r.ok) throw new Error(r.error)
+  }
+  console.log('✔ Cierre: no se puede invitar; el admin armó las parejas 11-12 con las 4 disponibles')
+
+  // 4. Pagos validados de las 24, siembras 1-4 (bombo 1) y bombos 2-3 por orden de formación.
+  for (let n = 1; n <= 24; n++) await pagar(n)
+  const { data: equipos } = await db.from('torneo_equipos').select('id').eq('categoria_id', categoria.id).eq('estado', 'activo').order('created_at')
+  if (equipos!.length !== 12) throw new Error(`Hay ${equipos!.length} duplas, no 12`)
+  for (const [k, e] of equipos!.entries()) {
+    const { error } = await db.from('torneo_equipos').update({ siembra: k < 4 ? k + 1 : null, bombo: Math.floor(k / 4) + 1 }).eq('id', e.id)
+    if (error) throw error
+  }
+  console.log(`✔ 24 pagos validados (Bs. ${monto} c/u), 24 inscripciones confirmadas y 12 duplas con siembra y bombo`)
   console.log('\nSiguiente: npm run simular -- sortear')
 }
 
@@ -260,18 +316,17 @@ async function sortear(db: Db) {
 
   // Sorteo por bombos: lo mismo que la vista previa (armarSorteoCategoria)
   // y la publicación (publicarSorteo) de la app, con azar de semilla fija.
-  const categorias = await datosParaSorteo(db, torneo)
-  const grupos: Record<string, string[][]> = {}
-  for (const c of categorias) {
+  // Cada categoría se sortea y se publica por separado (aquí hay una).
+  for (const c of await datosParaSorteo(db, torneo)) {
+    if (c.bloqueos.length) throw new Error(c.bloqueos.join(' · '))
     const r = armarSorteoCategoria(c, c.inscripciones, 'bombos', azarPara(`sorteo-${c.nombre}`))
     if (!r.ok) throw new Error(r.error)
-    grupos[c.id] = r.sorteo.grupos
     const nombre = new Map(c.inscripciones.map((i) => [i.id, i.nombre]))
     r.sorteo.grupos.forEach((g, i) => console.log(`  Grupo ${String.fromCharCode(65 + i)}: ${g.map((id) => nombre.get(id)).join(' · ')}`))
+    const pub = await publicarSorteo(db, torneo, c.id, 'bombos', r.sorteo.grupos, admin)
+    if (!pub.ok) throw new Error(pub.error)
+    console.log(`✔ Sorteo de ${c.nombre} publicado (bombos)${pub.torneoSorteado ? ' — torneo sorteado' : ''}`)
   }
-  const pub = await publicarSorteo(db, torneo, 'bombos', grupos, admin)
-  if (!pub.ok) throw new Error(pub.error)
-  console.log('✔ Sorteo publicado (bombos)')
 
   // Asistente de programación + guardar (como "Confirmar propuesta"; los
   // avisos se aceptan, los errores no) + publicar la programación.
@@ -306,8 +361,8 @@ async function jugar(db: Db, etapa: Etapa) {
   if (!deLaEtapa.length) throw new Error(`No hay partidos de ${etapa}${torneo.estado === 'inscripcion' ? ' (¿falta sortear?)' : ''}`)
 
   // Fuerza de cada pareja: su siembra/bombo (menor = mejor).
-  const ids = [...new Set(todos.flatMap((p) => [p.inscripcion_a, p.inscripcion_b]).filter(Boolean))] as string[]
-  const { data: ins, error } = await db.from('torneo_inscripciones').select('id, siembra, bombo, created_at').in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
+  const ids = [...new Set(todos.flatMap((p) => [p.equipo_a, p.equipo_b]).filter(Boolean))] as string[]
+  const { data: ins, error } = await db.from('torneo_equipos').select('id, siembra, bombo, created_at').in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
   if (error) throw error
   const orden = [...(ins || [])].sort((a, b) => (a.bombo ?? 9) - (b.bombo ?? 9) || (a.siembra ?? 99) - (b.siembra ?? 99) || a.created_at.localeCompare(b.created_at))
   const fuerza = new Map(orden.map((i, k) => [i.id, k]))
@@ -317,17 +372,17 @@ async function jugar(db: Db, etapa: Etapa) {
     const clave = `${p.fase}-${p.grupo_letra ?? ''}-${p.orden}`
     const etiqueta = p.fase === 'grupo' ? `Grupo ${p.grupo_letra} P${p.orden}` : clave.replace(/^(\w)\w*--/, (_, f) => f.toUpperCase())
     if (p.validado) { console.log(`  · ${etiqueta}: ya jugado (${textoMarcador(p)})`); continue }
-    if (!p.inscripcion_a || !p.inscripcion_b) throw new Error(`${etiqueta}: todavía no se conocen los rivales — juega antes la etapa anterior`)
+    if (!p.equipo_a || !p.equipo_b) throw new Error(`${etiqueta}: todavía no se conocen los rivales — juega antes la etapa anterior`)
 
-    const a = p.inscripcion_a
-    const b = p.inscripcion_b
+    const a = p.equipo_a
+    const b = p.equipo_b
     const rng = azarPara(clave)
     const aEsMejor = fuerza.get(a)! < fuerza.get(b)!
     const reportante = personas.get(a)![0]
     let r: { ok: boolean; error?: string; avisos?: string[] }
 
     // Miembros del grupo ordenados por fuerza (0 = la más fuerte).
-    const delGrupo = p.grupo_id ? [...new Set(todos.filter((q) => q.grupo_id === p.grupo_id).flatMap((q) => [q.inscripcion_a!, q.inscripcion_b!]))].sort((x, y) => fuerza.get(x)! - fuerza.get(y)!) : []
+    const delGrupo = p.grupo_id ? [...new Set(todos.filter((q) => q.grupo_id === p.grupo_id).flatMap((q) => [q.equipo_a!, q.equipo_b!]))].sort((x, y) => fuerza.get(x)! - fuerza.get(y)!) : []
     const pos = (id: string) => delGrupo.indexOf(id)
     const par = [pos(a), pos(b)].sort().join('-')
 
@@ -371,7 +426,7 @@ async function jugar(db: Db, etapa: Etapa) {
     if (!r.ok) throw new Error(`${etiqueta}: ${r.error}`)
 
     const final = (await listarPartidos(db, torneo.id)).find((q) => q.id === p.id)!
-    const ganador = final.ganador_inscripcion_id === a ? p.nombre_a : final.ganador_inscripcion_id === b ? p.nombre_b : 'nadie'
+    const ganador = final.ganador_equipo_id === a ? p.nombre_a : final.ganador_equipo_id === b ? p.nombre_b : 'nadie'
     console.log(`  ✔ ${etiqueta}: ${p.nombre_a} vs ${p.nombre_b} → ${textoMarcador(final)} · gana ${ganador}`)
     for (const aviso of r.avisos ?? []) console.log(`    ⚠️  ${aviso}`)
   }
@@ -395,16 +450,16 @@ async function estado(db: Db) {
 
   const { data: grupos, error } = await db
     .from('torneo_grupos')
-    .select('id, letra, torneo_grupo_miembros(inscripcion_id, desempate_manual)')
+    .select('id, letra, torneo_grupo_miembros(equipo_id, desempate_manual)')
     .in('id', [...new Set(partidos.map((p) => p.grupo_id).filter(Boolean))] as string[])
     .order('letra')
   if (error) throw error
-  const nombre = new Map(partidos.flatMap((p) => [[p.inscripcion_a, p.nombre_a], [p.inscripcion_b, p.nombre_b]]).filter(([id]) => id) as [string, string][])
+  const nombre = new Map(partidos.flatMap((p) => [[p.equipo_a, p.nombre_a], [p.equipo_b, p.nombre_b]]).filter(([id]) => id) as [string, string][])
   for (const g of grupos || []) {
     const delGrupo = partidos.filter((p) => p.grupo_id === g.id)
     const completo = delGrupo.every((p) => p.validado)
     const tabla = ordenarGrupo(delGrupo, g.torneo_grupo_miembros as any)
-    console.log(`Grupo ${g.letra}${completo ? ' (cerrado)' : ''}: ${tabla.map((f) => `${f.posicion}º ${nombre.get(f.inscripcion_id)} (PG ${f.pg}, sets ${f.sets_favor}-${f.sets_contra}, games ${f.games_favor}-${f.games_contra})${completo && f.requiere_sorteo ? ' ⚠️ empate sin resolver' : ''}`).join(' | ')}`)
+    console.log(`Grupo ${g.letra}${completo ? ' (cerrado)' : ''}: ${tabla.map((f) => `${f.posicion}º ${nombre.get(f.equipo_id)} (PG ${f.pg}, sets ${f.sets_favor}-${f.sets_contra}, games ${f.games_favor}-${f.games_contra})${completo && f.requiere_sorteo ? ' ⚠️ empate sin resolver' : ''}`).join(' | ')}`)
   }
   const llave = partidos.filter((p) => p.fase !== 'grupo')
   for (const p of llave) {
@@ -433,7 +488,16 @@ async function reset(db: Db) {
 
     const borrar = async (tabla: string, q: any) => { const { error, count } = await q; if (error) throw new Error(`${tabla}: ${error.message}`); return count ?? 0 }
     const nPagos = insIds.length ? await borrar('pagos', db.from('pagos').delete({ count: 'exact' }).in('torneo_inscripcion_id', insIds)) : 0
-    // Borra el torneo: en cascada sus categorías, inscripciones, grupos y partidos.
+    const nInv = await borrar('notificaciones', db.from('notificaciones').delete({ count: 'exact' }).not('torneo_invitacion_id', 'is', null).in('jugador_id', [...idsJugadoras, ...(p01 ? [p01.id] : [])]))
+    void nInv
+    // Partidos y grupos primero (apuntan a equipos); luego el torneo en cascada.
+    if (catIds.length) {
+      await borrar('torneo_partidos', db.from('torneo_partidos').delete().in('categoria_id', catIds))
+      await borrar('torneo_grupos', db.from('torneo_grupos').delete().in('categoria_id', catIds))
+      await borrar('torneo_invitaciones', db.from('torneo_invitaciones').delete().in('categoria_id', catIds))
+      await borrar('torneo_equipos', db.from('torneo_equipos').delete().in('categoria_id', catIds))
+    }
+    // Borra el torneo: en cascada sus categorías e inscripciones.
     await borrar('torneos', db.from('torneos').delete().eq('id', torneo.id))
     const nBloq = bloqueos.length ? await borrar('bloqueos_cancha', db.from('bloqueos_cancha').delete({ count: 'exact' }).in('id', bloqueos)) : 0
     console.log(`✔ Torneo de simulación borrado (con sus partidos), ${nPagos} pagos y ${nBloq} bloqueos de cancha`)

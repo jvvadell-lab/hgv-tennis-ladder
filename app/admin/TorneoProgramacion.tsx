@@ -24,11 +24,11 @@ type Partido = {
   estado: EstadoPartido
   retiro: boolean
   cerrado: boolean
-  inscripcion_a: string | null
-  inscripcion_b: string | null
+  equipo_a: string | null
+  equipo_b: string | null
   nombre_a: string | null
   nombre_b: string | null
-  handicap_inscripcion_id: string | null
+  handicap_equipo_id: string | null
   cancha: string | null
   inicio: string | null
   errores: string[]
@@ -276,11 +276,11 @@ export default function TorneoProgramacion() {
                   </div>
                 )}
               </div>
-              {p.esMixto && p.inscripcion_a && p.inscripcion_b && !p.cerrado && (
+              {p.esMixto && p.equipo_a && p.equipo_b && !p.cerrado && (
                 <div style={{ fontSize: '12px', marginTop: '6px', display: 'flex', gap: '6px', alignItems: 'center' }}>
                   Handicap 15-0:
                   <select
-                    value={p.handicap_inscripcion_id ?? ''}
+                    value={p.handicap_equipo_id ?? ''}
                     disabled={ocupado === `h-${p.id}`}
                     onChange={(e) => ejecutar(`h-${p.id}`, async () => {
                       const res = await fetch('/api/admin/torneo/programacion/handicap', {
@@ -295,8 +295,8 @@ export default function TorneoProgramacion() {
                     style={{ padding: '4px', fontSize: '12px', borderRadius: '6px', border: '1px solid #ccc' }}
                   >
                     <option value="">Sin handicap</option>
-                    <option value={p.inscripcion_a}>{p.nombre_a}</option>
-                    <option value={p.inscripcion_b}>{p.nombre_b}</option>
+                    <option value={p.equipo_a}>{p.nombre_a}</option>
+                    <option value={p.equipo_b}>{p.nombre_b}</option>
                   </select>
                 </div>
               )}

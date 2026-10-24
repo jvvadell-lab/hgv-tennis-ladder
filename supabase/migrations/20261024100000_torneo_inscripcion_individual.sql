@@ -384,18 +384,39 @@ begin
 end;
 $$;
 
--- Sorteo sobre equipos: en cada categoría entran exactamente sus equipos activos.
-create or replace function public.torneo_publicar_sorteo(p_torneo_id uuid, p_metodo text, p_admin_id uuid, p_plan jsonb)
+-- Sorteo POR CATEGORÍA y sobre equipos (pedido del 23-oct-2026). Cada
+-- categoría se sortea y se publica por separado (queda fija al publicarla y
+-- se le cierran las inscripciones); el torneo pasa a 'sorteado' cuando ya
+-- están sorteadas todas las categorías no canceladas. En la categoría entran
+-- exactamente sus equipos activos.
+alter table public.torneo_categorias
+  add column sorteo_metodo text null check (sorteo_metodo in ('bombos', 'serpentina')),
+  add column sorteo_publicado_por uuid null references public.administradores(id),
+  add column sorteo_publicado_at timestamptz null,
+  -- Cancelada (menos de 3 equipos, o fusionada con otra): no se sortea.
+  add column cancelada_at timestamptz null,
+  add column cancelada_por uuid null references public.administradores(id),
+  add column fusionada_en uuid null references public.torneo_categorias(id),
+  add constraint torneo_categorias_sorteo_completo check (
+    (sorteo_metodo is null) = (sorteo_publicado_por is null)
+    and (sorteo_metodo is null) = (sorteo_publicado_at is null)
+  ),
+  add constraint torneo_categorias_cancelada_con_admin check ((cancelada_at is null) = (cancelada_por is null)),
+  add constraint torneo_categorias_sorteada_o_cancelada check (sorteo_publicado_at is null or cancelada_at is null);
+
+drop function public.torneo_publicar_sorteo(uuid, text, uuid, jsonb);
+
+create function public.torneo_publicar_sorteo_categoria(p_categoria_id uuid, p_metodo text, p_admin_id uuid, p_plan jsonb)
 returns void
 language plpgsql
 set search_path = public
 as $$
 declare
+  v_cat public.torneo_categorias;
   v_estado text;
-  v_cat record;
-  v_plan_cat jsonb;
   v_grupo jsonb;
   v_partido jsonb;
+  v_miembro jsonb;
   v_grupo_id uuid;
   v_esperados uuid[];
   v_recibidos uuid[];
@@ -406,95 +427,80 @@ begin
     raise exception 'Método de sorteo no válido';
   end if;
 
-  select estado into v_estado from public.torneos where id = p_torneo_id for update;
-  if v_estado is null then
-    raise exception 'Torneo no encontrado';
+  select * into v_cat from public.torneo_categorias where id = p_categoria_id for update;
+  if v_cat.id is null then
+    raise exception 'Categoría no encontrada';
   end if;
+  select estado into v_estado from public.torneos where id = v_cat.torneo_id for update;
   if v_estado not in ('borrador', 'inscripcion') then
-    raise exception 'El sorteo ya se hizo (el torneo está en %)', v_estado;
+    raise exception 'El sorteo del torneo ya terminó (está en %)', v_estado;
   end if;
-
-  if exists (
-    select 1 from public.torneo_grupos g join public.torneo_categorias c on c.id = g.categoria_id where c.torneo_id = p_torneo_id
-  ) or exists (
-    select 1 from public.torneo_partidos p join public.torneo_categorias c on c.id = p.categoria_id where c.torneo_id = p_torneo_id
-  ) then
-    raise exception 'El torneo ya tiene grupos o partidos: el sorteo ya se hizo';
+  if v_cat.cancelada_at is not null then
+    raise exception '%: la categoría está cancelada', v_cat.nombre;
   end if;
-
-  if jsonb_typeof(p_plan) <> 'array' then
+  if v_cat.sorteo_publicado_at is not null
+     or exists (select 1 from public.torneo_grupos where categoria_id = p_categoria_id)
+     or exists (select 1 from public.torneo_partidos where categoria_id = p_categoria_id) then
+    raise exception '%: el sorteo ya se publicó', v_cat.nombre;
+  end if;
+  if jsonb_typeof(p_plan) <> 'object' or (p_plan->>'categoria_id')::uuid is distinct from p_categoria_id then
     raise exception 'Plan de sorteo no válido';
   end if;
 
   -- Nadie se retira ni cambia de dupla a mitad de la publicación.
-  perform 1 from public.torneo_inscripciones i
-  join public.torneo_categorias c on c.id = i.categoria_id
-  where c.torneo_id = p_torneo_id
-  for update of i;
-  perform 1 from public.torneo_equipos e
-  join public.torneo_categorias c on c.id = e.categoria_id
-  where c.torneo_id = p_torneo_id
-  for update of e;
+  perform 1 from public.torneo_inscripciones where categoria_id = p_categoria_id for update;
+  perform 1 from public.torneo_equipos where categoria_id = p_categoria_id for update;
 
-  for v_cat in select id, nombre from public.torneo_categorias where torneo_id = p_torneo_id order by orden loop
-    v_plan_cat := null;
-    select e into v_plan_cat from jsonb_array_elements(p_plan) e where (e->>'categoria_id')::uuid = v_cat.id;
-    if v_plan_cat is null then
-      raise exception 'Falta la categoría % en el sorteo', v_cat.nombre;
-    end if;
+  select coalesce(array_agg(id order by id), '{}') into v_esperados
+  from public.torneo_equipos
+  where categoria_id = p_categoria_id and estado = 'activo';
 
-    select coalesce(array_agg(id order by id), '{}') into v_esperados
-    from public.torneo_equipos
-    where categoria_id = v_cat.id and estado = 'activo';
+  select coalesce(array_agg(m::uuid order by m::uuid), '{}') into v_recibidos
+  from jsonb_array_elements(p_plan->'grupos') g, jsonb_array_elements_text(g->'miembros') m;
 
-    select coalesce(array_agg(m::uuid order by m::uuid), '{}') into v_recibidos
-    from jsonb_array_elements(v_plan_cat->'grupos') g, jsonb_array_elements_text(g->'miembros') m;
+  if coalesce(array_length(v_esperados, 1), 0) < 3 then
+    raise exception '%: hacen falta al menos 3 duplas o inscritos para sortear', v_cat.nombre;
+  end if;
+  if v_esperados <> v_recibidos then
+    raise exception '%: las duplas o inscripciones cambiaron desde la vista previa. Repite el sorteo.', v_cat.nombre;
+  end if;
 
-    if array_length(v_esperados, 1) is null or array_length(v_esperados, 1) < 3 then
-      raise exception '%: hacen falta al menos 3 duplas o inscritos para sortear', v_cat.nombre;
-    end if;
-    if v_esperados <> v_recibidos then
-      raise exception '%: las duplas o inscripciones cambiaron desde la vista previa. Repite el sorteo.', v_cat.nombre;
-    end if;
+  v_letras := '{}'::jsonb;
+  for v_grupo in select * from jsonb_array_elements(p_plan->'grupos') loop
+    insert into public.torneo_grupos (categoria_id, letra)
+    values (p_categoria_id, v_grupo->>'letra')
+    returning id into v_grupo_id;
+    v_letras := v_letras || jsonb_build_object(v_grupo->>'letra', v_grupo_id);
 
-    v_letras := '{}'::jsonb;
-    for v_grupo in select * from jsonb_array_elements(v_plan_cat->'grupos') loop
-      insert into public.torneo_grupos (categoria_id, letra)
-      values (v_cat.id, v_grupo->>'letra')
-      returning id into v_grupo_id;
-      v_letras := v_letras || jsonb_build_object(v_grupo->>'letra', v_grupo_id);
-
-      v_pos := 0;
-      for v_partido in select * from jsonb_array_elements(v_grupo->'miembros') loop
-        v_pos := v_pos + 1;
-        insert into public.torneo_grupo_miembros (grupo_id, equipo_id, siembra)
-        values (v_grupo_id, (v_partido #>> '{}')::uuid, v_pos);
-      end loop;
+    v_pos := 0;
+    for v_miembro in select * from jsonb_array_elements(v_grupo->'miembros') loop
+      v_pos := v_pos + 1;
+      insert into public.torneo_grupo_miembros (grupo_id, equipo_id, siembra)
+      values (v_grupo_id, (v_miembro #>> '{}')::uuid, v_pos);
     end loop;
+  end loop;
 
-    for v_partido in select * from jsonb_array_elements(v_plan_cat->'partidos') loop
-      if (v_partido->>'fase') = 'grupo' and not (v_letras ? (v_partido->>'letra')) then
-        raise exception '%: partido de un grupo que no existe', v_cat.nombre;
-      end if;
-      insert into public.torneo_partidos
-        (categoria_id, fase, grupo_id, orden, origen_a, origen_b, equipo_a, equipo_b)
-      values (
-        v_cat.id,
-        v_partido->>'fase',
-        case when (v_partido->>'fase') = 'grupo' then (v_letras->>(v_partido->>'letra'))::uuid end,
-        (v_partido->>'orden')::integer,
-        v_partido->>'origen_a',
-        v_partido->>'origen_b',
-        (v_partido->>'equipo_a')::uuid,
-        (v_partido->>'equipo_b')::uuid
-      );
-    end loop;
+  for v_partido in select * from jsonb_array_elements(p_plan->'partidos') loop
+    if (v_partido->>'fase') = 'grupo' and not (v_letras ? (v_partido->>'letra')) then
+      raise exception '%: partido de un grupo que no existe', v_cat.nombre;
+    end if;
+    insert into public.torneo_partidos
+      (categoria_id, fase, grupo_id, orden, origen_a, origen_b, equipo_a, equipo_b)
+    values (
+      p_categoria_id,
+      v_partido->>'fase',
+      case when (v_partido->>'fase') = 'grupo' then (v_letras->>(v_partido->>'letra'))::uuid end,
+      (v_partido->>'orden')::integer,
+      v_partido->>'origen_a',
+      v_partido->>'origen_b',
+      (v_partido->>'equipo_a')::uuid,
+      (v_partido->>'equipo_b')::uuid
+    );
   end loop;
 
   if exists (
     select 1 from public.torneo_partidos p
-    join public.torneo_categorias c on c.id = p.categoria_id
-    where c.torneo_id = p_torneo_id and p.fase = 'grupo'
+    where p.categoria_id = p_categoria_id and p.fase = 'grupo'
       and (
         not exists (select 1 from public.torneo_grupo_miembros m where m.grupo_id = p.grupo_id and m.equipo_id = p.equipo_a)
         or not exists (select 1 from public.torneo_grupo_miembros m where m.grupo_id = p.grupo_id and m.equipo_id = p.equipo_b)
@@ -503,9 +509,113 @@ begin
     raise exception 'Hay un partido de grupo entre equipos que no son de ese grupo';
   end if;
 
-  update public.torneos
-     set estado = 'sorteado', sorteo_metodo = p_metodo, sorteo_publicado_por = p_admin_id, sorteo_publicado_at = now()
-   where id = p_torneo_id;
+  update public.torneo_categorias
+     set sorteo_metodo = p_metodo, sorteo_publicado_por = p_admin_id, sorteo_publicado_at = now(),
+         inscripciones_abiertas = false, inscripciones_cambiadas_por = p_admin_id, inscripciones_cambiadas_at = now()
+   where id = p_categoria_id;
+
+  -- Última categoría: el torneo queda sorteado (programación y resultados).
+  if not exists (
+    select 1 from public.torneo_categorias
+    where torneo_id = v_cat.torneo_id and cancelada_at is null and sorteo_publicado_at is null
+  ) then
+    update public.torneos
+       set estado = 'sorteado', sorteo_metodo = p_metodo, sorteo_publicado_por = p_admin_id, sorteo_publicado_at = now()
+     where id = v_cat.torneo_id;
+  end if;
+end;
+$$;
+
+-- Cancelar una categoría antes de su sorteo (p. ej. menos de 3 equipos). Se
+-- retiran sus inscripciones vivas y se marcan para devolución, salvo que
+-- p_destino_id la fusione con otra compatible: entonces las inscripciones se
+-- trasladan allá con sus duplas (la API valida nivel y género; aquí, cupo y
+-- modalidad). Si con esto ya están sorteadas las demás, el torneo queda
+-- sorteado.
+create function public.torneo_cancelar_categoria(p_categoria_id uuid, p_admin_id uuid, p_destino_id uuid)
+returns jsonb
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_cat public.torneo_categorias;
+  v_dest public.torneo_categorias;
+  v_estado text;
+  v_ins uuid[];
+  v_duplas record;
+  v_vivas integer;
+begin
+  select * into v_cat from public.torneo_categorias where id = p_categoria_id for update;
+  if v_cat.id is null then
+    raise exception 'Categoría no encontrada';
+  end if;
+  select estado into v_estado from public.torneos where id = v_cat.torneo_id for update;
+  if v_estado not in ('borrador', 'inscripcion') then
+    raise exception 'El sorteo del torneo ya terminó';
+  end if;
+  if v_cat.cancelada_at is not null then
+    raise exception '%: ya estaba cancelada', v_cat.nombre;
+  end if;
+  if v_cat.sorteo_publicado_at is not null then
+    raise exception '%: ya se sorteó', v_cat.nombre;
+  end if;
+
+  select coalesce(array_agg(id order by created_at), '{}') into v_ins
+  from public.torneo_inscripciones where categoria_id = p_categoria_id and estado <> 'retirada';
+  v_vivas := coalesce(array_length(v_ins, 1), 0);
+
+  if p_destino_id is not null then
+    select * into v_dest from public.torneo_categorias where id = p_destino_id for update;
+    if v_dest.id is null or v_dest.torneo_id <> v_cat.torneo_id or v_dest.id = v_cat.id then
+      raise exception 'Categoría de destino no válida';
+    end if;
+    if v_dest.cancelada_at is not null or v_dest.sorteo_publicado_at is not null then
+      raise exception '%: no recibe inscripciones (cancelada o ya sorteada)', v_dest.nombre;
+    end if;
+    if v_dest.modalidad <> v_cat.modalidad or v_dest.es_infantil <> v_cat.es_infantil then
+      raise exception 'Solo se fusiona con una categoría de la misma modalidad';
+    end if;
+
+    -- Las duplas activas, para rearmarlas en el destino (el traslado las disuelve).
+    create temporary table _duplas on commit drop as
+      select inscripcion1_id, inscripcion2_id, origen, siembra, bombo, formado_por_jugador, formado_por_admin
+      from public.torneo_equipos
+      where categoria_id = p_categoria_id and estado = 'activo' and inscripcion2_id is not null;
+
+    update public.torneo_inscripciones set categoria_id = p_destino_id where id = any(v_ins);
+
+    for v_duplas in select * from _duplas loop
+      insert into public.torneo_equipos (categoria_id, inscripcion1_id, inscripcion2_id, origen, formado_por_jugador, formado_por_admin)
+      values (p_destino_id, v_duplas.inscripcion1_id, v_duplas.inscripcion2_id, v_duplas.origen, v_duplas.formado_por_jugador,
+              coalesce(v_duplas.formado_por_admin, p_admin_id));
+    end loop;
+  else
+    update public.torneo_inscripciones
+       set estado = 'retirada', devolucion_marcada_por = p_admin_id, devolucion_marcada_at = now()
+     where id = any(v_ins);
+  end if;
+
+  update public.torneo_invitaciones
+     set estado = 'cancelada', respondida_at = now(), motivo = 'La categoría se canceló'
+   where categoria_id = p_categoria_id and estado = 'pendiente';
+
+  update public.torneo_categorias
+     set cancelada_at = now(), cancelada_por = p_admin_id, fusionada_en = p_destino_id,
+         inscripciones_abiertas = false, inscripciones_cambiadas_por = p_admin_id, inscripciones_cambiadas_at = now()
+   where id = p_categoria_id;
+
+  if exists (select 1 from public.torneo_categorias where torneo_id = v_cat.torneo_id and sorteo_publicado_at is not null)
+     and not exists (
+       select 1 from public.torneo_categorias
+       where torneo_id = v_cat.torneo_id and cancelada_at is null and sorteo_publicado_at is null
+     ) then
+    update public.torneos
+       set estado = 'sorteado', sorteo_publicado_por = p_admin_id, sorteo_publicado_at = now(),
+           sorteo_metodo = coalesce(sorteo_metodo, 'bombos')
+     where id = v_cat.torneo_id;
+  end if;
+
+  return jsonb_build_object('inscripciones', to_jsonb(v_ins), 'fusionada', p_destino_id is not null);
 end;
 $$;
 
@@ -635,5 +745,6 @@ revoke execute on function public.torneo_equipos_validar() from public, anon, au
 revoke execute on function public.torneo_inscripciones_equipo() from public, anon, authenticated;
 revoke execute on function public.torneo_inscripciones_validar() from public, anon, authenticated;
 revoke execute on function public.torneo_partidos_validar_handicap() from public, anon, authenticated;
-revoke execute on function public.torneo_publicar_sorteo(uuid, text, uuid, jsonb) from public, anon, authenticated;
+revoke execute on function public.torneo_publicar_sorteo_categoria(uuid, text, uuid, jsonb) from public, anon, authenticated;
+revoke execute on function public.torneo_cancelar_categoria(uuid, uuid, uuid) from public, anon, authenticated;
 revoke execute on function public.torneo_aceptar_invitacion(uuid, uuid) from public, anon, authenticated;

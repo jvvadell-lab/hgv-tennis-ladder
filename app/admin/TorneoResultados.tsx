@@ -19,8 +19,8 @@ type Partido = {
   fase: Fase
   grupo_letra: string | null
   orden: number
-  inscripcion_a: string | null
-  inscripcion_b: string | null
+  equipo_a: string | null
+  equipo_b: string | null
   nombre_a: string | null
   nombre_b: string | null
   cancha: string | null
@@ -28,8 +28,8 @@ type Partido = {
   estado: EstadoPartido
   sets: SetJugado[] | null
   tipo_resultado: TipoResultado
-  wo_ausente_inscripcion_id: string | null
-  ganador_inscripcion_id: string | null
+  wo_ausente_equipo_id: string | null
+  ganador_equipo_id: string | null
   validado: boolean
   reportado_at: string | null
 }
@@ -46,7 +46,7 @@ const etiqueta = (p: Partido) =>
   p.fase === 'grupo' ? `Grupo ${p.grupo_letra} · P${p.orden}` : `${ETIQUETA_FASE[p.fase]} ${PREFIJO_FASE[p.fase as Exclude<Fase, 'grupo'>]}${p.orden}`
 
 const porValidar = (p: Partido) => !p.validado && !!p.reportado_at
-const porJugar = (p: Partido) => !p.validado && !p.reportado_at && !!p.inscripcion_a && !!p.inscripcion_b
+const porJugar = (p: Partido) => !p.validado && !p.reportado_at && !!p.equipo_a && !!p.equipo_b
 
 export default function TorneoResultados() {
   const [partidos, setPartidos] = useState<Partido[] | null>(null)
@@ -131,7 +131,7 @@ export default function TorneoResultados() {
       <div style={tarjeta}>
         {visibles.length === 0 && <p style={{ margin: 0, fontSize: '13px', color: '#888' }}>No hay partidos en esta lista.</p>}
         {visibles.map((p, i) => {
-          const conRivales = !!p.inscripcion_a && !!p.inscripcion_b
+          const conRivales = !!p.equipo_a && !!p.equipo_b
           const marcador = textoMarcador(p)
           return (
             <div key={p.id} style={{ borderTop: i ? '1px solid #e5e5e5' : 'none', padding: '10px 0' }}>
@@ -139,9 +139,9 @@ export default function TorneoResultados() {
                 <div>
                   <div style={{ fontSize: '12px', color: '#666' }}>{p.categoria_nombre} · {etiqueta(p)} · {p.fecha_hora ? `${formatearFechaHora(p.fecha_hora)} · ${p.cancha}` : 'sin horario'}</div>
                   <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-ink)' }}>
-                    <span style={{ color: p.validado && p.ganador_inscripcion_id === p.inscripcion_a ? '#1e6b34' : 'inherit' }}>{p.nombre_a ?? 'Por definir'}</span>
+                    <span style={{ color: p.validado && p.ganador_equipo_id === p.equipo_a ? '#1e6b34' : 'inherit' }}>{p.nombre_a ?? 'Por definir'}</span>
                     <span style={{ color: '#888', fontWeight: 'normal' }}> vs </span>
-                    <span style={{ color: p.validado && p.ganador_inscripcion_id === p.inscripcion_b ? '#1e6b34' : 'inherit' }}>{p.nombre_b ?? 'Por definir'}</span>
+                    <span style={{ color: p.validado && p.ganador_equipo_id === p.equipo_b ? '#1e6b34' : 'inherit' }}>{p.nombre_b ?? 'Por definir'}</span>
                   </div>
                   {marcador && <div style={{ fontSize: '13px' }}>{p.validado ? '✓ ' : 'Reportado: '}<strong>{marcador}</strong></div>}
                 </div>
@@ -158,15 +158,15 @@ export default function TorneoResultados() {
                         onChange={(e) => {
                           const ausente = e.target.value
                           if (!ausente) return
-                          const quien = ausente === 'ambos' ? 'doble WO (no se presentó ninguno)' : `WO: no se presentó ${ausente === p.inscripcion_a ? p.nombre_a : p.nombre_b}`
+                          const quien = ausente === 'ambos' ? 'doble WO (no se presentó ninguno)' : `WO: no se presentó ${ausente === p.equipo_a ? p.nombre_a : p.nombre_b}`
                           if (!confirm(`¿Registrar ${quien}? Queda validado.`)) return
                           post('wo', { partidoId: p.id, ausente }, ausente === 'ambos' ? 'Doble WO registrado' : 'WO registrado').catch(() => {})
                         }}
                         style={{ fontSize: '12px', padding: '4px', borderRadius: '6px', border: '1px solid #c0392b', color: '#c0392b' }}
                       >
                         <option value="">WO…</option>
-                        <option value={p.inscripcion_a!}>No vino {p.nombre_a}</option>
-                        <option value={p.inscripcion_b!}>No vino {p.nombre_b}</option>
+                        <option value={p.equipo_a!}>No vino {p.nombre_a}</option>
+                        <option value={p.equipo_b!}>No vino {p.nombre_b}</option>
                         <option value="ambos">Doble WO</option>
                       </select>
                     </>
@@ -177,8 +177,8 @@ export default function TorneoResultados() {
                 <FormMarcadorTorneo
                   nombreA={p.nombre_a ?? 'A'}
                   nombreB={p.nombre_b ?? 'B'}
-                  inscripcionA={p.inscripcion_a!}
-                  inscripcionB={p.inscripcion_b!}
+                  inscripcionA={p.equipo_a!}
+                  inscripcionB={p.equipo_b!}
                   textoBoton="Guardar y validar"
                   onEnviar={async (d) => {
                     await post('cargar', { partidoId: p.id, ...d }, 'Resultado cargado y validado')

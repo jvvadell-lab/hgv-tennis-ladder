@@ -154,12 +154,19 @@ export function escaparHtml(texto: string): string {
 export async function notificarJugadores(
   db: SupabaseClient,
   jugadorIds: string[],
-  aviso: { tipo: string; mensaje: string; asunto: string; cuerpoHtml: (jugador: { id: string; nombre: string }) => string }
+  aviso: {
+    tipo: string; mensaje: string; asunto: string; cuerpoHtml: (jugador: { id: string; nombre: string }) => string
+    // Invitación a formar dupla: la campana muestra Aceptar / Rechazar.
+    torneoInvitacionId?: string
+  }
 ): Promise<void> {
   if (!jugadorIds.length) return
   try {
     const { error } = await db.from('notificaciones').insert(
-      jugadorIds.map((id) => ({ jugador_id: id, tipo: aviso.tipo, mensaje: aviso.mensaje }))
+      jugadorIds.map((id) => ({
+        jugador_id: id, tipo: aviso.tipo, mensaje: aviso.mensaje,
+        ...(aviso.torneoInvitacionId ? { torneo_invitacion_id: aviso.torneoInvitacionId } : {}),
+      }))
     )
     if (error) throw error
   } catch (err: any) {

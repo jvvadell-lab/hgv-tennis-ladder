@@ -6,7 +6,7 @@ import { construirSets, type CampoSet } from '@/lib/resultados'
 // si quedan 1-1, tie-break en 6-6, retiro). Arma `sets` con construirSets
 // (el mismo de la escalera) y lo manda con onEnviar; el servidor vuelve a
 // validar todo. Lo usan "Mis partidos" (reportar) y la pestaña Resultados
-// del admin (cargar y validar). A = inscripcion_a, B = inscripcion_b.
+// del admin (cargar y validar). A = equipo_a, B = equipo_b.
 
 const vacio = (): CampoSet => ({ golesRetador: '', golesRetado: '', tbRetador: '', tbRetado: '' })
 

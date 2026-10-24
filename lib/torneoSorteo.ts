@@ -237,8 +237,8 @@ export type PartidoPlan = {
   ronda: number | null        // ronda del todos contra todos (solo grupos)
   origen_a: string | null
   origen_b: string | null
-  inscripcion_a: string | null
-  inscripcion_b: string | null
+  equipo_a: string | null
+  equipo_b: string | null
 }
 
 export type PlanCategoria = {
@@ -257,7 +257,7 @@ export function planCategoria(s: SorteoCategoria): PlanCategoria {
       partidos.push({
         fase: 'grupo', letra: g.letra, orden: cruce.orden, ronda: cruce.ronda,
         origen_a: null, origen_b: null,
-        inscripcion_a: g.miembros[cruce.a], inscripcion_b: g.miembros[cruce.b],
+        equipo_a: g.miembros[cruce.a], equipo_b: g.miembros[cruce.b],
       })
     }
   }
@@ -265,7 +265,7 @@ export function planCategoria(s: SorteoCategoria): PlanCategoria {
     for (const p of generarLlave(s.grupos.length, s.formato.llave)) {
       partidos.push({
         fase: p.fase, letra: null, orden: p.orden, ronda: null,
-        origen_a: p.origen_a, origen_b: p.origen_b, inscripcion_a: null, inscripcion_b: null,
+        origen_a: p.origen_a, origen_b: p.origen_b, equipo_a: null, equipo_b: null,
       })
     }
   }

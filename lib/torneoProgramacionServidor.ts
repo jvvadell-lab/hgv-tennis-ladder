@@ -9,6 +9,7 @@ import { ahora, formatearFechaHora, instanteEnCaracas, sumarDiasEnCaracas } from
 import { CANCHAS_TORNEO, ETIQUETA_FASE, crucesTodosContraTodos, type CanchaTorneo, type EstadoPartido, type Fase, type Torneo } from '@/lib/torneo'
 import { codigoPartido, dependenciasDe, etiquetaPartido, revisarHorario, type ContextoProgramacion, type Franja, type Horario, type Ocupacion, type PartidoProg } from '@/lib/torneoProgramacion'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
+import { competidoresPorId, personasDe } from '@/lib/torneoEquiposServidor'
 import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 
 export type PartidoDetalle = PartidoProg & {
@@ -16,11 +17,11 @@ export type PartidoDetalle = PartidoProg & {
   // Jugado, pero terminó por retiro de una de las parejas.
   retiro: boolean
   esMixto: boolean
-  inscripcion_a: string | null
-  inscripcion_b: string | null
+  equipo_a: string | null
+  equipo_b: string | null
   nombre_a: string | null
   nombre_b: string | null
-  handicap_inscripcion_id: string | null
+  handicap_equipo_id: string | null
   // Personas a avisar: jugadores y, por cada menor, su representante.
   avisar: string[]
 }
@@ -42,9 +43,9 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
 
   const [{ data: partidos, error: errP }, { data: grupos, error: errG }, { data: franjas, error: errF }, { data: disp, error: errD }] = await Promise.all([
     db.from('torneo_partidos')
-      .select('id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, inscripcion_a, inscripcion_b, cancha, fecha_hora, estado, tipo_resultado, bloqueo_id, handicap_inscripcion_id')
+      .select('id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, equipo_a, equipo_b, cancha, fecha_hora, estado, tipo_resultado, bloqueo_id, handicap_equipo_id')
       .in('categoria_id', categoriaIds),
-    db.from('torneo_grupos').select('id, letra, torneo_grupo_miembros(inscripcion_id)').in('categoria_id', categoriaIds),
+    db.from('torneo_grupos').select('id, letra, torneo_grupo_miembros(equipo_id)').in('categoria_id', categoriaIds),
     db.from('torneo_franjas_academia').select('id, fecha, cancha, hora_inicio, hora_fin').eq('torneo_id', torneo.id),
     db.from('torneo_disponibilidad').select('jugador_id, no_disponible').eq('torneo_id', torneo.id),
   ])
@@ -53,25 +54,22 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
   if (errF) throw errF
   if (errD) throw errD
 
-  const inscripcionIds = [...new Set((partidos || []).flatMap((p) => [p.inscripcion_a, p.inscripcion_b]).filter(Boolean))] as string[]
-  const { data: inscripciones, error: errI } = inscripcionIds.length
-    ? await db.from('torneo_inscripciones').select('id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, torneo_menores(representante_jugador_id)').in('id', inscripcionIds)
-    : { data: [] as any[], error: null }
-  if (errI) throw errI
-  const insPorId = new Map((inscripciones || []).map((i: any) => [i.id, i]))
-  const nombres = await nombresInscripciones(db, inscripciones || [])
+  const inscripcionIds = [...new Set((partidos || []).flatMap((p) => [p.equipo_a, p.equipo_b]).filter(Boolean))] as string[]
+  // Los rivales son equipos (la dupla, o la inscripción en single/infantil).
+  const insPorId = await competidoresPorId(db, inscripcionIds)
+  const nombres = await nombresInscripciones(db, [...insPorId.values()])
 
   const grupoPorId = new Map((grupos || []).map((g: any) => [g.id, { letra: g.letra as string, tamano: (g.torneo_grupo_miembros || []).length as number }]))
 
-  const personasDe = (insId: string | null) => {
-    const i = insId ? insPorId.get(insId) : null
-    if (!i) return []
-    return i.menor_id ? [`m:${i.menor_id}`] : [i.jugador1_id, i.jugador2_id].filter(Boolean)
+  // Para los choques de horario, un menor cuenta como persona propia.
+  const personasCuadro = (equipoId: string | null): string[] => {
+    const e = equipoId ? insPorId.get(equipoId) : null
+    if (!e) return []
+    return e.menor_id ? [`m:${e.menor_id}`] : ([e.jugador1_id, e.jugador2_id].filter(Boolean) as string[])
   }
-  const avisarDe = (insId: string | null) => {
-    const i = insId ? insPorId.get(insId) : null
-    if (!i) return []
-    return i.menor_id ? [i.torneo_menores?.representante_jugador_id].filter(Boolean) : [i.jugador1_id, i.jugador2_id].filter(Boolean)
+  const avisarDe = (equipoId: string | null): string[] => {
+    const e = equipoId ? insPorId.get(equipoId) : null
+    return e ? personasDe(e) : []
   }
 
   const detalle: PartidoDetalle[] = (partidos || []).map((p) => {
@@ -91,16 +89,16 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
       ronda: g && g.tamano >= 2 ? crucesTodosContraTodos(g.tamano)[p.orden - 1]?.ronda ?? null : null,
       origen_a: p.origen_a,
       origen_b: p.origen_b,
-      personas: [...personasDe(p.inscripcion_a), ...personasDe(p.inscripcion_b)],
+      personas: [...personasCuadro(p.equipo_a), ...personasCuadro(p.equipo_b)],
       cerrado: ['jugado', 'wo', 'doble_wo'].includes(p.estado),
       estado: p.estado as EstadoPartido,
       retiro: p.estado === 'jugado' && p.tipo_resultado === 'retiro',
-      inscripcion_a: p.inscripcion_a,
-      inscripcion_b: p.inscripcion_b,
-      nombre_a: p.inscripcion_a ? nombres.get(p.inscripcion_a) ?? null : null,
-      nombre_b: p.inscripcion_b ? nombres.get(p.inscripcion_b) ?? null : null,
-      handicap_inscripcion_id: p.handicap_inscripcion_id,
-      avisar: [...new Set([...avisarDe(p.inscripcion_a), ...avisarDe(p.inscripcion_b)])],
+      equipo_a: p.equipo_a,
+      equipo_b: p.equipo_b,
+      nombre_a: p.equipo_a ? nombres.get(p.equipo_a) ?? null : null,
+      nombre_b: p.equipo_b ? nombres.get(p.equipo_b) ?? null : null,
+      handicap_equipo_id: p.handicap_equipo_id,
+      avisar: [...new Set([...avisarDe(p.equipo_a), ...avisarDe(p.equipo_b)])],
     }
   })
 

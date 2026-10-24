@@ -12,11 +12,11 @@ import type { SetJugado } from '@/lib/resultados'
 // "Nombre I.").
 
 type Categoria = { id: string; nombre: string; modalidad: string; genero: string; es_infantil: boolean; orden: number; llave_desde: string; inscritas: number }
-type Fila = { inscripcion_id: string; posicion: number; pj: number; pg: number; pp: number; sets_favor: number; sets_contra: number; games_favor: number; games_contra: number; stb_puntos_favor: number; stb_puntos_contra: number; requiere_sorteo: boolean }
+type Fila = { equipo_id: string; posicion: number; pj: number; pg: number; pp: number; sets_favor: number; sets_contra: number; games_favor: number; games_contra: number; stb_puntos_favor: number; stb_puntos_contra: number; requiere_sorteo: boolean }
 type Grupo = { id: string; categoria_id: string; letra: string; tabla: Fila[] }
 type Partido = {
   id: string; categoria_id: string; fase: Fase; grupo: string | null; orden: number
-  origen_a: string | null; origen_b: string | null; inscripcion_a: string | null; inscripcion_b: string | null
+  origen_a: string | null; origen_b: string | null; equipo_a: string | null; equipo_b: string | null
   cancha: string | null; fecha_hora: string | null; estado: string; sets: SetJugado[] | null; tipo_resultado: string
   ganador: string | null; wo_ausente: string | null; retirada: string | null; handicap: string | null
 }
@@ -46,7 +46,7 @@ function origenTexto(o: string | null): string {
 // Marcador desde el lado de `a` (j1) o de `b` (j2): "6-4 3-6 [10-8]". En un
 // retiro, la pareja que se retiró lleva "ret." al final.
 function marcador(p: Partido, lado: 'a' | 'b'): string {
-  const id = lado === 'a' ? p.inscripcion_a : p.inscripcion_b
+  const id = lado === 'a' ? p.equipo_a : p.equipo_b
   if (p.estado === 'wo') return p.wo_ausente === id ? 'WO' : ''
   if (p.estado === 'doble_wo') return 'WO'
   const games = (p.sets || [])
@@ -74,7 +74,7 @@ export default function TorneoPublico() {
       .then((d: Datos) => {
         setDatos(d)
         // Arranca en la sección y categoría del usuario, si tiene inscripción.
-        const mia = d.partidos?.find((p) => d.mias.includes(p.inscripcion_a ?? '') || d.mias.includes(p.inscripcion_b ?? ''))
+        const mia = d.partidos?.find((p) => d.mias.includes(p.equipo_a ?? '') || d.mias.includes(p.equipo_b ?? ''))
         const cat = mia ? d.categorias.find((c) => c.id === mia.categoria_id) : null
         if (cat) { setSeccion(cat.es_infantil ? 'infantil' : 'adultos'); setVista(cat.id) }
       })
@@ -134,7 +134,7 @@ export default function TorneoPublico() {
 
             <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '6px', marginBottom: '16px' }}>
               {[{ id: 'calendario', nombre: '📅 Calendario' }, ...categorias].map((c) => {
-                const tieneMia = c.id !== 'calendario' && datos.partidos.some((p) => p.categoria_id === c.id && (mias.has(p.inscripcion_a ?? '') || mias.has(p.inscripcion_b ?? '')))
+                const tieneMia = c.id !== 'calendario' && datos.partidos.some((p) => p.categoria_id === c.id && (mias.has(p.equipo_a ?? '') || mias.has(p.equipo_b ?? '')))
                 return (
                   <button key={c.id} onClick={() => setVista(c.id)} style={{
                     padding: '7px 12px', borderRadius: '999px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap', flexShrink: 0,
@@ -158,9 +158,11 @@ export default function TorneoPublico() {
             )}
 
             {categoria && (
-              !torneo.sorteado ? (
+              // Cada categoría se sortea por separado: se ve en cuanto tiene grupos.
+              !datos.grupos.some((g) => g.categoria_id === categoria.id) ? (
                 <p style={{ fontSize: '14px', color: '#555' }}>
-                  El sorteo de los grupos todavía no se ha hecho · {categoria.inscritas} inscrita{categoria.inscritas === 1 ? '' : 's'}.
+                  El sorteo de los grupos todavía no se ha hecho · {categoria.inscritas}{' '}
+                  {categoria.modalidad === 'doble' ? `dupla${categoria.inscritas === 1 ? '' : 's'} formada${categoria.inscritas === 1 ? '' : 's'}` : `inscrita${categoria.inscritas === 1 ? '' : 's'}`}.
                 </p>
               ) : (
                 <>
@@ -204,9 +206,9 @@ function Grupos({ grupos, nombre, mias }: { grupos: Grupo[]; nombre: (id: string
               </thead>
               <tbody>
                 {g.tabla.map((f) => (
-                  <tr key={f.inscripcion_id} style={{ borderTop: '1px solid #eee', background: mias.has(f.inscripcion_id) ? RESALTE : undefined }}>
+                  <tr key={f.equipo_id} style={{ borderTop: '1px solid #eee', background: mias.has(f.equipo_id) ? RESALTE : undefined }}>
                     <td style={td}>{f.posicion}{f.requiere_sorteo ? '*' : ''}</td>
-                    <td style={{ ...td, textAlign: 'left', fontFamily: 'var(--font-body)', fontWeight: mias.has(f.inscripcion_id) ? 800 : 500 }}>{nombre(f.inscripcion_id)}</td>
+                    <td style={{ ...td, textAlign: 'left', fontFamily: 'var(--font-body)', fontWeight: mias.has(f.equipo_id) ? 800 : 500 }}>{nombre(f.equipo_id)}</td>
                     <td style={td}>{f.pj}</td><td style={td}>{f.pg}</td><td style={td}>{f.pp}</td>
                     <td style={td}>{f.sets_favor}-{f.sets_contra}</td><td style={td}>{f.games_favor}-{f.games_contra}</td>
                   </tr>
@@ -217,7 +219,7 @@ function Grupos({ grupos, nombre, mias }: { grupos: Grupo[]; nombre: (id: string
               <p style={{ fontSize: '11px', color: '#888', margin: '6px 0 0 0' }}>
                 * Empate pendiente de revisión.
                 {g.tabla.some((f) => f.requiere_sorteo && f.stb_puntos_favor + f.stb_puntos_contra > 0) && (
-                  <> Puntos de súper tie-break: {g.tabla.filter((f) => f.requiere_sorteo).map((f) => `${nombre(f.inscripcion_id)} ${f.stb_puntos_favor}-${f.stb_puntos_contra}`).join(' · ')}.</>
+                  <> Puntos de súper tie-break: {g.tabla.filter((f) => f.requiere_sorteo).map((f) => `${nombre(f.equipo_id)} ${f.stb_puntos_favor}-${f.stb_puntos_contra}`).join(' · ')}.</>
                 )}
               </p>
             )}
@@ -230,7 +232,7 @@ function Grupos({ grupos, nombre, mias }: { grupos: Grupo[]; nombre: (id: string
 
 function Ficha({ p, nombre, mias, encabezado }: { p: Partido; nombre: (id: string | null) => string | null; mias: Set<string>; encabezado?: string }) {
   const lado = (l: 'a' | 'b') => {
-    const id = l === 'a' ? p.inscripcion_a : p.inscripcion_b
+    const id = l === 'a' ? p.equipo_a : p.equipo_b
     const gana = !!p.ganador && p.ganador === id
     return (
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '5px 8px', background: id && mias.has(id) ? RESALTE : undefined, fontWeight: gana ? 800 : 500 }}>

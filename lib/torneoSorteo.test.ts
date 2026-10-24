@@ -221,7 +221,7 @@ describe('planCategoria', () => {
       'semis1:G:C1-G:C2', 'semis2:G:C3-G:C4', 'final1:G:S1-G:S2',
     ])
     const grupoA = plan.partidos.filter((p) => p.letra === 'A')
-    expect(grupoA.map((p) => [p.inscripcion_a, p.inscripcion_b].sort().join('-')).sort()).toEqual(['i1-i8', 'i1-i9', 'i8-i9'])
+    expect(grupoA.map((p) => [p.equipo_a, p.equipo_b].sort().join('-')).sort()).toEqual(['i1-i8', 'i1-i9', 'i8-i9'])
   })
 
   it('Pelota Naranja: solo grupos, sin llave', () => {

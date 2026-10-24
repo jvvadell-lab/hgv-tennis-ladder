@@ -16,8 +16,8 @@ type Partido = {
   fase: Fase
   grupo_letra: string | null
   orden: number
-  inscripcion_a: string | null
-  inscripcion_b: string | null
+  equipo_a: string | null
+  equipo_b: string | null
   nombre_a: string | null
   nombre_b: string | null
   origen_a: string | null
@@ -27,8 +27,8 @@ type Partido = {
   estado: EstadoPartido
   sets: SetJugado[] | null
   tipo_resultado: TipoResultado
-  wo_ausente_inscripcion_id: string | null
-  ganador_inscripcion_id: string | null
+  wo_ausente_equipo_id: string | null
+  ganador_equipo_id: string | null
   validado: boolean
   reportado_at: string | null
 }
@@ -97,9 +97,9 @@ export default function MisPartidos() {
 
   const mias = new Set(datos?.mias ?? [])
   const partidos = datos?.partidos ?? []
-  const porReportar = partidos.filter((p) => !p.validado && p.inscripcion_a && p.inscripcion_b && !['wo', 'doble_wo'].includes(p.estado))
+  const porReportar = partidos.filter((p) => !p.validado && p.equipo_a && p.equipo_b && !['wo', 'doble_wo'].includes(p.estado))
   const cerrados = partidos.filter((p) => p.validado)
-  const porConocer = partidos.filter((p) => !p.validado && (!p.inscripcion_a || !p.inscripcion_b))
+  const porConocer = partidos.filter((p) => !p.validado && (!p.equipo_a || !p.equipo_b))
 
   const reportar = async (p: Partido, d: { sets: unknown; tipoResultado: string; retiradaInscripcionId: string | null }) => {
     const res = await fetch('/api/jugador/torneo/resultado', {
@@ -116,10 +116,10 @@ export default function MisPartidos() {
 
   const Rivales = ({ p }: { p: Partido }) => (
     <div style={{ fontSize: '14px', marginTop: '4px' }}>
-      {[['a', p.inscripcion_a, p.nombre_a, p.origen_a], ['b', p.inscripcion_b, p.nombre_b, p.origen_b]].map(([lado, id, nombre, origen], i) => (
+      {[['a', p.equipo_a, p.nombre_a, p.origen_a], ['b', p.equipo_b, p.nombre_b, p.origen_b]].map(([lado, id, nombre, origen], i) => (
         <span key={lado as string}>
           {i === 1 && <span style={{ color: '#888' }}> vs </span>}
-          <span style={{ fontWeight: id && mias.has(id as string) ? 800 : 400, color: id && p.validado && p.ganador_inscripcion_id === id ? '#1e6b34' : 'inherit' }}>
+          <span style={{ fontWeight: id && mias.has(id as string) ? 800 : 400, color: id && p.validado && p.ganador_equipo_id === id ? '#1e6b34' : 'inherit' }}>
             {(nombre as string) ?? origenTexto(origen as string | null)}
           </span>
         </span>
@@ -168,8 +168,8 @@ export default function MisPartidos() {
                   <FormMarcadorTorneo
                     nombreA={p.nombre_a ?? 'A'}
                     nombreB={p.nombre_b ?? 'B'}
-                    inscripcionA={p.inscripcion_a!}
-                    inscripcionB={p.inscripcion_b!}
+                    inscripcionA={p.equipo_a!}
+                    inscripcionB={p.equipo_b!}
                     textoBoton="Reportar resultado"
                     onEnviar={(d) => reportar(p, d)}
                     onCancelar={() => setReportando(null)}
@@ -197,7 +197,7 @@ export default function MisPartidos() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                   <strong style={{ color: 'var(--color-ink)', fontSize: '14px' }}>{p.categoria_nombre} · {etiquetaPartido(p)}</strong>
                   <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '999px', background: '#dff5e3', color: '#1e6b34' }}>
-                    {p.ganador_inscripcion_id && mias.has(p.ganador_inscripcion_id) ? 'Ganado' : p.ganador_inscripcion_id ? 'Perdido' : 'Sin ganador'}
+                    {p.ganador_equipo_id && mias.has(p.ganador_equipo_id) ? 'Ganado' : p.ganador_equipo_id ? 'Perdido' : 'Sin ganador'}
                   </span>
                 </div>
                 <Rivales p={p} />

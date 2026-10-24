@@ -5,8 +5,9 @@ import { torneoVigente } from '@/lib/torneoServidor'
 import { METODOS_SORTEO, armarSorteoCategoria, planCategoria, type MetodoSorteo } from '@/lib/torneoSorteo'
 import { azarSorteo, datosParaSorteo } from '@/lib/torneoSorteoServidor'
 
-// Vista previa del sorteo (SPEC §3): arma los grupos al azar con las
-// inscripciones vivas (hayan pagado o no) y los devuelve SIN guardar nada.
+// Vista previa del sorteo de UNA categoría (SPEC §3): arma los grupos al azar
+// con sus equipos activos (duplas en dobles; hayan pagado o no) y los
+// devuelve SIN guardar nada.
 // Se puede con las inscripciones abiertas o cerradas. El admin puede
 // repetirla cuantas veces quiera; lo que publique se revisa otra vez en
 // /api/admin/torneo/sorteo/publicar.
@@ -17,7 +18,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Solo un administrador puede hacer esto' }, { status: 403 })
     }
 
-    const { metodo } = await request.json()
+    const { categoriaId, metodo } = await request.json()
+    if (typeof categoriaId !== 'string') return NextResponse.json({ error: 'Elige la categoría' }, { status: 400 })
     if (!(METODOS_SORTEO as readonly string[]).includes(metodo)) {
       return NextResponse.json({ error: 'Elige el método del sorteo: bombos o serpentina' }, { status: 400 })
     }
@@ -29,7 +31,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El sorteo ya se hizo' }, { status: 400 })
     }
 
-    const categorias = await datosParaSorteo(db, torneo)
+    const categorias = await datosParaSorteo(db, torneo, categoriaId)
+    if (!categorias.length) return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 404 })
+    if (categorias[0].sorteo_publicado_at) return NextResponse.json({ error: `${categorias[0].nombre}: el sorteo ya se publicó` }, { status: 400 })
+    if (categorias[0].cancelada_at) return NextResponse.json({ error: `${categorias[0].nombre}: la categoría está cancelada` }, { status: 400 })
     // Categoría oficial, certificación o invitado sin autorizar: se resuelven antes.
     const errores: string[] = categorias.flatMap((c) => c.bloqueos)
     const resultado = categorias.map((c) => {
