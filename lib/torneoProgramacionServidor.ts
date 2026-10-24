@@ -9,7 +9,7 @@ import { ahora, formatearFechaHora, instanteEnCaracas, sumarDiasEnCaracas } from
 import { CANCHAS_TORNEO, ETIQUETA_FASE, crucesTodosContraTodos, type CanchaTorneo, type EstadoPartido, type Fase, type Torneo } from '@/lib/torneo'
 import { codigoPartido, dependenciasDe, etiquetaPartido, revisarHorario, type ContextoProgramacion, type Franja, type Horario, type Ocupacion, type PartidoProg } from '@/lib/torneoProgramacion'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
-import { competidoresPorId, personasDe } from '@/lib/torneoEquiposServidor'
+import { competidoresPorId, pagosPendientes, personasDe } from '@/lib/torneoEquiposServidor'
 import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 
 export type PartidoDetalle = PartidoProg & {
@@ -24,6 +24,8 @@ export type PartidoDetalle = PartidoProg & {
   handicap_equipo_id: string | null
   // Personas a avisar: jugadores y, por cada menor, su representante.
   avisar: string[]
+  // Sin pago validado (no pueden jugar su primer partido): se marca en rojo.
+  pagoPendiente: string[]
 }
 
 export type DatosProgramacion = {
@@ -58,6 +60,7 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
   // Los rivales son equipos (la dupla, o la inscripción en single/infantil).
   const insPorId = await competidoresPorId(db, inscripcionIds)
   const nombres = await nombresInscripciones(db, [...insPorId.values()])
+  const sinPago = await pagosPendientes(db, [...insPorId.values()])
 
   const grupoPorId = new Map((grupos || []).map((g: any) => [g.id, { letra: g.letra as string, tamano: (g.torneo_grupo_miembros || []).length as number }]))
 
@@ -99,6 +102,7 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
       nombre_b: p.equipo_b ? nombres.get(p.equipo_b) ?? null : null,
       handicap_equipo_id: p.handicap_equipo_id,
       avisar: [...new Set([...avisarDe(p.equipo_a), ...avisarDe(p.equipo_b)])],
+      pagoPendiente: [...(p.equipo_a ? sinPago.get(p.equipo_a) ?? [] : []), ...(p.equipo_b ? sinPago.get(p.equipo_b) ?? [] : [])],
     }
   })
 

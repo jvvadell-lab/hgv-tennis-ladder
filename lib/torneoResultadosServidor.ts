@@ -17,6 +17,7 @@ import { ahora } from '@/lib/tiempo'
 import { ETIQUETA_FASE, type EstadoTorneo, type Fase } from '@/lib/torneo'
 import {
   avanceGrupo,
+  avanceMejoresPrimeros,
   avanceLlave,
   evaluarReporte,
   pasesPorVacante,
@@ -26,7 +27,7 @@ import {
   type PartidoAvance,
 } from '@/lib/torneoResultados'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
-import { competidoresPorId, personasDe } from '@/lib/torneoEquiposServidor'
+import { competidoresPorId, pagosPendientes, personasDe } from '@/lib/torneoEquiposServidor'
 import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 
 export const COLUMNAS_PARTIDO =
@@ -259,6 +260,10 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
       cambios.push(...r.cambios)
       r.avisos.forEach((a) => avisos.add(a))
     }
+    const mejores = avanceMejoresPrimeros(
+      (grupos || []).map((g: any) => ({ id: g.id, letra: g.letra, miembros: g.torneo_grupo_miembros })), todos, llave)
+    cambios.push(...mejores.cambios)
+    mejores.avisos.forEach((a) => avisos.add(a))
     for (const p of llave.filter(partidoCerrado)) cambios.push(...avanceLlave(p, llave).cambios)
     cambios.push(...pasesPorVacante(llave))
     if (!cambios.length) break
@@ -349,6 +354,8 @@ export type PartidoLista = PartidoFila & {
   grupo_letra: string | null
   nombre_a: string | null
   nombre_b: string | null
+  // Sin pago validado: no pueden jugar su primer partido (se marca en rojo).
+  pago_pendiente: string[]
 }
 
 // Partidos del torneo con nombres públicos (para "Mis partidos" y la
@@ -375,7 +382,9 @@ export async function listarPartidos(db: SupabaseClient, torneoId: string, soloI
   const letra = new Map((grupos || []).map((g) => [g.id, g.letra]))
 
   const inscripcionIds = [...new Set((partidos || []).flatMap((p: any) => [p.equipo_a, p.equipo_b]).filter(Boolean))] as string[]
-  const nombres = await nombresInscripciones(db, [...(await competidoresPorId(db, inscripcionIds)).values()])
+  const equipos = [...(await competidoresPorId(db, inscripcionIds)).values()]
+  const nombres = await nombresInscripciones(db, equipos)
+  const sinPago = await pagosPendientes(db, equipos)
 
   const ordenFase: Record<Fase, number> = { grupo: 0, cuartos: 1, semis: 2, final: 3 }
   return ((partidos || []) as unknown as PartidoFila[])
@@ -386,6 +395,7 @@ export async function listarPartidos(db: SupabaseClient, torneoId: string, soloI
       grupo_letra: p.grupo_id ? letra.get(p.grupo_id) ?? null : null,
       nombre_a: p.equipo_a ? nombres.get(p.equipo_a) ?? null : null,
       nombre_b: p.equipo_b ? nombres.get(p.equipo_b) ?? null : null,
+      pago_pendiente: [...(p.equipo_a ? sinPago.get(p.equipo_a) ?? [] : []), ...(p.equipo_b ? sinPago.get(p.equipo_b) ?? [] : [])],
     }))
     .sort((x, y) =>
       x.categoria_orden - y.categoria_orden ||

@@ -40,6 +40,7 @@ export type FormatoSorteo = {
   numGrupos: number
   llave: LlaveSorteo
   avisos: string[]
+  descripcion: string   // qué formato se juega y por qué (vista previa)
 }
 
 export type CategoriaParaSorteo = Pick<
@@ -53,31 +54,36 @@ export function tamanosGrupos(n: number, g: number): number[] {
   return Array.from({ length: g }, (_, i) => Math.floor(n / g) + (i < n % g ? 1 : 0))
 }
 
-// Grupos y llave de una categoría con `n` inscripciones confirmadas (SPEC §3,
-// aprobado 20-oct-2026):
-//  * < 3: no se puede sortear.
-//  * Adultos: siempre los grupos de la categoría; si algún grupo quedaría
-//    con menos de 3, se bloquea: se completa con invitados o wild card.
-//  * Infantil con llave: 3–4 → 1 grupo sin llave · 5–7 → 1 grupo + final ·
-//    ≥ 8 → los grupos de la categoría; si algún grupo quedaría con menos de
-//    3, 2 grupos y semis.
+// Número de grupos según cuántos equipos entran al sorteo (grupos
+// flexibles, SPEC §3, 23-oct-2026): grupos de 3 o 4 y pasan los 2 primeros.
+//   3–5 → 1 grupo y final 1º-2º · 6–8 → 2 grupos y semis ·
+//   9–11 → 3 grupos y cuartos con 2 byes · 12–16 → 4 grupos y cuartos.
+export const MAXIMO_PARA_SORTEAR = 16
+
+export function gruposFlexibles(n: number): { numGrupos: number; llave: 'final' | 'semis' | 'cuartos' } {
+  if (n <= 5) return { numGrupos: 1, llave: 'final' }
+  if (n <= 8) return { numGrupos: 2, llave: 'semis' }
+  if (n <= 11) return { numGrupos: 3, llave: 'cuartos' }
+  return { numGrupos: 4, llave: 'cuartos' }
+}
+
+// Grupos y llave de una categoría con `n` equipos (duplas o inscripciones)
+// activos. cupo, num_grupos y tamano_grupo de la categoría son el máximo, no
+// un requisito: con menos inscritos se juega el formato que corresponde.
+//  * < 3: no se puede sortear (fusionar o cancelar la categoría).
+//  * Dobles, single e infantiles con llave: gruposFlexibles.
 //  * Pelota Naranja (sin llave): ≤ 7 → 1 grupo · ≥ 8 → los grupos de la
 //    categoría, reducidos para que cada uno tenga al menos 4.
+// `formato.descripcion` explica en la vista previa qué se juega y por qué.
 export function formatoSorteo(c: CategoriaParaSorteo, n: number): { ok: false; error: string } | { ok: true; formato: FormatoSorteo } {
   if (n < MINIMO_PARA_SORTEAR) {
-    return { ok: false, error: `${c.nombre}: tiene ${n} inscripción${n === 1 ? '' : 'es'} y hacen falta al menos ${MINIMO_PARA_SORTEAR} para sortear. Complétala con invitados o wild card, o retírala antes del sorteo.` }
+    return { ok: false, error: `${c.nombre}: tiene ${n} ${n === 1 ? 'inscrito' : 'inscritos'} y hacen falta al menos ${MINIMO_PARA_SORTEAR} para sortear. Fusiónala con otra categoría o cancélala.` }
   }
+  if (n > MAXIMO_PARA_SORTEAR) return { ok: false, error: `${c.nombre}: con ${n} el sorteo admite como máximo ${MAXIMO_PARA_SORTEAR}` }
 
   const minimoGrupo = (g: number) => Math.min(...tamanosGrupos(n, g))
   const avisos: string[] = []
-
-  if (!c.es_infantil) {
-    if (c.llave_desde === 'sin_llave') return { ok: false, error: `${c.nombre}: una categoría de adultos necesita llave` }
-    if (minimoGrupo(c.num_grupos) < 3) {
-      return { ok: false, error: `${c.nombre}: con ${n} inscripciones algún grupo quedaría con menos de 3. Complétala con invitados o wild card antes del sorteo.` }
-    }
-    return { ok: true, formato: { numGrupos: c.num_grupos, llave: c.llave_desde, avisos } }
-  }
+  const tamanos = (g: number) => tamanosGrupos(n, g).join(', ')
 
   if (c.llave_desde === 'sin_llave') {
     const numGrupos = n <= 7 ? 1 : Math.max(1, Math.min(c.num_grupos, Math.floor(n / 4)))
@@ -85,20 +91,18 @@ export function formatoSorteo(c: CategoriaParaSorteo, n: number): { ok: false; e
     if (c.partidos_minimos && partidosPorNino < c.partidos_minimos) {
       avisos.push(`${c.nombre}: con ${n} inscritos cada niño juega ${partidosPorNino} partido${partidosPorNino === 1 ? '' : 's'}, menos que el mínimo de ${c.partidos_minimos}.`)
     }
-    return { ok: true, formato: { numGrupos, llave: 'sin_llave', avisos } }
+    const descripcion = `${n} inscritos → ${numGrupos === 1 ? `1 grupo de ${n}` : `${numGrupos} grupos (${tamanos(numGrupos)})`}, sin llave (festival).`
+    return { ok: true, formato: { numGrupos, llave: 'sin_llave', avisos, descripcion } }
   }
 
-  if (n <= 4) {
-    avisos.push(`${c.nombre}: con ${n} inscritos se juega un solo grupo sin llave; el 1º de la tabla es el campeón.`)
-    return { ok: true, formato: { numGrupos: 1, llave: 'sin_llave', avisos } }
-  }
-  if (n <= 7) {
-    avisos.push(`${c.nombre}: con ${n} inscritos se juega un solo grupo y una final entre el 1º y el 2º.`)
-    return { ok: true, formato: { numGrupos: 1, llave: 'final', avisos } }
-  }
-  if (minimoGrupo(c.num_grupos) >= 3) return { ok: true, formato: { numGrupos: c.num_grupos, llave: c.llave_desde, avisos } }
-  avisos.push(`${c.nombre}: con ${n} inscritos se juegan 2 grupos y la llave empieza en semifinales.`)
-  return { ok: true, formato: { numGrupos: 2, llave: 'semis', avisos } }
+  const { numGrupos, llave } = gruposFlexibles(n)
+  const quien = c.es_infantil ? 'inscritos' : 'duplas o inscritos'
+  const descripcion =
+    numGrupos === 1 ? `${n} ${quien} (3 a 5) → 1 grupo todos contra todos y final entre el 1º y el 2º.`
+    : numGrupos === 2 ? `${n} ${quien} (6 a 8) → 2 grupos (${tamanos(2)}) y semifinales: 1A-2B y 1B-2A.`
+    : numGrupos === 3 ? `${n} ${quien} (9 a 11) → 3 grupos (${tamanos(3)}) y cuartos con 2 byes: los 2 mejores primeros pasan directo a semis.`
+    : `${n} ${quien} (12 a 16) → 4 grupos (${tamanos(4)}) y cuartos de final.`
+  return { ok: true, formato: { numGrupos, llave, avisos, descripcion } }
 }
 
 // ---------------------------------------------------------------------------

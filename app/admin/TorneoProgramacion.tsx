@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { fechaISOEnCaracas, formatearFechaHora, formatearFechaLarga, formatearHora } from '@/lib/tiempo'
-import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, type EstadoPartido, type Fase } from '@/lib/torneo'
+import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, type EstadoPartido, type Fase, textoOrigen } from '@/lib/torneo'
 
 // Programación del torneo (SPEC §4), dentro de la pestaña Torneo del admin:
 // asistente (propone sin guardar), confirmación, asignación a mano con
@@ -29,6 +29,7 @@ type Partido = {
   nombre_a: string | null
   nombre_b: string | null
   handicap_equipo_id: string | null
+  pagoPendiente: string[]   // sin pago validado: se marca en rojo
   cancha: string | null
   inicio: string | null
   errores: string[]
@@ -58,6 +59,7 @@ const etiqueta = (p: Partido) => (p.fase === 'grupo' ? `Grupo ${p.grupoLetra} ·
 const rivales = (p: Partido) =>
   `${p.nombre_a ?? (p.origen_a ? origenTexto(p.origen_a) : '—')} vs ${p.nombre_b ?? (p.origen_b ? origenTexto(p.origen_b) : '—')}`
 const origenTexto = (o: string) => {
+  if (/^2?P\d$/.test(o)) return textoOrigen(o)   // llave de 3 grupos (mejores primeros)
   const g = o.match(/^([1-9])([A-Z])$/)
   if (g) return `${g[1]}º grupo ${g[2]}`
   const w = o.match(/^G:(.+)$/)
@@ -248,10 +250,18 @@ export default function TorneoProgramacion() {
           const opciones = opcionesDe(p)
           const elegido = eleccion[p.id] ?? ''
           return (
-            <div key={p.id} style={{ borderTop: idx ? '1px solid #e5e5e5' : 'none', padding: '10px 0' }}>
+            <div key={p.id} style={{
+              borderTop: idx ? '1px solid #e5e5e5' : 'none', padding: '10px 0',
+              ...(p.pagoPendiente.length && !p.cerrado ? { background: '#fdecea', borderLeft: '4px solid #c0392b', paddingLeft: '8px' } : {}),
+            }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ fontSize: '13px' }}>
                   <strong>{p.categoriaNombre}</strong> · {etiqueta(p)} · {rivales(p)}
+                  {p.pagoPendiente.length > 0 && !p.cerrado && (
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#c0392b' }}>
+                      💸 Pago pendiente: {p.pagoPendiente.join(', ')} — no puede jugar su primer partido sin el pago validado. Decide retiro o WO.
+                    </div>
+                  )}
                   <div style={{ fontSize: '12px', color: p.inicio ? '#1e6b34' : '#888' }}>
                     {p.inicio ? `📅 ${formatearFechaHora(p.inicio)} · ${p.cancha}` : 'Sin horario'} · {ETIQUETA_ESTADO_PARTIDO[p.estado]}{p.retiro ? ' (retiro)' : ''}
                   </div>

@@ -72,3 +72,32 @@ export function personasDe(c: Pick<Competidor, 'jugador1_id' | 'jugador2_id' | '
   if (c.menor_id) return c.torneo_menores?.representante_jugador_id ? [c.torneo_menores.representante_jugador_id] : []
   return [c.jugador1_id, c.jugador2_id].filter(Boolean) as string[]
 }
+
+// Quién de cada equipo no tiene su pago validado (SPEC §2.4): el pago
+// pendiente no bloquea el sorteo, pero no puede jugar su primer partido. Los
+// partidos con alguien así se marcan en rojo y el admin decide retiro o WO.
+// Devuelve, por equipo, los nombres (o el nombre público del menor).
+export async function pagosPendientes(db: SupabaseClient, equipos: Competidor[]): Promise<Map<string, string[]>> {
+  const insIds = equipos.flatMap((e) => e.inscripcionIds)
+  if (!insIds.length) return new Map()
+  const [{ data: pagos, error }, { data: jugadores, error: errJ }] = await Promise.all([
+    db.from('pagos').select('torneo_inscripcion_id').in('torneo_inscripcion_id', insIds).eq('validado', true),
+    db.from('jugadores').select('id, nombre').in('id', equipos.flatMap((e) => [e.jugador1_id, e.jugador2_id]).filter(Boolean) as string[]),
+  ])
+  if (error) throw error
+  if (errJ) throw errJ
+  const pagadas = new Set((pagos || []).map((p) => p.torneo_inscripcion_id))
+  const nombre = new Map((jugadores || []).map((j) => [j.id, j.nombre as string]))
+  const r = new Map<string, string[]>()
+  for (const e of equipos) {
+    // inscripcionIds va en el mismo orden que jugador1_id / jugador2_id.
+    const quienes = e.inscripcionIds.flatMap((id, k) => {
+      if (pagadas.has(id)) return []
+      if (e.menor_nombre_publico) return [e.menor_nombre_publico]
+      const j = k === 0 ? e.jugador1_id : e.jugador2_id
+      return [(j && nombre.get(j)) || '—']
+    })
+    if (quienes.length) r.set(e.id, quienes)
+  }
+  return r
+}

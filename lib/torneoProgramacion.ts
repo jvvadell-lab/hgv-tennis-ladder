@@ -186,7 +186,12 @@ function calcularDependencias(p: PartidoProg, todos: PartidoProg[]): PartidoProg
     if (!o) continue
     for (const q of todos) {
       if (q.categoriaId !== p.categoriaId || deps.includes(q)) continue
-      if (o.tipo === 'grupo' ? q.fase === 'grupo' && q.grupoLetra === o.letra : q.fase !== 'grupo' && codigoPartido(q) === o.codigo) deps.push(q)
+      const depende =
+        o.tipo === 'grupo' ? q.fase === 'grupo' && q.grupoLetra === o.letra
+        : o.tipo === 'ganador' ? q.fase !== 'grupo' && codigoPartido(q) === o.codigo
+        // Mejores primeros (llave de 3 grupos): dependen de todos los grupos.
+        : q.fase === 'grupo'
+      if (depende) deps.push(q)
     }
   }
   return deps

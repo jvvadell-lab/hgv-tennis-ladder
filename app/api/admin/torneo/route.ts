@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { torneoVigente } from '@/lib/torneoServidor'
 import { COLUMNAS_INVITACION, vencerInvitaciones } from '@/lib/torneoDoblesServidor'
+import { listasDeEspera } from '@/lib/torneoCierreServidor'
 import { pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
 import { COLUMNAS_MENOR } from '@/lib/torneoInfantilServidor'
 import { edadAlCorte, fechaCorteEdad, pendientesInscripcionMenor } from '@/lib/torneoInfantil'
@@ -153,6 +154,7 @@ export async function GET() {
       categorias: categorias || [],
       inscripciones: filas,
       equipos: equipos || [],
+      listaEspera: await listasDeEspera(db, categoriaIds),
       invitaciones: (invitaciones || []).map((v: any) => ({
         id: v.id, categoria_id: v.categoria_id, invita_inscripcion_id: v.invita_inscripcion_id, vence_at: v.vence_at,
         para: (v.invitado_jugador_id && jugadorPorId.get(v.invitado_jugador_id)?.nombre) || v.invitado_nombre || '—',

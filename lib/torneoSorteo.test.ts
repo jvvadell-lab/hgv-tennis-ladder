@@ -50,27 +50,31 @@ describe('formatoSorteo', () => {
     expect(!r.ok && r.error).toContain('al menos 3')
   })
 
-  it('adultos: los grupos de la categoría; bloquea si un grupo quedaría con menos de 3', () => {
-    expect(formato(dobles, 12)).toBe('4/cuartos')
-    expect(formato(dobles, 11)).toBe('bloqueado')   // 3,3,3,2
-    expect(formato(single, 8)).toBe('2/semis')
-    expect(formato(single, 7)).toBe('2/semis')      // 4,3
-    expect(formato(single, 5)).toBe('bloqueado')    // 3,2
-    const r = formatoSorteo(dobles, 11)
-    expect(!r.ok && r.error).toContain('invitados o wild card')
+  it('grupos flexibles (dobles, single e infantiles): 3–5 final, 6–8 semis, 9–11 cuartos con byes, 12–16 cuartos', () => {
+    const casos: [number, string][] = [
+      [3, '1/final'], [5, '1/final'], [6, '2/semis'], [7, '2/semis'], [8, '2/semis'],
+      [9, '3/cuartos'], [10, '3/cuartos'], [11, '3/cuartos'], [12, '4/cuartos'], [13, '4/cuartos'], [16, '4/cuartos'],
+    ]
+    for (const c of [dobles, single, infantil, verde]) {
+      for (const [n, esperado] of casos) expect(formato(c, n), `${c.nombre} con ${n}`).toBe(esperado)
+    }
+    expect(formato(dobles, 17)).toBe('bloqueado')
   })
 
-  it('infantil con llave: 3–4 sin llave, 5–7 grupo único + final, 8+ grupos', () => {
-    expect(formato(infantil, 3)).toBe('1/sin_llave')
-    expect(formato(infantil, 4)).toBe('1/sin_llave')
-    expect(formato(infantil, 5)).toBe('1/final')
-    expect(formato(infantil, 7)).toBe('1/final')
-    expect(formato(infantil, 8)).toBe('2/semis')
-    expect(formato(verde, 6)).toBe('1/final')
-    expect(formato(verde, 16)).toBe('4/cuartos')
-    expect(formato(verde, 12)).toBe('4/cuartos')
-    expect(formato(verde, 11)).toBe('2/semis')      // 4 grupos dejarían uno de 2
-    expect(formato(verde, 8)).toBe('2/semis')
+  it('grupos de 3 o 4 (y uno de 5 con 5 inscritos)', () => {
+    expect(tamanosGrupos(5, 1)).toEqual([5])
+    expect(tamanosGrupos(7, 2)).toEqual([4, 3])
+    expect(tamanosGrupos(9, 3)).toEqual([3, 3, 3])
+    expect(tamanosGrupos(10, 3)).toEqual([4, 3, 3])
+    expect(tamanosGrupos(11, 3)).toEqual([4, 4, 3])
+    expect(tamanosGrupos(13, 4)).toEqual([4, 3, 3, 3])
+  })
+
+  it('la vista previa explica el formato y por qué', () => {
+    const r = formatoSorteo(dobles, 10)
+    expect(r.ok && r.formato.descripcion).toBe('10 duplas o inscritos (9 a 11) → 3 grupos (4, 3, 3) y cuartos con 2 byes: los 2 mejores primeros pasan directo a semis.')
+    const r5 = formatoSorteo(single, 5)
+    expect(r5.ok && r5.formato.descripcion).toContain('1 grupo todos contra todos y final')
   })
 
   it('Pelota Naranja: un grupo hasta 7, después grupos de al menos 4', () => {
@@ -155,11 +159,11 @@ describe('armarSorteoCategoria — bombos', () => {
     expect(armarSorteoCategoria(single, inscripciones(8, 2, { i5: 1 }), 'bombos').ok).toBe(false)
   })
 
-  it('un solo grupo (infantil de 5–7) no exige siembras', () => {
-    const r = armarSorteoCategoria(infantil, inscripciones(6), 'bombos', semilla(2))
+  it('un solo grupo (3–5) no exige siembras', () => {
+    const r = armarSorteoCategoria(infantil, inscripciones(5), 'bombos', semilla(2))
     if (!r.ok) throw new Error(r.error)
     expect(r.sorteo.grupos).toHaveLength(1)
-    expect([...r.sorteo.grupos[0]].sort()).toEqual(['i1', 'i2', 'i3', 'i4', 'i5', 'i6'])
+    expect([...r.sorteo.grupos[0]].sort()).toEqual(['i1', 'i2', 'i3', 'i4', 'i5'])
   })
 })
 
@@ -234,18 +238,49 @@ describe('planCategoria', () => {
     expect(plan.partidos).toHaveLength(4 * 6)
   })
 
-  it('infantil de 6: grupo único (15 partidos) y final 1A-2A', () => {
-    const r = armarSorteoCategoria(infantil, inscripciones(6), 'serpentina', semilla(1))
+  it('5 inscritos: grupo único (10 partidos) y final 1A-2A', () => {
+    const r = armarSorteoCategoria(infantil, inscripciones(5), 'serpentina', semilla(1))
     if (!r.ok) throw new Error(r.error)
     const plan = planCategoria(r.sorteo)
-    expect(plan.partidos.filter((p) => p.fase === 'grupo')).toHaveLength(15)
+    expect(plan.partidos.filter((p) => p.fase === 'grupo')).toHaveLength(10)
     expect(plan.partidos.filter((p) => p.fase !== 'grupo').map((p) => `${p.fase}:${p.origen_a}-${p.origen_b}`)).toEqual(['final:1A-2A'])
   })
 
-  it('infantil de 4: grupo único, sin llave', () => {
-    const r = armarSorteoCategoria(infantil, inscripciones(4), 'bombos', semilla(1))
+  it('3 inscritos: grupo de 3 y final entre los 2 primeros', () => {
+    const r = armarSorteoCategoria(dobles, inscripciones(3), 'bombos', semilla(1))
     if (!r.ok) throw new Error(r.error)
-    expect(planCategoria(r.sorteo).partidos.every((p) => p.fase === 'grupo')).toBe(true)
+    const plan = planCategoria(r.sorteo)
+    expect(plan.partidos.filter((p) => p.fase === 'grupo')).toHaveLength(3)
+    expect(plan.partidos.filter((p) => p.fase !== 'grupo').map((p) => `${p.origen_a}-${p.origen_b}`)).toEqual(['1A-2A'])
+  })
+
+  it('7 inscritos: 2 grupos (4 y 3) y semis cruzadas', () => {
+    const r = armarSorteoCategoria(dobles, inscripciones(7, 2), 'bombos', semilla(3))
+    if (!r.ok) throw new Error(r.error)
+    const plan = planCategoria(r.sorteo)
+    expect(plan.grupos.map((g) => g.miembros.length).sort().reverse()).toEqual([4, 3])
+    expect(plan.partidos.filter((p) => p.fase === 'grupo')).toHaveLength(6 + 3)
+    expect(plan.partidos.filter((p) => p.fase !== 'grupo').map((p) => `${p.fase}:${p.origen_a}-${p.origen_b}`)).toEqual(['semis:1A-2B', 'semis:1B-2A', 'final:G:S1-G:S2'])
+  })
+
+  it('9, 10 y 11 inscritos: 3 grupos y cuartos con 2 byes para los mejores primeros', () => {
+    for (const n of [9, 10, 11]) {
+      const r = armarSorteoCategoria(dobles, inscripciones(n, 3), 'bombos', semilla(n))
+      if (!r.ok) throw new Error(r.error)
+      const plan = planCategoria(r.sorteo)
+      expect(plan.grupos).toHaveLength(3)
+      expect(plan.partidos.filter((p) => p.fase !== 'grupo').map((p) => `${p.fase}:${p.origen_a}-${p.origen_b}`)).toEqual([
+        'cuartos:P3-2P2', 'cuartos:2P1-2P3', 'semis:P1-G:C1', 'semis:P2-G:C2', 'final:G:S1-G:S2',
+      ])
+    }
+  })
+
+  it('13 inscritos: 4 grupos (4, 3, 3, 3) y cuartos', () => {
+    const r = armarSorteoCategoria(dobles, inscripciones(13, 4), 'bombos', semilla(13))
+    if (!r.ok) throw new Error(r.error)
+    const plan = planCategoria(r.sorteo)
+    expect(plan.grupos.map((g) => g.miembros.length).sort().reverse()).toEqual([4, 3, 3, 3])
+    expect(plan.partidos.filter((p) => p.fase === 'cuartos')).toHaveLength(4)
   })
 })
 

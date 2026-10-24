@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { formatearFechaHora } from '@/lib/tiempo'
-import { ETIQUETA_FASE, type EstadoTorneo } from '@/lib/torneo'
+import { ETIQUETA_FASE, textoOrigen, type EstadoTorneo } from '@/lib/torneo'
 import { ETIQUETA_METODO_SORTEO, METODOS_SORTEO, type FormatoSorteo, type MetodoSorteo } from '@/lib/torneoSorteo'
 
 // Sorteo del torneo (SPEC §3) POR CATEGORÍA, dentro de la pestaña Torneo del
@@ -216,9 +216,10 @@ function VistaPrevia({ previa }: { previa: Previa }) {
       )}
       {previa.categorias.filter((c) => 'gruposDetalle' in c).map((c: any) => (
         <div key={c.categoriaId} style={{ padding: '8px 0 0 0' }}>
+          {c.formato?.descripcion && <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-court)' }}>📐 Formato: {c.formato.descripcion}</div>}
           <span style={{ fontSize: '12px', color: '#666' }}>
             {c.inscritas} en el sorteo · {c.partidosGrupo} partidos de grupo ·{' '}
-            {c.llave.length ? `llave desde ${ETIQUETA_FASE[c.llave[0].fase as keyof typeof ETIQUETA_FASE].toLowerCase()} (${c.llave.map((p: any) => `${p.origen_a}-${p.origen_b}`).slice(0, 4).join(', ')}${c.llave.length > 4 ? '…' : ''})` : 'sin llave'}
+            {c.llave.length ? `llave desde ${ETIQUETA_FASE[c.llave[0].fase as keyof typeof ETIQUETA_FASE].toLowerCase()} (${c.llave.filter((p: any) => p.fase === c.llave[0].fase).map((p: any) => `${textoOrigen(p.origen_a)} vs ${textoOrigen(p.origen_b)}`).join(' · ')})` : 'sin llave'}
           </span>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
             {c.gruposDetalle.map((g: any) => (

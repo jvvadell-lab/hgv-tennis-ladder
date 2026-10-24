@@ -12,9 +12,12 @@ import { pendientesInscripcion } from '@/lib/torneoInscripcion'
 import { pendientesInscripcionMenor } from '@/lib/torneoInfantil'
 import { pendientesQueBloqueanSorteo } from '@/lib/torneoSorteo'
 import { vencerInvitaciones } from '@/lib/torneoDoblesServidor'
+import { revisarCierreVencido } from '@/lib/torneoCierreServidor'
 
 export type ResumenTorneo = {
   cierreInscripcionesAt: string | null
+  // Categorías abiertas después del cierre programado ("cierre programado vencido").
+  cierreVencido: string[]
   dobles: { duplas: number; cupo: number }
   singleEInfantil: { inscritos: number; cupo: number }
   categorias: (ResumenCategoria & { nombre: string; es_infantil: boolean; sorteada: boolean; cancelada: boolean })[]
@@ -90,6 +93,7 @@ export async function resumenTorneo(db: SupabaseClient, torneo: Torneo): Promise
   const otras = vivas.filter((f) => f.modalidad !== 'doble')
   return {
     cierreInscripcionesAt: torneo.cierre_inscripciones_at,
+    cierreVencido: await revisarCierreVencido(db, torneo),
     dobles: { duplas: dobles.reduce((s, f) => s + f.confirmados, 0), cupo: dobles.reduce((s, f) => s + f.cupo, 0) },
     singleEInfantil: { inscritos: otras.reduce((s, f) => s + f.inscritos, 0), cupo: otras.reduce((s, f) => s + f.cupo, 0) },
     categorias: filas,

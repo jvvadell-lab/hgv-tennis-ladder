@@ -22,7 +22,8 @@ import {
   type Parentesco,
 } from '@/lib/torneoInfantil'
 import TorneoSorteo from './TorneoSorteo'
-import { GestionCategoria, ResumenTorneo, type EquipoAdmin, type InvitacionAdmin } from './TorneoDoblesAdmin'
+import { GestionCategoria, ResumenTorneo, type EquipoAdmin, type EsperaAdmin, type InvitacionAdmin } from './TorneoDoblesAdmin'
+import { avisoAntesDeCerrar } from '@/lib/torneoCierre'
 import TorneoProgramacion from './TorneoProgramacion'
 import TorneoResultados from './TorneoResultados'
 import HorarioAcademia from '@/app/components/HorarioAcademia'
@@ -115,6 +116,7 @@ type Datos = {
   inscripciones: Inscripcion[]
   equipos: EquipoAdmin[]
   invitaciones: InvitacionAdmin[]
+  listaEspera: EsperaAdmin[]
   disponibilidad: Disponibilidad[]
   jugadoresActivos: { id: string; nombre: string }[]
   sorteoPublicadoPor: string | null
@@ -350,6 +352,11 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                 estadoTorneo={torneo.estado}
                 editable={esAdminCompleto}
                 ocupado={ocupado === `abrir-${c.id}`}
+                avisoCerrar={(() => {
+                  const enDupla = new Set(datos.equipos.flatMap((e) => [e.inscripcion1_id, e.inscripcion2_id]))
+                  const sueltos = c.modalidad === 'doble' ? lista.filter((i) => i.estado !== 'retirada' && !enDupla.has(i.id)).map(nombreInscripcion) : []
+                  return avisoAntesDeCerrar(c.nombre, sueltos, datos.invitaciones.filter((v) => v.categoria_id === c.id).length)
+                })()}
                 onCambiar={(abrir) => accion(`abrir-${c.id}`, 'categoria-inscripciones', { categoriaId: c.id, abiertas: abrir }, `${c.nombre}: inscripciones ${abrir ? 'abiertas' : 'cerradas'}`)}
               />
             </div>
@@ -359,6 +366,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
               inscripciones={lista.filter((i) => i.estado !== 'retirada').map((i) => ({ id: i.id, categoria_id: i.categoria_id, estado: i.estado, nombre: nombreInscripcion(i), esMenor: !!i.menor }))}
               equipos={datos.equipos}
               invitaciones={datos.invitaciones}
+              listaEspera={datos.listaEspera}
               editable={esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && !c.sorteo_publicado_at}
               cerrada={!categoriaAbierta(torneo.estado, c) || (!!torneo.cierre_inscripciones_at && new Date(torneo.cierre_inscripciones_at).getTime() <= Date.now())}
               ocupado={ocupado}
@@ -668,15 +676,17 @@ const td: React.CSSProperties = { padding: '8px' }
 // Interruptor abrir/cerrar inscripciones de una categoría, con quién y cuándo
 // la cambió por última vez. Solo acepta inscripciones si además el torneo
 // está en 'inscripcion'.
-function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, onCambiar }: {
+function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, avisoCerrar, onCambiar }: {
   categoria: Categoria
   estadoTorneo: EstadoTorneo
   editable: boolean
   ocupado: boolean
+  avisoCerrar: string | null   // sin pareja / invitaciones pendientes: se muestra antes de cerrar
   onCambiar: (abrir: boolean) => void
 }) {
   const abierta = categoria.inscripciones_abiertas
-  const antesDelSorteo = estadoTorneo === 'borrador' || estadoTorneo === 'inscripcion'
+  // Se puede cerrar y reabrir mientras no se publique el sorteo de la categoría.
+  const antesDelSorteo = (estadoTorneo === 'borrador' || estadoTorneo === 'inscripcion') && !categoria.sorteo_publicado_at && !categoria.cancelada_at
   const recibe = categoriaAbierta(estadoTorneo, categoria)
   return (
     <div style={{ textAlign: 'right' }}>
@@ -692,13 +702,13 @@ function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, on
             disabled={ocupado}
             onClick={() => {
               const texto = abierta
-                ? `¿Cerrar las inscripciones de ${categoria.nombre}? Nadie más podrá inscribirse en ella; las inscripciones hechas se mantienen.`
+                ? `${avisoCerrar ? `⚠️ ${avisoCerrar}\n\n` : ''}¿Cerrar las inscripciones de ${categoria.nombre}? Nadie más podrá inscribirse, invitar ni aceptar invitaciones en ella; las inscripciones y duplas hechas se mantienen y puedes seguir armando duplas, trasladando y certificando hasta el sorteo. Se puede reabrir mientras no publiques su sorteo.`
                 : `¿Abrir las inscripciones de ${categoria.nombre}?${estadoTorneo === 'inscripcion' ? ' Los jugadores podrán inscribirse desde la app.' : ' Recibirá inscripciones cuando abras las del torneo.'}`
               if (confirm(texto)) onCambiar(!abierta)
             }}
             style={boton(abierta ? '#c0392b' : 'var(--color-court)')}
           >
-            {ocupado ? '…' : abierta ? '🔒 Cerrar' : '🔓 Abrir'}
+            {ocupado ? '…' : abierta ? '🔒 Cerrar inscripciones' : categoria.inscripciones_cambiadas_at ? '🔓 Reabrir' : '🔓 Abrir'}
           </button>
         )}
       </div>

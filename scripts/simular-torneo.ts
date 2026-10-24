@@ -1,7 +1,7 @@
 // Simulación del torneo en el entorno de pruebas LOCAL (Supabase en Docker).
 // Ver scripts/README-simulacion.md.
 //
-//   npm run simular -- preparar        24 jugadoras inscritas una a una, 12 duplas por invitación o armadas por el admin, pagos y siembras
+//   npm run simular -- preparar [N]    2N jugadoras inscritas una a una, N duplas (6–12, por defecto 12) por invitación o armadas por el admin, pagos y siembras
 //   npm run simular -- sortear         sorteo por bombos + asistente de programación (y la publica)
 //   npm run simular -- jugar <etapa>   grupos-j1 | grupos-j2 | grupos-j3 | cuartos | semis | final
 //   npm run simular -- estado          resumen de lo que hay
@@ -104,7 +104,7 @@ async function main() {
   const db = supabaseServer()
 
   const comandos: Record<string, () => Promise<void>> = {
-    preparar: () => preparar(db),
+    preparar: () => preparar(db, arg ? Number(arg) : 12),
     sortear: () => sortear(db),
     jugar: () => jugar(db, arg as Etapa),
     estado: () => estado(db),
@@ -143,7 +143,11 @@ async function vigenteEsSim(db: Db) {
 
 // --- preparar -------------------------------------------------------------
 
-async function preparar(db: Db) {
+// `duplas` (10 a 12): las primeras se forman por invitación aceptada; las 5
+// últimas son los escenarios (rechazada, vencida, por teléfono y 2 armadas
+// por el admin tras el cierre).
+async function preparar(db: Db, duplas: number) {
+  if (!Number.isInteger(duplas) || duplas < 6 || duplas > 12) throw new Error('preparar admite de 6 a 12 duplas')
   if (await torneoSim(db)) throw new Error('La simulación ya está preparada. Para empezar de nuevo: npm run simular -- reset')
   const admin = await adminId(db)
   const { ahora, hoyEnCaracas } = await import('../lib/tiempo')
@@ -203,11 +207,13 @@ async function preparar(db: Db) {
     email_verificado: true,
     ...certificada,
   })
-  const numeros = Array.from({ length: 23 }, (_, i) => String(i + 2).padStart(2, '0')).filter((n) => n !== '20')
+  const total = duplas * 2
+  const nTel = 2 * (duplas - 2)   // la invitada por teléfono (Prueba 20 con 12 duplas)
+  const numeros = Array.from({ length: total - 1 }, (_, i) => String(i + 2).padStart(2, '0')).filter((n) => Number(n) !== nTel)
   const { data: creadas, error: errJ } = await db.from('jugadores').insert(numeros.map((n) => ficha(n))).select('id, nombre')
   if (errJ) throw errJ
   const id = new Map<number, string>([[1, p01.id], ...creadas!.map((j) => [Number(j.nombre.slice(-2)), j.id] as [number, string])])
-  console.log(`✔ 23 jugadoras (Prueba 01 es la cuenta de prueba; Prueba 20 se registrará después)`)
+  console.log(`✔ ${total - 1} jugadoras (Prueba 01 es la cuenta de prueba; Prueba ${nTel} se registrará después)`)
 
   // 3. Inscripción individual y pago de cada una, como en la app.
   const { aceptarInvitacion, armarDuplaAdmin, enviarInvitacion, rechazarInvitacion, vencerInvitaciones, vincularInvitacionesPorTelefono } = await import('../lib/torneoDoblesServidor')
@@ -241,65 +247,79 @@ async function preparar(db: Db) {
     if (!r.ok) throw new Error(`Prueba ${n} no pudo aceptar: ${r.error}`)
   }
 
-  // Parejas 1-7: la que invita se inscribe; las impares de 1-3 invitan a una
+  // Parejas 1..duplas-5: la que invita se inscribe; las de 1-3 invitan a una
   // ya inscrita, las demás a una que se inscribe al aceptar.
-  for (let k = 0; k < 7; k++) {
+  const aceptadas = duplas - 5
+  for (let k = 0; k < aceptadas; k++) {
     const a = 2 * k + 1, b = 2 * k + 2
     await inscribir(a)
     if (k < 3) await inscribir(b)
     await aceptar(await invitar(a, b), b)
   }
-  console.log('✔ Parejas 1-7: invitación aceptada (4 de las invitadas se inscribieron al aceptar)')
+  console.log(`✔ Parejas 1-${aceptadas}: invitación aceptada (${aceptadas - 3} de las invitadas se inscribieron al aceptar)`)
 
-  // Pareja 8: Prueba 15 invita a Prueba 17, que rechaza; luego invita a Prueba 16, que acepta.
-  await inscribir(15)
-  const rechazada = await invitar(15, 17)
-  const rr = await rechazarInvitacion(db, rechazada, id.get(17)!)
+  // Rechazada: la pareja siguiente invita primero a otra, que rechaza, y después a su pareja.
+  const [r1, r2] = [2 * aceptadas + 1, 2 * aceptadas + 2]
+  await inscribir(r1)
+  const rechazada = await invitar(r1, r2 + 1)
+  const rr = await rechazarInvitacion(db, rechazada, id.get(r2 + 1)!)
   if (!rr.ok) throw new Error(rr.error)
-  await aceptar(await invitar(15, 16), 16)
-  console.log('✔ Pareja 8: una invitación rechazada y otra aceptada')
+  await aceptar(await invitar(r1, r2), r2)
+  console.log(`✔ Pareja ${aceptadas + 1}: una invitación rechazada y otra aceptada`)
 
-  // Pareja 9: la invitación de Prueba 17 a Prueba 18 vence (se adelanta su plazo); la repite y Prueba 18 acepta.
-  await inscribir(17)
-  const vieja = await invitar(17, 18)
+  // Vencida: la primera invitación vence (se adelanta su plazo); la repite y acepta.
+  const [v1, v2] = [r2 + 1, r2 + 2]
+  await inscribir(v1)
+  const vieja = await invitar(v1, v2)
   await db.from('torneo_invitaciones').update({ vence_at: new Date(Date.now() - 60_000).toISOString() }).eq('id', vieja)
   if ((await vencerInvitaciones(db, [categoria.id])) !== 1) throw new Error('La invitación vieja no venció')
-  await aceptar(await invitar(17, 18), 18)
-  console.log('✔ Pareja 9: una invitación vencida (sin cron, al leer) y otra aceptada')
+  await aceptar(await invitar(v1, v2), v2)
+  console.log(`✔ Pareja ${aceptadas + 2}: una invitación vencida (sin cron, al leer) y otra aceptada`)
 
-  // Pareja 10: Prueba 19 invita por teléfono a "Prueba 20", que se registra con ese número y acepta.
-  await inscribir(19)
-  const porTelefono = await invitar(19, { nombre: 'Prueba 20', telefono: '0414-555.00.20' })
-  const { data: p20, error: errP20 } = await db.from('jugadores').insert(ficha('20', '+58 414-5550020')).select('id').single()
-  if (errP20) throw errP20
-  id.set(20, p20.id)
-  if ((await vincularInvitacionesPorTelefono(db, p20.id, '+58 414-5550020')) !== 1) throw new Error('No se vinculó la invitación por teléfono')
-  await aceptar(porTelefono, 20)
-  console.log('✔ Pareja 10: invitación por teléfono; Prueba 20 se registró y aceptó')
+  // Por teléfono: invita a "Prueba nTel", que se registra con ese número y acepta.
+  const t1 = nTel - 1
+  const tel = `+58 414-55500${String(nTel).padStart(2, '0')}`
+  await inscribir(t1)
+  const porTelefono = await invitar(t1, { nombre: `Prueba ${nTel}`, telefono: tel })
+  const { data: pTel, error: errPTel } = await db.from('jugadores').insert(ficha(String(nTel).padStart(2, '0'), tel)).select('id').single()
+  if (errPTel) throw errPTel
+  id.set(nTel, pTel.id)
+  if ((await vincularInvitacionesPorTelefono(db, pTel.id, tel)) !== 1) throw new Error('No se vinculó la invitación por teléfono')
+  await aceptar(porTelefono, nTel)
+  console.log(`✔ Pareja ${aceptadas + 3}: invitación por teléfono; Prueba ${nTel} se registró y aceptó`)
 
-  // Parejas 11-12: Prueba 21-24 se inscriben sin elegir pareja (disponibles); al cierre el admin arma las duplas.
-  for (const n of [21, 22, 23, 24]) await inscribir(n)
-  const { data: sueltas } = await db.from('torneo_inscripciones').select('id, jugador1_id').eq('categoria_id', categoria.id).in('jugador1_id', [21, 22, 23, 24].map((n) => id.get(n)!))
+  // Las 4 últimas se inscriben sin elegir pareja (disponibles); el admin cierra la categoría y arma las duplas.
+  const ultimas = [total - 3, total - 2, total - 1, total]
+  for (const n of ultimas) await inscribir(n)
+  const { data: sueltas } = await db.from('torneo_inscripciones').select('id, jugador1_id').eq('categoria_id', categoria.id).in('jugador1_id', ultimas.map((n) => id.get(n)!))
   const insDe = (n: number) => sueltas!.find((i) => i.jugador1_id === id.get(n))!.id
+  // Pasa la hora del cierre programado: no cierra sola, el panel lo alerta.
   await db.from('torneos').update({ cierre_inscripciones_at: new Date(Date.now() - 60_000).toISOString() }).eq('id', torneo.id)
+  const { revisarCierreVencido } = await import('../lib/torneoCierreServidor')
+  const abiertas = await revisarCierreVencido(db, (await torneoSim(db))!)
+  if (!abiertas.includes(categoria.nombre)) throw new Error('Faltó la alerta de cierre programado vencido')
+  // El admin cierra la categoría a mano (como /api/admin/torneo/categoria-inscripciones).
+  await db.from('torneo_categorias').update({ inscripciones_abiertas: false, inscripciones_cambiadas_por: admin, inscripciones_cambiadas_at: ahora().toISOString() }).eq('id', categoria.id)
   const tCerrado = (await torneoSim(db))!
-  const tarde = await enviarInvitacion(db, tCerrado, categoria.id, id.get(21)!, { jugadorId: id.get(22)! })
-  if (tarde.ok) throw new Error('Después del cierre no se debería poder invitar')
-  for (const [x, y] of [[21, 24], [22, 23]]) {
+  const tarde = await enviarInvitacion(db, tCerrado, categoria.id, id.get(ultimas[0])!, { jugadorId: id.get(ultimas[1])! })
+  if (tarde.ok) throw new Error('Con la categoría cerrada no se debería poder invitar')
+  for (const [x, y] of [[ultimas[0], ultimas[3]], [ultimas[1], ultimas[2]]]) {
     const r = await armarDuplaAdmin(db, tCerrado, [insDe(x), insDe(y)], admin)
     if (!r.ok) throw new Error(r.error)
   }
-  console.log('✔ Cierre: no se puede invitar; el admin armó las parejas 11-12 con las 4 disponibles')
+  console.log(`✔ Cierre programado vencido (alerta) → el admin cierra la categoría; ya no se puede invitar y el admin armó las parejas ${duplas - 1}-${duplas} con las 4 disponibles`)
 
-  // 4. Pagos validados de las 24, siembras 1-4 (bombo 1) y bombos 2-3 por orden de formación.
-  for (let n = 1; n <= 24; n++) await pagar(n)
+  // 4. Pagos validados de todas, siembras 1-G (bombo 1) y bombos siguientes por orden de formación.
+  for (let n = 1; n <= total; n++) await pagar(n)
   const { data: equipos } = await db.from('torneo_equipos').select('id').eq('categoria_id', categoria.id).eq('estado', 'activo').order('created_at')
-  if (equipos!.length !== 12) throw new Error(`Hay ${equipos!.length} duplas, no 12`)
+  if (equipos!.length !== duplas) throw new Error(`Hay ${equipos!.length} duplas, no ${duplas}`)
+  const { gruposFlexibles } = await import('../lib/torneoSorteo')
+  const g = gruposFlexibles(duplas).numGrupos
   for (const [k, e] of equipos!.entries()) {
-    const { error } = await db.from('torneo_equipos').update({ siembra: k < 4 ? k + 1 : null, bombo: Math.floor(k / 4) + 1 }).eq('id', e.id)
+    const { error } = await db.from('torneo_equipos').update({ siembra: k < g ? k + 1 : null, bombo: Math.floor(k / g) + 1 }).eq('id', e.id)
     if (error) throw error
   }
-  console.log(`✔ 24 pagos validados (Bs. ${monto} c/u), 24 inscripciones confirmadas y 12 duplas con siembra y bombo`)
+  console.log(`✔ ${total} pagos validados (Bs. ${monto} c/u), ${total} inscripciones confirmadas y ${duplas} duplas con siembra y bombo`)
   console.log('\nSiguiente: npm run simular -- sortear')
 }
 
@@ -357,7 +377,14 @@ async function jugar(db: Db, etapa: Etapa) {
 
   const todos = await listarPartidos(db, torneo.id)
   const ronda = etapa.startsWith('grupos-') ? Number(etapa.slice(-1)) : null
-  const deLaEtapa = todos.filter((p) => (ronda ? p.fase === 'grupo' && p.orden === ronda : p.fase === etapa))
+  // Jornada del todos contra todos (grupos de 3, 4 o 5: el orden no es la jornada).
+  const { crucesTodosContraTodos } = await import('../lib/torneo')
+  const tamano = (grupoId: string) => {
+    const n = todos.filter((q) => q.grupo_id === grupoId).length
+    return Math.round((1 + Math.sqrt(1 + 8 * n)) / 2)   // n = k(k-1)/2
+  }
+  const jornada = (q: (typeof todos)[number]) => crucesTodosContraTodos(tamano(q.grupo_id!))[q.orden - 1]?.ronda
+  const deLaEtapa = todos.filter((p) => (ronda ? p.fase === 'grupo' && jornada(p) === ronda : p.fase === etapa))
   if (!deLaEtapa.length) throw new Error(`No hay partidos de ${etapa}${torneo.estado === 'inscripcion' ? ' (¿falta sortear?)' : ''}`)
 
   // Fuerza de cada pareja: su siembra/bombo (menor = mejor).
@@ -389,7 +416,7 @@ async function jugar(db: Db, etapa: Etapa) {
     let datos: { sets: Set[]; tipoResultado: 'normal' | 'retiro'; retiradaInscripcionId: string | null } | null = null
     let wo: string | null = null
 
-    if (p.grupo_letra === 'A') {
+    if (p.grupo_letra === 'A' && delGrupo.length === 3) {
       // Triple empate 1-1-1: 0 > 1 (2-0), 1 > 2 (con Super Tiebreak), 2 > 0 (2-0) → se resuelve por sets.
       const ganador = par === '0-1' ? delGrupo[0] : par === '1-2' ? delGrupo[1] : delGrupo[2]
       const ganaA = ganador === a

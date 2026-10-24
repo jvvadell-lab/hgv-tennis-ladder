@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { generarLlave } from './torneo'
+import { generarLlave, ordenarPrimeros } from './torneo'
 import type { SetJugado } from './resultados'
-import { avanceGrupo, avanceLlave, codigoLlave, evaluarReporte, pasesPorVacante, textoMarcador, type PartidoAvance } from './torneoResultados'
+import { avanceGrupo, avanceLlave, avanceMejoresPrimeros, codigoLlave, evaluarReporte, pasesPorVacante, textoMarcador, type PartidoAvance } from './torneoResultados'
 
 const set = (numero: number, a: number, b: number, extra: Partial<SetJugado> = {}): SetJugado => ({ numero, games_j1: a, games_j2: b, completo: true, ...extra })
 const stb = (a: number, b: number): SetJugado => ({ numero: 3, games_j1: a, games_j2: b, completo: true, es_super_tiebreak: true })
@@ -209,5 +209,47 @@ describe('textoMarcador', () => {
     expect(textoMarcador(p({ estado: 'wo' }))).toBe('Pasa por WO')
     expect(textoMarcador(p({ estado: 'doble_wo' }))).toBe('Doble WO')
     expect(textoMarcador(p({ estado: 'programado' }))).toBeNull()
+  })
+})
+
+// --- Llave de 3 grupos: cuartos con 2 byes ----------------------------------
+
+describe('avanceMejoresPrimeros (3 grupos)', () => {
+  const llave = llaveDe(3, 'cuartos')
+  // Grupo de 3: el 1º gana sus 2 partidos con el marcador dado; el 2º gana 1.
+  const grupo3 = (g: string, l: string, setsPrimero: SetJugado[]): PartidoAvance[] => [
+    { ...jugado(`${g}1`, `${l}1`, `${l}2`, `${l}1`, setsPrimero), grupo_id: g },
+    { ...jugado(`${g}2`, `${l}1`, `${l}3`, `${l}1`, setsPrimero), grupo_id: g },
+    { ...jugado(`${g}3`, `${l}2`, `${l}3`, `${l}2`, [set(1, 6, 4), set(2, 6, 4)]), grupo_id: g },
+  ]
+  const miembros = (l: string) => [1, 2, 3].map((k) => ({ equipo_id: `${l}${k}`, desempate_manual: null }))
+  const grupos = ['A', 'B', 'C'].map((l) => ({ id: `g${l}`, letra: l, miembros: miembros(l.toLowerCase()) }))
+  const partidos = [
+    ...grupo3('gA', 'a', [set(1, 6, 4), set(2, 6, 4)]),   // A: dif. games +4 por partido
+    ...grupo3('gB', 'b', [set(1, 6, 0), set(2, 6, 0)]),   // B: el mejor primero
+    ...grupo3('gC', 'c', [set(1, 6, 2), set(2, 6, 2)]),   // C: segundo mejor
+  ]
+
+  it('los dos mejores primeros pasan directo a semis; los del mismo grupo en mitades opuestas', () => {
+    const r = avanceMejoresPrimeros(grupos, partidos, llave)
+    expect(r.avisos).toEqual([])
+    const asignado = Object.fromEntries(r.cambios.map((c: any) => [`${c.partidoId}${c.lado}`, c.inscripcionId]))
+    // P1 = b1, P2 = c1, P3 = a1 · C1 = P3 vs 2P2 · C2 = 2P1 vs 2P3 · S1 = P1 · S2 = P2
+    expect(asignado).toEqual({ C1a: 'a1', C1b: 'c2', C2a: 'b2', C2b: 'a2', S1a: 'b1', S2a: 'c1' })
+  })
+
+  it('no hace nada hasta que todos los grupos estén completos', () => {
+    const incompletos = partidos.map((p) => (p.id === 'gC3' ? { ...p, estado: 'programado' as const, validado: false } : p))
+    expect(avanceMejoresPrimeros(grupos, incompletos, llave).cambios).toEqual([])
+  })
+
+  it('con grupos de distinto tamaño compara promedios por partido', () => {
+    const fila = (pj: number, pg: number, sf: number, sc: number, gf: number, gc: number) => ({ pj, pg, sets_favor: sf, sets_contra: sc, games_favor: gf, games_contra: gc })
+    const orden = ordenarPrimeros([
+      { letra: 'A', fila: fila(3, 3, 6, 1, 38, 20) },   // grupo de 4: 3 de 3
+      { letra: 'B', fila: fila(2, 2, 4, 0, 24, 6) },    // grupo de 3: 2 de 2, mejor diferencia por partido
+      { letra: 'C', fila: fila(2, 1, 2, 2, 20, 18) },
+    ])
+    expect(orden.map((o) => o.letra)).toEqual(['B', 'A', 'C'])
   })
 })

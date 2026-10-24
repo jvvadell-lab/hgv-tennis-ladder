@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import FormMarcadorTorneo from '@/app/components/FormMarcadorTorneo'
 import { formatearFechaHora } from '@/lib/tiempo'
-import { ETIQUETA_FASE, PREFIJO_FASE, type EstadoPartido, type Fase } from '@/lib/torneo'
+import { ETIQUETA_FASE, PREFIJO_FASE, type EstadoPartido, type Fase, textoOrigen } from '@/lib/torneo'
 import type { SetJugado, TipoResultado } from '@/lib/resultados'
 import { textoMarcador } from '@/lib/torneoResultados'
 
@@ -46,6 +46,7 @@ const etiquetaPartido = (p: Partido) =>
   p.fase === 'grupo' ? `Grupo ${p.grupo_letra}` : `${ETIQUETA_FASE[p.fase]} ${PREFIJO_FASE[p.fase as Exclude<Fase, 'grupo'>]}${p.orden}`
 
 const origenTexto = (o: string | null) => {
+  if (o && /^2?P\d$/.test(o)) return textoOrigen(o)   // llave de 3 grupos (mejores primeros)
   const g = o?.match(/^([1-9])([A-Z])$/)
   if (g) return `${g[1]}º del grupo ${g[2]}`
   const w = o?.match(/^G:([CSF]\d+)$/)

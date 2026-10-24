@@ -7,6 +7,7 @@ import { cupoInscripciones, montoInscripcionBs, pendientesInscripcion, textoPend
 import { candidatosPareja, estadoEnDobles, invitacionVigente, type JugadorDobles } from '@/lib/torneoDobles'
 import { COLUMNAS_INVITACION, despuesDelCierre, vencerInvitaciones, vincularInvitacionesPorTelefono, type Invitacion } from '@/lib/torneoDoblesServidor'
 import { ahora } from '@/lib/tiempo'
+import { listasDeEspera, revisarCierreVencido } from '@/lib/torneoCierreServidor'
 import type { Nivel } from '@/lib/torneo'
 
 // Todo lo que necesita la pantalla "Inscribirme en el Torneo Navidad":
@@ -34,7 +35,7 @@ export async function GET() {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas, duracion_min, orden')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas, inscripciones_cambiadas_at, duracion_min, orden, sorteo_publicado_at, cancelada_at')
       .eq('torneo_id', torneo.id)
       .eq('es_infantil', false) // las infantiles van por /api/jugador/torneo/infantil
       .order('orden')
@@ -45,6 +46,8 @@ export async function GET() {
     // Al leer: vencen las invitaciones cuyo plazo pasó y se asignan las que
     // me hicieron a mi teléfono antes de tener cuenta.
     await vencerInvitaciones(db, doblesIds)
+    // Si pasó el cierre programado con categorías abiertas, avisa a los admins (una vez).
+    await revisarCierreVencido(db, torneo).catch((e) => console.error('[torneo] cierre vencido:', e.message))
     await vincularInvitacionesPorTelefono(db, session.id, yo.telefono)
 
     const [{ data: inscripciones, error: errIns }, { data: equipos, error: errEq }, { data: invitaciones, error: errInv }] = await Promise.all([
@@ -168,6 +171,10 @@ export async function GET() {
       inscrito: mias.some((m) => m.categoria_id === v.categoria_id),
     }))
 
+    // Mis anotaciones en lista de espera, con el puesto.
+    const espera = await listasDeEspera(db, categoriaIds)
+    const misEsperas = espera.filter((e) => e.jugador_id === session.id).map((e) => ({ categoriaId: e.categoria_id, puesto: e.puesto }))
+
     const tasa = await obtenerTasaVigente(db)
     const tasaEur = tasa ? tasaParaCalculo(tasa.eur) : null
 
@@ -179,6 +186,7 @@ export async function GET() {
       categorias: (categorias || []).map((c) => ({ ...c, ocupados: ocupados[c.id] || 0, cupoJugadores: cupoInscripciones(c), duplas: duplas[c.id] || 0 })),
       misInscripciones,
       invitacionesRecibidas,
+      misEsperas,
       cierreInscripcionesAt: torneo.cierre_inscripciones_at,
       despuesDelCierre: despuesDelCierre(torneo),
       disponibilidad: disponibilidad || { no_disponible: [], nota: null },

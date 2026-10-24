@@ -23,6 +23,7 @@ type Partido = {
   equipo_b: string | null
   nombre_a: string | null
   nombre_b: string | null
+  pago_pendiente: string[]   // sin pago validado: se marca en rojo
   cancha: string | null
   fecha_hora: string | null
   estado: EstadoPartido
@@ -134,7 +135,10 @@ export default function TorneoResultados() {
           const conRivales = !!p.equipo_a && !!p.equipo_b
           const marcador = textoMarcador(p)
           return (
-            <div key={p.id} style={{ borderTop: i ? '1px solid #e5e5e5' : 'none', padding: '10px 0' }}>
+            <div key={p.id} style={{
+              borderTop: i ? '1px solid #e5e5e5' : 'none', padding: '10px 0',
+              ...(p.pago_pendiente.length && !p.validado ? { background: '#fdecea', borderLeft: '4px solid #c0392b', paddingLeft: '8px' } : {}),
+            }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '12px', color: '#666' }}>{p.categoria_nombre} · {etiqueta(p)} · {p.fecha_hora ? `${formatearFechaHora(p.fecha_hora)} · ${p.cancha}` : 'sin horario'}</div>
@@ -144,6 +148,11 @@ export default function TorneoResultados() {
                     <span style={{ color: p.validado && p.ganador_equipo_id === p.equipo_b ? '#1e6b34' : 'inherit' }}>{p.nombre_b ?? 'Por definir'}</span>
                   </div>
                   {marcador && <div style={{ fontSize: '13px' }}>{p.validado ? '✓ ' : 'Reportado: '}<strong>{marcador}</strong></div>}
+                  {p.pago_pendiente.length > 0 && !p.validado && (
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#c0392b' }}>
+                      💸 Pago pendiente: {p.pago_pendiente.join(', ')} — no puede jugar su primer partido sin el pago validado. Decide retiro o WO.
+                    </div>
+                  )}
                 </div>
                 <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                   {p.validado ? (

@@ -13,6 +13,7 @@ import { telefonoLegible } from '@/lib/torneoDobles'
 type FilaResumen = ResumenCategoria & { nombre: string; es_infantil: boolean; sorteada: boolean; cancelada: boolean }
 type Resumen = {
   cierreInscripcionesAt: string | null
+  cierreVencido: string[]
   dobles: { duplas: number; cupo: number }
   singleEInfantil: { inscritos: number; cupo: number }
   categorias: FilaResumen[]
@@ -70,6 +71,12 @@ export function ResumenTorneo({ version, categoriaSel, onElegir }: { version: nu
 
   return (
     <div style={tarjeta}>
+      {resumen.cierreVencido.length > 0 && (
+        <div style={{ background: '#fff4d6', border: '1px solid #f0b400', color: '#8a5a00', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px' }}>
+          ⚠️ <strong>Cierre programado vencido:</strong> pasó el {formatearFechaHora(resumen.cierreInscripcionesAt!)} y siguen abiertas {resumen.cierreVencido.join(', ')}.
+          La fecha no cierra sola: ciérralas desde su tarjeta cuando decidas. Las invitaciones pendientes ya vencieron.
+        </div>
+      )}
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
         {cifra(`${resumen.dobles.duplas}/${resumen.dobles.cupo}`, 'duplas confirmadas en dobles')}
         {cifra(`${resumen.singleEInfantil.inscritos}/${resumen.singleEInfantil.cupo}`, 'inscritos en single e infantiles')}
@@ -122,18 +129,20 @@ export function ResumenTorneo({ version, categoriaSel, onElegir }: { version: nu
 // --- Gestión de una categoría ----------------------------------------------
 
 export type EquipoAdmin = { id: string; categoria_id: string; inscripcion1_id: string; inscripcion2_id: string | null; origen: string; siembra: number | null; bombo: number | null }
+export type EsperaAdmin = { id: string; categoria_id: string; nombre: string; created_at: string; puesto: number }
 export type InvitacionAdmin = { id: string; categoria_id: string; invita_inscripcion_id: string; vence_at: string; para: string; telefono: string | null }
 type CategoriaGestion = { id: string; nombre: string; modalidad: string; es_infantil: boolean; sorteo_publicado_at: string | null; cancelada_at: string | null }
 type InscripcionGestion = { id: string; categoria_id: string; estado: string; nombre: string; esMenor: boolean }
 
 export function GestionCategoria({
-  categoria, categorias, inscripciones, equipos, invitaciones, editable, cerrada, ocupado, accion,
+  categoria, categorias, inscripciones, equipos, invitaciones, listaEspera, editable, cerrada, ocupado, accion,
 }: {
   categoria: CategoriaGestion
   categorias: CategoriaGestion[]
   inscripciones: InscripcionGestion[]        // vivas de la categoría
   equipos: EquipoAdmin[]
   invitaciones: InvitacionAdmin[]
+  listaEspera: EsperaAdmin[]
   editable: boolean                          // admin completo, antes del sorteo de la categoría
   cerrada: boolean                           // sin inscripciones abiertas o pasado el cierre: se puede fusionar o cancelar
   ocupado: string | null
@@ -253,6 +262,29 @@ export function GestionCategoria({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {listaEspera.filter((e) => e.categoria_id === categoria.id).length > 0 && (
+        <div style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px' }}>
+          <strong style={{ color: 'var(--color-ink)' }}>⏳ Lista de espera (en orden de llegada)</strong>
+          {listaEspera.filter((e) => e.categoria_id === categoria.id).map((e) => (
+            <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '5px 0', borderTop: '1px solid #f0f0f0' }}>
+              <span>{e.puesto}. {e.nombre} <span style={{ color: '#888', fontSize: '11px' }}>· desde {formatearFechaHora(e.created_at)}</span></span>
+              {editable && (
+                <button
+                  disabled={ocupado === `espera-${e.id}`}
+                  onClick={() => {
+                    if (!confirm(`¿Inscribir a ${e.nombre} en ${categoria.nombre} desde la lista de espera? Se le avisa y le queda el pago pendiente.`)) return
+                    accion(`espera-${e.id}`, 'lista-espera', { esperaId: e.id }, `${e.nombre} inscrita/o desde la lista de espera`)
+                  }}
+                  style={boton('var(--color-court)', true)}
+                >
+                  Inscribir
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

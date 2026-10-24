@@ -98,8 +98,22 @@ RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas 
 - **Formar la dupla:** (A) invitar a un jugador de la app: le llega a la campana (Aceptar / Rechazar) y por correo; si no estaba inscrito, al aceptar se inscribe en el mismo paso y le queda el pago pendiente. (B) invitar a alguien sin cuenta con nombre y teléfono (+58): la app abre wa.me con el mensaje (quién invita, categoría, enlaces a /register y al torneo); al registrarse con ese teléfono ve la invitación y la acepta si su registro está activo (cuenta activa y correo verificado). (C) no elegir pareja: queda disponible.
 - **Lista para elegir pareja:** jugadores elegibles (género y nivel, sin dupla en la categoría, con menos de 2 categorías si no están inscritos en ella). Los disponibles inscritos van arriba; los que esperan respuesta de otra invitación salen en gris («esperando a …»), sin poder elegirlos; los que ya tienen dupla no aparecen.
 - **Invitaciones:** una sola enviada pendiente por jugador y categoría (se puede cancelar). Vence a las 48 h o al cierre de inscripciones, lo que llegue primero; se calcula al leer o actuar (sin cron). Al rechazarse, vencer o cancelarse, quien invitó vuelve a disponible y se avisa a los dos. Si el invitado acepta, se cancelan las demás que recibió (o envió) en la categoría. Si al aceptar no hay cupo o alguien ya no es elegible, queda vencida con el motivo y se avisa.
-- **Después del cierre** nadie invita ni acepta; el admin arma duplas con los disponibles («Armar dupla», avisa a los dos), cambia la pareja de una dupla (deshacer + armar) y, con un número impar, traslada al jugador a otra categoría o retira su inscripción con el pago **marcado para devolución**. Todo solo antes del sorteo de la categoría.
-- **Sorteo:** entran las duplas activas. Un jugador de dobles sin pareja bloquea el sorteo de su categoría hasta que el admin lo resuelva. El pago pendiente **no** bloquea (§3). [CONFIRMAR] el pedido del 23-oct decía «los 2 pagos validados»; se mantiene lo decidido el 20-oct.
+- **Con la categoría cerrada** (§2.3) nadie se inscribe, invita ni acepta; el admin arma duplas con los disponibles («Armar dupla», avisa a los dos), cambia la pareja de una dupla (deshacer + armar) y, con un número impar, traslada al jugador a otra categoría o retira su inscripción con el pago **marcado para devolución**. Todo solo antes del sorteo de la categoría.
+- **Sorteo:** entran las duplas activas. Un jugador de dobles sin pareja bloquea el sorteo de su categoría hasta que el admin lo resuelva. El pago pendiente **no** bloquea (§2.4).
+
+### 2.3 Cierre MANUAL por categoría y lista de espera (decidido 23-oct-2026)
+
+- El admin cierra cada categoría cuando lo decide (normalmente al completar el cupo, aunque falte tiempo para el 1-nov): «Cerrar inscripciones» en su tarjeta, con confirmación; queda registrado quién y cuándo (`inscripciones_cambiadas_por/_at`). Se puede **reabrir** mientras no se publique el sorteo de esa categoría.
+- Antes de cerrar, si hay jugadores sin pareja o invitaciones pendientes, la confirmación lo dice con la lista («Quedan N sin pareja: arma la dupla, trasládalos o marca su devolución»). Al cerrar, las invitaciones pendientes **vencen** (con aviso).
+- Categoría cerrada: el servidor rechaza inscripciones, invitaciones y aceptaciones de jugadores. El admin sigue armando duplas, trasladando, certificando e inscribiendo desde la lista de espera hasta publicar su sorteo.
+- **Cupo lleno:** aunque la categoría siga abierta, el servidor no acepta más inscripciones (dobles: parejas × 2; lo repite el trigger).
+- **La hora programada (1-nov 23:59 de Caracas) no cierra nada.** Si pasa con alguna categoría abierta: alerta «cierre programado vencido» en el panel y correo a los admins, una sola vez (`torneos.cierre_vencido_avisado_at`; se revisa al abrir el panel o la pantalla de un jugador, sin cron nuevo). Las invitaciones pendientes **sí** vencen a esa hora, y desde ahí no se envían nuevas. La cuenta regresiva de los jugadores sigue mostrando el 1-nov. (Los admins no tienen campana en la app: el aviso va por correo.)
+- **Lista de espera** (`torneo_lista_espera`, sin lectura pública): con la categoría cerrada o llena, el jugador se anota (sin pago) y puede salir. Si una dupla o un inscrito se retira antes del sorteo, el admin ve la lista en orden de llegada e inscribe al siguiente (con aviso; le queda el pago pendiente).
+
+### 2.4 Pago pendiente (confirmado 23-oct-2026)
+
+- El pago pendiente **no bloquea el sorteo**, pero **un inscrito sin pago validado no puede jugar su primer partido**.
+- En la programación y en el panel de resultados, los partidos con algún pago pendiente se marcan **en rojo** con quién debe; el admin decide retiro o WO.
 - Single e infantiles no cambian.
 
 ## 3. Sorteo y generación de grupos
@@ -138,18 +152,19 @@ Resultado esperado (tests):
 
 Pelota Naranja (`sin_llave`): solo grupos.
 
-**Categorías infantiles con menos inscritos que el cupo** (aprobado 20-oct-2026, `formatoSorteo` en `lib/torneoSorteo.ts`), con N confirmadas:
+**Grupos FLEXIBLES** (decidido 23-oct-2026, `gruposFlexibles` / `formatoSorteo` en `lib/torneoSorteo.ts`). El formato sale de cuántas duplas o inscritos entran al sorteo; `cupo`, `num_grupos` y `tamano_grupo` de la categoría son el **máximo**, no un requisito exacto. Grupos de 3 o 4; pasan los 2 primeros de cada grupo. Vale para dobles, single e infantiles con llave:
 
-| N | Con llave (Verde, Infantil, Juvenil) | Pelota Naranja (festival) |
-|---|---|---|
-| < 3 | Sorteo bloqueado | Sorteo bloqueado |
-| 3–4 | 1 grupo, todos contra todos, **sin llave**: el 1º es el campeón | 1 grupo |
-| 5–7 | 1 grupo + **final** 1A vs 2A | 1 grupo (4 a 6 partidos por niño) |
-| ≥ 8 | Grupos de la categoría (`num_grupos`); si algún grupo quedaría con menos de 3, se baja a 2 grupos y la llave empieza en semis | `num_grupos`, reducido para que cada grupo tenga al menos 4 (mínimo 3 partidos por niño) |
+| N | Formato |
+|---|---|
+| < 3 | No se sortea: fusionar con otra categoría o cancelar (§3) |
+| 3–5 | 1 grupo todos contra todos → **final** 1A vs 2A |
+| 6–8 | 2 grupos → **semis** 1A-2B y 1B-2A |
+| 9–11 | 3 grupos → **cuartos con 2 byes**: los 2 mejores primeros pasan directo a semis, en los extremos. C1 = 3º mejor 1º vs 2º del grupo del 2º mejor · C2 = 2º del grupo del mejor 1º vs 2º del grupo del 3º mejor · S1 = mejor 1º vs G:C1 · S2 = 2º mejor 1º vs G:C2. Así dos del mismo grupo quedan en mitades opuestas |
+| 12–16 | 4 grupos → **cuartos** (C1 = 1A-2B, C2 = 1C-2D, C3 = 1B-2A, C4 = 1D-2C) |
 
-Pelota Naranja con 3 inscritos solo da 2 partidos por niño: el sorteo lo permite y avisa.
-
-Adultos: siempre `num_grupos` de la categoría. Si con los confirmados algún grupo quedaría con menos de 3, el sorteo se bloquea con un aviso: la categoría se completa con invitados / wild card (§2.1, aprobado 20-oct-2026).
+- **Mejores primeros** (3 grupos, de tamaños distintos): se ordenan con los criterios de la tabla de grupo en **promedio por partido** — partidos ganados, diferencia de sets, diferencia de games — y, si siguen iguales, por la letra del grupo [CONFIRMAR]. Se calculan cuando cierran todos los grupos (avance automático, `avanceMejoresPrimeros`).
+- La vista previa del sorteo muestra el formato que se va a usar y por qué.
+- **Pelota Naranja** (festival, sin llave): ≤ 7 → 1 grupo; ≥ 8 → `num_grupos`, reducido para que cada grupo tenga al menos 4. Con 3 inscritos el sorteo lo permite y avisa (2 partidos por niño).
 
 ## 4. Programación de partidos
 
@@ -374,7 +389,9 @@ Decisión del 20-oct-2026: el horario escuela **no es fijo**. El profesor o el a
 
 1. Doble WO: ninguna suma; en llave, el rival pasa por WO — §6.
 2. Tabla del festival (Pelota Naranja): partidos ganados, después games — §14.1.
-3. Dupla al sorteo: el pedido del 23-oct pide los 2 pagos validados; queda como el 20-oct (el pago no bloquea) — §2.2.
-4. Cierre de inscripciones: el pedido del 23-oct dice que tras el 1-nov 23:59 nadie se inscribe; queda como se decidió el 23-oct (el admin cierra a mano; la hora solo da la cuenta regresiva y vence las invitaciones, y desde ahí nadie invita ni acepta) — §2.2.
+3. Mejores primeros con 3 grupos: desempate final por letra del grupo — §3.
+4. Tras el cierre programado, con una categoría todavía abierta: los jugadores pueden inscribirse pero no invitar (las invitaciones vencen a esa hora) — §2.3.
+
+Resueltos el 23-oct-2026: pago pendiente (§2.4), cierre manual por categoría con lista de espera (§2.3) y grupos flexibles (§3).
 
 Resueltos el 20-oct-2026: premiación (11-dic), triple empate, súper tie-break, retiro, Infantil/Juvenil separados, solo socios con invitados / wild card y categoría incompleta.

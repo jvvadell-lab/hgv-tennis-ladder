@@ -9,6 +9,7 @@ import type { SetJugado, TipoResultado } from './resultados'
 import {
   PREFIJO_FASE,
   ordenarGrupo,
+  ordenarPrimeros,
   parsearOrigen,
   validarMarcadorTorneo,
   type MiembroParaTabla,
@@ -123,6 +124,48 @@ export function avanceGrupo(
     }
   }
   return { cambios, avisos: [...new Set(avisos)] }
+}
+
+// Llave de 3 grupos (cuartos con 2 byes): cuando TODOS los grupos están
+// completos, ordena a los primeros (ordenarPrimeros) y llena 'P1'..'P3' con
+// los primeros y '2P1'..'2P3' con el 2º del grupo de cada uno. Si un 1º o un
+// 2º sigue empatado (falta el desempate del admin), no llena nada y avisa.
+export function avanceMejoresPrimeros(
+  grupos: { id: string; letra: string; miembros: MiembroParaTabla[] }[],
+  partidos: PartidoAvance[],
+  llave: PartidoAvance[],
+): ResultadoAvance {
+  const usa = llave.some((p) => lados.some((l) => {
+    const o = parsearOrigen(origenDe(p, l) ?? '')
+    return o?.tipo === 'mejor_primero' || o?.tipo === 'segundo_de_mejor'
+  }))
+  if (!usa) return { cambios: [], avisos: [] }
+  const tablas = []
+  for (const g of grupos) {
+    const delGrupo = partidos.filter((p) => p.fase === 'grupo' && p.grupo_id === g.id)
+    if (!delGrupo.length || !delGrupo.every(partidoCerrado)) return { cambios: [], avisos: [] }
+    tablas.push({ letra: g.letra, tabla: ordenarGrupo(delGrupo, g.miembros) })
+  }
+  const empatados = tablas.filter((t) => t.tabla.slice(0, 2).some((f) => f.requiere_sorteo)).map((t) => t.letra)
+  if (empatados.length) {
+    return { cambios: [], avisos: empatados.map((l) => `Grupo ${l}: el 1º o el 2º sigue empatado — falta el desempate del admin`) }
+  }
+  const orden = ordenarPrimeros(tablas.map((t) => ({ letra: t.letra, fila: t.tabla[0] })))
+  const tablaDe = new Map(tablas.map((t) => [t.letra, t.tabla]))
+
+  const cambios: CambioAvance[] = []
+  for (const p of llave) {
+    for (const lado of lados) {
+      const o = parsearOrigen(origenDe(p, lado) ?? '')
+      if (o?.tipo !== 'mejor_primero' && o?.tipo !== 'segundo_de_mejor') continue
+      const letra = orden[o.k - 1]?.letra
+      const fila = letra ? tablaDe.get(letra)![o.tipo === 'mejor_primero' ? 0 : 1] : null
+      if (fila && inscripcionDe(p, lado) !== fila.equipo_id) {
+        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: fila.equipo_id })
+      }
+    }
+  }
+  return { cambios, avisos: [] }
 }
 
 // Al cerrar un partido de llave: su ganador va al partido cuyo origen es

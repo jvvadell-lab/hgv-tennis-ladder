@@ -103,6 +103,7 @@ export type Torneo = {
   // invitaciones de dobles). El cierre en sí lo hace el admin a mano.
   cierre_inscripciones_at: string | null
   fecha_sorteo: string | null   // 'YYYY-MM-DD', informativa
+  cierre_vencido_avisado_at: string | null   // aviso a los admins de categorías abiertas tras el cierre programado
   created_at: string
 }
 
@@ -283,10 +284,16 @@ export type PartidoLlave = {
 export type Origen =
   | { tipo: 'grupo'; puesto: number; letra: string }   // '1A' = 1º del grupo A
   | { tipo: 'ganador'; codigo: string }                // 'G:C1' = ganador de C1
+  // Llave de 3 grupos (cuartos con 2 byes): se conocen al cerrar TODOS los
+  // grupos. 'P1' = el mejor de los primeros; '2P1' = el 2º del grupo de P1.
+  | { tipo: 'mejor_primero'; k: number }
+  | { tipo: 'segundo_de_mejor'; k: number }
 
 export function parsearOrigen(origen: string): Origen | null {
   const pos = origen.match(/^([1-9])([A-Z])$/)
   if (pos) return { tipo: 'grupo', puesto: Number(pos[1]), letra: pos[2] }
+  const mejor = origen.match(/^(2?)P([1-9])$/)
+  if (mejor) return mejor[1] ? { tipo: 'segundo_de_mejor', k: Number(mejor[2]) } : { tipo: 'mejor_primero', k: Number(mejor[2]) }
   const gan = origen.match(/^G:([CSF][1-9]\d*)$/)
   if (gan) return { tipo: 'ganador', codigo: gan[1] }
   return null
@@ -301,8 +308,22 @@ const FASES_LLAVE: FaseLlave[] = ['cuartos', 'semis', 'final']
 // a los ganadores en orden (S1 = G:C1 vs G:C2…).
 //   4 grupos (cuartos): C1 = 1A-2B · C2 = 1C-2D · C3 = 1B-2A · C4 = 1D-2C
 //   2 grupos (semis):   S1 = 1A-2B · S2 = 1B-2A
-//   1 grupo (final):    F1 = 1A-2A (categoría infantil con 5–7 inscritos, SPEC §3)
+//   1 grupo (final):    F1 = 1A-2A (3–5 inscritos, SPEC §3)
+//   3 grupos (cuartos con 2 byes, 9–11 inscritos): los dos mejores primeros
+//   pasan directo a semis, en los extremos; el 3º de los primeros juega con
+//   el 2º del grupo de P2, y los 2º de los grupos de P1 y P3 entre sí. Así
+//   dos del mismo grupo siempre quedan en mitades opuestas:
+//     C1 = P3-2P2 · C2 = 2P1-2P3 · S1 = P1 vs G:C1 · S2 = P2 vs G:C2
 export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde | 'final'): PartidoLlave[] {
+  if (numGrupos === 3 && llaveDesde === 'cuartos') {
+    return [
+      { fase: 'cuartos', orden: 1, codigo: 'C1', origen_a: 'P3', origen_b: '2P2' },
+      { fase: 'cuartos', orden: 2, codigo: 'C2', origen_a: '2P1', origen_b: '2P3' },
+      { fase: 'semis', orden: 1, codigo: 'S1', origen_a: 'P1', origen_b: 'G:C1' },
+      { fase: 'semis', orden: 2, codigo: 'S2', origen_a: 'P2', origen_b: 'G:C2' },
+      { fase: 'final', orden: 1, codigo: 'F1', origen_a: 'G:S1', origen_b: 'G:S2' },
+    ]
+  }
   const esperados: Record<LlaveDesde | 'final', number> = { cuartos: 4, semis: 2, final: 1 }
   if (numGrupos !== esperados[llaveDesde]) {
     throw new Error(`Una llave desde ${llaveDesde} necesita ${esperados[llaveDesde]} grupos (con 1º y 2º clasificados); hay ${numGrupos}`)
@@ -331,6 +352,31 @@ export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde | 'final'
     for (let i = 0; i + 1 < codigos.length; i += 2) ronda.push([`G:${codigos[i]}`, `G:${codigos[i + 1]}`])
   }
   return partidos
+}
+
+// Texto de un origen para mostrar mientras el partido no tiene rivales.
+export function textoOrigen(origen: string | null): string {
+  const o = origen ? parsearOrigen(origen) : null
+  if (!o) return origen ?? '—'
+  if (o.tipo === 'grupo') return `${o.puesto}º ${o.letra}`
+  if (o.tipo === 'ganador') return `Gan. ${o.codigo}`
+  if (o.tipo === 'mejor_primero') return `${o.k}º mejor 1º`
+  return `2º del grupo del ${o.k}º mejor 1º`
+}
+
+// Orden de los primeros de grupos de distinto tamaño (llave de 3 grupos):
+// promedio por partido de lo que mira la tabla del grupo — partidos
+// ganados, diferencia de sets, diferencia de games — y, si siguen iguales,
+// la letra del grupo. [CONFIRMAR] el último criterio.
+export function ordenarPrimeros<F extends Pick<FilaTabla, 'pj' | 'pg' | 'sets_favor' | 'sets_contra' | 'games_favor' | 'games_contra'>>(
+  primeros: { letra: string; fila: F }[],
+): { letra: string; fila: F }[] {
+  const prom = (n: number, pj: number) => (pj ? n / pj : 0)
+  return [...primeros].sort((x, y) =>
+    prom(y.fila.pg, y.fila.pj) - prom(x.fila.pg, x.fila.pj) ||
+    prom(y.fila.sets_favor - y.fila.sets_contra, y.fila.pj) - prom(x.fila.sets_favor - x.fila.sets_contra, x.fila.pj) ||
+    prom(y.fila.games_favor - y.fila.games_contra, y.fila.pj) - prom(x.fila.games_favor - x.fila.games_contra, x.fila.pj) ||
+    x.letra.localeCompare(y.letra))
 }
 
 // ---------------------------------------------------------------------------

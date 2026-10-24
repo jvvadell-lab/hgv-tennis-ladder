@@ -379,6 +379,14 @@ async function terminar(db: SupabaseClient, lista: Invitacion[], estado: 'vencid
   await avisarFinInvitaciones(db, (data || []) as Invitacion[], estado)
 }
 
+// Al cerrar el admin una categoría: sus invitaciones pendientes vencen y se avisa.
+export async function vencerInvitacionesDeCategoria(db: SupabaseClient, categoriaId: string, motivo: string): Promise<number> {
+  const { data, error } = await db.from('torneo_invitaciones').select(COLUMNAS_INVITACION).eq('categoria_id', categoriaId).eq('estado', 'pendiente')
+  if (error) throw error
+  await terminar(db, (data || []) as Invitacion[], 'vencida', motivo)
+  return (data || []).length
+}
+
 // Cancela las pendientes en que participa una inscripción (al retirarse,
 // trasladarse o al armarle dupla el admin).
 export async function cancelarInvitacionesDe(db: SupabaseClient, inscripcionIds: string[], motivo: string) {

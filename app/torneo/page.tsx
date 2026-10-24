@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { fechaISOEnCaracas, formatearFechaConAnio, formatearFechaCorta, formatearFechaLarga, formatearHora, instanteEnCaracas } from '@/lib/tiempo'
-import { ETIQUETA_ESTADO_TORNEO, ETIQUETA_FASE, PREFIJO_FASE, type EstadoTorneo, type Fase } from '@/lib/torneo'
+import { ETIQUETA_ESTADO_TORNEO, ETIQUETA_FASE, PREFIJO_FASE, type EstadoTorneo, type Fase, textoOrigen } from '@/lib/torneo'
 import type { SetJugado } from '@/lib/resultados'
 
 // Vista pública del Torneo Navidad (SPEC §9): pestañas Adultos | Infantil y
@@ -36,6 +36,7 @@ const fecha = (iso: string) => formatearFechaConAnio(instanteEnCaracas(iso, '12:
 
 function origenTexto(o: string | null): string {
   if (!o) return 'Por definir'
+  if (/^2?P\d$/.test(o)) return textoOrigen(o)   // llave de 3 grupos (mejores primeros)
   const g = o.match(/^([1-9])([A-Z])$/)
   if (g) return `${g[1]}º grupo ${g[2]}`
   const w = o.match(/^G:([CSF])(\d+)$/)

@@ -32,6 +32,9 @@ type Categoria = {
   categoria_nivel: Nivel | null
   cupo: number
   inscripciones_abiertas: boolean
+  inscripciones_cambiadas_at: string | null   // null = nunca se abrió ("próximamente")
+  sorteo_publicado_at: string | null
+  cancelada_at: string | null
   ocupados: number        // inscripciones vivas (en dobles, jugadores)
   cupoJugadores: number   // en dobles, cupo de parejas × 2
   duplas: number          // dobles: duplas formadas
@@ -59,6 +62,7 @@ type Datos = {
   categorias: Categoria[]
   misInscripciones: MiInscripcion[]
   disponibilidad: { no_disponible: string[]; nota: string | null }
+  misEsperas: { categoriaId: string; puesto: number }[]
   invitacionesRecibidas: { id: string; categoria: { id: string; nombre: string }; de: string; vence_at: string; inscrito: boolean }[]
   cierreInscripcionesAt: string | null
   despuesDelCierre: boolean
@@ -304,6 +308,24 @@ function FormInscripcion({ datos, onCambio }: { datos: Datos; onCambio: () => Pr
     }
   }
 
+  // Lista de espera: categoría cerrada (ya abierta alguna vez) o llena, a la que podría entrar.
+  const puedoEsperar = (c: Categoria, motivo: string | null) =>
+    !c.sorteo_publicado_at && !c.cancelada_at &&
+    ((motivo === 'cerrada' && !!c.inscripciones_cambiadas_at) || motivo === 'sin cupo') &&
+    (c.genero === 'mixto' || c.genero === yo.genero) && nivelAdmitido(c.categoria_nivel, nivelParaTorneo(yo))
+  const espera = async (c: Categoria, accion: 'anotar' | 'salir') => {
+    setEnviando(true); setError(''); setOk('')
+    try {
+      await postJson('/api/jugador/torneo/lista-espera', { categoriaId: c.id, accion })
+      setOk(accion === 'anotar' ? `Te anotaste en la lista de espera de ${c.nombre}. Si se libera un lugar antes del sorteo, el admin te avisa.` : `Saliste de la lista de espera de ${c.nombre}.`)
+      await onCambio()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setEnviando(false)
+    }
+  }
+
   const deshabilitado = enviando || !categoria
 
   return (
@@ -332,7 +354,7 @@ function FormInscripcion({ datos, onCambio }: { datos: Datos; onCambio: () => Pr
                     <strong style={{ fontSize: '14px' }}>{c.nombre}</strong>
                     <span style={{ display: 'block', fontSize: '12px', color: '#666' }}>
                       {motivo === 'cerrada'
-                        ? 'Inscripciones próximamente'
+                        ? (c.inscripciones_cambiadas_at ? 'Inscripciones cerradas' : 'Inscripciones próximamente')
                         : <>
                             {c.modalidad === 'doble'
                               ? `${c.duplas} de ${c.cupo} parejas formadas · ${Math.max(0, c.cupoJugadores - c.ocupados)} lugares libres`
@@ -340,6 +362,21 @@ function FormInscripcion({ datos, onCambio }: { datos: Datos; onCambio: () => Pr
                             {motivo && ` · ${motivo}`}
                           </>}
                     </span>
+                    {(() => {
+                      const mia = datos.misEsperas.find((e) => e.categoriaId === c.id)
+                      if (mia) return (
+                        <span style={{ display: 'block', fontSize: '12px', marginTop: '4px', color: '#1c4e72' }}>
+                          ⏳ En lista de espera (puesto {mia.puesto}) ·{' '}
+                          <button type="button" disabled={enviando} onClick={() => espera(c, 'salir')} style={{ border: 'none', background: 'none', color: '#c0392b', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '12px' }}>Salir</button>
+                        </span>
+                      )
+                      return puedoEsperar(c, motivo) ? (
+                        <button type="button" disabled={enviando} onClick={() => espera(c, 'anotar')}
+                          style={{ marginTop: '6px', padding: '5px 10px', fontSize: '12px', fontWeight: 700, borderRadius: '4px', border: '1px solid var(--color-court)', background: 'white', color: 'var(--color-court)', cursor: 'pointer' }}>
+                          Anotarme en la lista de espera
+                        </button>
+                      ) : null
+                    })()}
                   </span>
                 </label>
               )
