@@ -102,6 +102,7 @@ export type Torneo = {
   // Cierre de inscripciones (cuenta regresiva y vencimiento de las
   // invitaciones de dobles). El cierre en sí lo hace el admin a mano.
   cierre_inscripciones_at: string | null
+  fecha_sorteo: string | null   // 'YYYY-MM-DD', informativa
   created_at: string
 }
 
