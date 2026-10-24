@@ -122,6 +122,9 @@ export type TorneoCategoria = {
   formato_partido: FormatoPartido
   plantilla_turnos: unknown | null         // ver PlantillaTurnosInfantil en lib/torneoInfantil.ts
   partidos_minimos: number | null
+  inscripciones_abiertas: boolean          // además del torneo en 'inscripcion'
+  inscripciones_cambiadas_por: string | null
+  inscripciones_cambiadas_at: string | null
   created_at: string
 }
 

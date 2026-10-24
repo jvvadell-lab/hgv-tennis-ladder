@@ -93,7 +93,7 @@ describe('validarInscripcionMenor', () => {
     estadoTorneo: 'inscripcion',
     soloSocios: false,
     fechaCorte: CORTE,
-    categoria: { ...verde, cupo: 16, es_infantil: true },
+    categoria: { ...verde, cupo: 16, es_infantil: true, inscripciones_abiertas: true },
     menor: { nombre: 'Sofía', genero: 'damas', fecha_nacimiento: '2016-03-01', numero_accion: null },
     autorizacionParticipacion: true,
     ocupados: 0,
@@ -111,13 +111,20 @@ describe('validarInscripcionMenor', () => {
     expect(error({ estadoTorneo: 'borrador', porAdmin: true })).toBeNull()
     expect(error({ estadoTorneo: 'sorteado', porAdmin: true })).toMatch(/no están abiertas/)
   })
+
+  it('el representante no inscribe en una categoría cerrada; el admin sí', () => {
+    const cerrada = { ...verde, cupo: 16, es_infantil: true, inscripciones_abiertas: false }
+    expect(error({ categoria: cerrada })).toMatch(/categoría no están abiertas/)
+    expect(error({ categoria: cerrada, porAdmin: true })).toBeNull()
+    expect(error({ categoria: cerrada, estadoTorneo: 'borrador', porAdmin: true })).toBeNull()
+  })
   it('autorización de participación obligatoria', () => expect(error({ autorizacionParticipacion: false })).toMatch(/autorización/))
   it('edad fuera de rango', () => {
     expect(error({ menor: { ...datos().menor, fecha_nacimiento: '2014-06-01' } })).toMatch(/12 años.*9 a 11/)
   })
-  it('categoría de adultos', () => expect(error({ categoria: { ...verde, cupo: 16, es_infantil: false } })).toMatch(/no es una categoría infantil/))
+  it('categoría de adultos', () => expect(error({ categoria: { ...verde, cupo: 16, es_infantil: false, inscripciones_abiertas: true } })).toMatch(/no es una categoría infantil/))
   it('género', () => {
-    expect(error({ categoria: { ...verde, genero: 'caballeros', cupo: 16, es_infantil: true } })).toMatch(/solo para niños/)
+    expect(error({ categoria: { ...verde, genero: 'caballeros', cupo: 16, es_infantil: true, inscripciones_abiertas: true } })).toMatch(/solo para niños/)
   })
   it('solo socios: sin N.º de acción igual se inscribe (queda pendiente de autorización)', () => {
     expect(error({ soloSocios: true })).toBeNull()

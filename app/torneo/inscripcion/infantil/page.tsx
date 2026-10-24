@@ -13,6 +13,7 @@ import {
   categoriasParaMenor,
   edadAlCorte,
 } from '@/lib/torneoInfantil'
+import { categoriaAbierta } from '@/lib/torneoInscripcion'
 import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
 
 // "Inscribir a mi hijo/a" (Torneo Navidad, sección Infantil — SPEC §14):
@@ -21,7 +22,7 @@ import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
 // autorizaciones por separado, estado y reporte de pago. Todo lo valida el
 // servidor (/api/jugador/torneo/infantil/...); el admin certifica la categoría.
 
-type Categoria = { id: string; nombre: string; genero: GeneroCategoria; edad_min: number | null; edad_max: number | null; cupo: number; ocupados: number; duracion_min: number }
+type Categoria = { id: string; nombre: string; genero: GeneroCategoria; edad_min: number | null; edad_max: number | null; cupo: number; inscripciones_abiertas: boolean; ocupados: number; duracion_min: number }
 
 type Pago = { id: string; numero_recibo: number; jugador_id: string; tipo_pago: string; monto: number; fecha: string; validado: boolean }
 
@@ -376,7 +377,7 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
   // Al cambiar de niño, preselecciona la sugerida (si sigue disponible).
   useEffect(() => {
     const yaEn = new Set(vivas.map((i) => i.categoria.id))
-    setCategoriaId(sugerida && !yaEn.has(sugerida.id) && sugerida.ocupados < sugerida.cupo ? sugerida.id : '')
+    setCategoriaId(sugerida && !yaEn.has(sugerida.id) && categoriaAbierta(torneo.estado, sugerida) && sugerida.ocupados < sugerida.cupo ? sugerida.id : '')
     setImagen(!!menor?.autorizacion_imagen)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menorId])
@@ -427,9 +428,12 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
               <label style={labelStyle}>Categoría</label>
               <div style={{ display: 'grid', gap: '8px' }}>
                 {categorias.map((c) => {
+                  const cerrada = !categoriaAbierta(torneo.estado, c)
                   const motivo = vivas.some((i) => i.categoria.id === c.id)
                     ? 'ya inscrito'
-                    : !posibles.some((p) => p.id === c.id)
+                    : cerrada
+                      ? 'Inscripciones próximamente'
+                      : !posibles.some((p) => p.id === c.id)
                       ? `de ${c.edad_min} a ${c.edad_max} años${c.genero !== 'abierto' ? `, ${ETIQUETA_GENERO_CATEGORIA_INFANTIL[c.genero].toLowerCase()}` : ''}`
                       : c.ocupados >= c.cupo ? 'sin cupo' : null
                   const sel = categoriaId === c.id
@@ -443,7 +447,7 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
                         <strong style={{ fontSize: '14px' }}>{c.nombre}</strong>
                         {sugerida?.id === c.id && <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--color-court)' }}>SUGERIDA</span>}
                         <span style={{ display: 'block', fontSize: '12px', color: '#666' }}>
-                          {c.edad_min}–{c.edad_max} años · {ETIQUETA_GENERO_CATEGORIA_INFANTIL[c.genero] || c.genero} · {c.cupo - c.ocupados} de {c.cupo} cupos
+                          {c.edad_min}–{c.edad_max} años · {ETIQUETA_GENERO_CATEGORIA_INFANTIL[c.genero] || c.genero}{!cerrada && ` · ${c.cupo - c.ocupados} de ${c.cupo} cupos`}
                           {motivo && ` · ${motivo}`}
                         </span>
                       </span>

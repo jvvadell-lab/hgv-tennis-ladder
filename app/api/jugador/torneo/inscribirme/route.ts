@@ -7,8 +7,8 @@ import type { TorneoCategoria } from '@/lib/torneo'
 
 // Inscripción del jugador con sesión (y su pareja, en dobles) en una
 // categoría del torneo vigente. Todo se valida aquí con mensajes claros; el
-// trigger torneo_inscripciones_validar repite cupo / pareja / máximo 2
-// categorías como red de seguridad (inscripciones simultáneas).
+// trigger torneo_inscripciones_validar repite categoría abierta / cupo /
+// pareja / máximo 2 categorías como red de seguridad (inscripciones simultáneas).
 export async function POST(request: Request) {
   try {
     const session = await getSession()
@@ -30,12 +30,12 @@ export async function POST(request: Request) {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas')
       .eq('torneo_id', torneo.id)
       .eq('es_infantil', false) // a un menor lo inscribe su representante (/api/jugador/torneo/infantil)
     if (errCat) throw errCat
     const categoria = (categorias || []).find((c) => c.id === categoriaId) as
-      (Pick<TorneoCategoria, 'id' | 'nombre' | 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo'>) | undefined
+      (Pick<TorneoCategoria, 'id' | 'nombre' | 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo' | 'inscripciones_abiertas'>) | undefined
     if (!categoria) return NextResponse.json({ error: 'Esa categoría no es de este torneo' }, { status: 400 })
 
     const ids = [session.id, ...(categoria.modalidad === 'doble' && parejaId ? [parejaId] : [])]

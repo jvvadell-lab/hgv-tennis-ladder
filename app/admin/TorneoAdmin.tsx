@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { formatearFechaConAnio, formatearFechaHora, instanteEnCaracas } from '@/lib/tiempo'
 import { ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
 import {
+  categoriaAbierta,
   DIAS_TORNEO,
   ETIQUETA_GENERO_JUGADOR,
   ETIQUETA_NIVEL,
@@ -94,6 +95,7 @@ type Categoria = {
   id: string; nombre: string; modalidad: string; genero: GeneroCategoria; categoria_nivel: Nivel | null; cupo: number
   es_infantil: boolean; edad_min: number | null; edad_max: number | null; duracion_min: number
   plantilla_turnos: unknown | null
+  inscripciones_abiertas: boolean; inscripciones_cambiadas_at: string | null; admin_cambio: { nombre: string } | null
 }
 
 type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: string | null }
@@ -303,10 +305,21 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           : c.categoria_nivel ? ETIQUETA_NIVEL[c.categoria_nivel] + (c.categoria_nivel === 'sexta' ? ' (incluye Novato)' : '') : 'Nivel libre'
         return (
           <div key={c.id} style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-            <h4 style={{ color: 'var(--color-ink)', margin: '0 0 4px 0' }}>{c.nombre}</h4>
-            <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#666' }}>
-              {c.modalidad === 'doble' ? 'Dobles' : 'Single'} · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
+              <div>
+                <h4 style={{ color: 'var(--color-ink)', margin: '0 0 4px 0' }}>{c.nombre}</h4>
+                <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#666' }}>
+                  {c.modalidad === 'doble' ? 'Dobles' : 'Single'} · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}
+                </p>
+              </div>
+              <InscripcionesCategoria
+                categoria={c}
+                estadoTorneo={torneo.estado}
+                editable={esAdminCompleto}
+                ocupado={ocupado === `abrir-${c.id}`}
+                onCambiar={(abrir) => accion(`abrir-${c.id}`, 'categoria-inscripciones', { categoriaId: c.id, abiertas: abrir }, `${c.nombre}: inscripciones ${abrir ? 'abiertas' : 'cerradas'}`)}
+              />
+            </div>
             {lista.length === 0 && <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Sin inscripciones todavía.</p>}
 
             {lista.map((ins, idx) => (
@@ -495,6 +508,52 @@ const td: React.CSSProperties = { padding: '8px' }
 
 // Asignar / confirmar la categoría oficial de torneo. "Confirmar" asigna la
 // de la escalera de un clic; el selector permite cualquier otra.
+// Interruptor abrir/cerrar inscripciones de una categoría, con quién y cuándo
+// la cambió por última vez. Solo acepta inscripciones si además el torneo
+// está en 'inscripcion'.
+function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, onCambiar }: {
+  categoria: Categoria
+  estadoTorneo: EstadoTorneo
+  editable: boolean
+  ocupado: boolean
+  onCambiar: (abrir: boolean) => void
+}) {
+  const abierta = categoria.inscripciones_abiertas
+  const antesDelSorteo = estadoTorneo === 'borrador' || estadoTorneo === 'inscripcion'
+  const recibe = categoriaAbierta(estadoTorneo, categoria)
+  return (
+    <div style={{ textAlign: 'right' }}>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end' }}>
+        <span style={{
+          fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px',
+          background: recibe ? '#dff5e3' : '#eee', color: recibe ? '#1e6b34' : '#666',
+        }}>
+          {recibe ? 'Recibe inscripciones' : abierta ? 'Abierta (torneo cerrado)' : 'Inscripciones cerradas'}
+        </span>
+        {editable && antesDelSorteo && (
+          <button
+            disabled={ocupado}
+            onClick={() => {
+              const texto = abierta
+                ? `¿Cerrar las inscripciones de ${categoria.nombre}? Nadie más podrá inscribirse en ella; las inscripciones hechas se mantienen.`
+                : `¿Abrir las inscripciones de ${categoria.nombre}?${estadoTorneo === 'inscripcion' ? ' Los jugadores podrán inscribirse desde la app.' : ' Recibirá inscripciones cuando abras las del torneo.'}`
+              if (confirm(texto)) onCambiar(!abierta)
+            }}
+            style={boton(abierta ? '#c0392b' : 'var(--color-court)')}
+          >
+            {ocupado ? '…' : abierta ? '🔒 Cerrar' : '🔓 Abrir'}
+          </button>
+        )}
+      </div>
+      {categoria.inscripciones_cambiadas_at && (
+        <p style={{ fontSize: '11px', color: '#888', margin: '4px 0 0 0' }}>
+          {abierta ? 'Abierta' : 'Cerrada'} por {categoria.admin_cambio?.nombre || 'un admin'} el {formatearFechaHora(categoria.inscripciones_cambiadas_at)}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function CategoriaOficial({ jugador, compatible, editable, ocupado, onGuardar }: {
   jugador: Jugador
   compatible: boolean | null

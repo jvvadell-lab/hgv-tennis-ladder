@@ -57,6 +57,18 @@ export function errorGeneros(generoCategoria: TorneoCategoria['genero'], generos
 }
 
 // ---------------------------------------------------------------------------
+// Apertura por categoría
+// ---------------------------------------------------------------------------
+
+// Una categoría acepta inscripciones solo con el torneo en 'inscripcion' y
+// la categoría abierta por el admin (el trigger lo repite).
+export function categoriaAbierta(estadoTorneo: EstadoTorneo, categoria: Pick<TorneoCategoria, 'inscripciones_abiertas'>): boolean {
+  return estadoTorneo === 'inscripcion' && categoria.inscripciones_abiertas
+}
+
+export const ERROR_CATEGORIA_CERRADA = 'Las inscripciones de esta categoría no están abiertas'
+
+// ---------------------------------------------------------------------------
 // Validación de una inscripción nueva
 // ---------------------------------------------------------------------------
 
@@ -72,7 +84,7 @@ export type JugadorParaInscripcion = {
 
 export type DatosValidacionInscripcion = {
   estadoTorneo: EstadoTorneo
-  categoria: Pick<TorneoCategoria, 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo'>
+  categoria: Pick<TorneoCategoria, 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo' | 'inscripciones_abiertas'>
   // [quien se inscribe, pareja] — la pareja solo en dobles.
   jugadores: JugadorParaInscripcion[]
   // Inscripciones vivas (no retiradas) en la categoría.
@@ -93,6 +105,7 @@ export const nivelParaTorneo = (j: Pick<JugadorParaInscripcion, 'categoria' | 'c
 export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoValidacion {
   const { categoria, jugadores } = d
   if (d.estadoTorneo !== 'inscripcion') return { ok: false, error: 'Las inscripciones del torneo no están abiertas' }
+  if (!categoriaAbierta(d.estadoTorneo, categoria)) return { ok: false, error: ERROR_CATEGORIA_CERRADA }
 
   if (categoria.modalidad === 'doble') {
     if (jugadores.length !== 2 || !jugadores[1]) return { ok: false, error: 'Elige a tu pareja para inscribirte en dobles' }
@@ -137,6 +150,7 @@ export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoVali
 // cupo) a un mensaje para el jugador. null si no es uno de ellos.
 export function mensajeErrorBaseInscripcion(mensaje: string): string | null {
   const conocidos = [
+    ERROR_CATEGORIA_CERRADA,
     'La categoría ya no tiene cupo',
     'El jugador ya está inscrito en esta categoría',
     'Un jugador puede inscribirse en máximo 2 categorías del torneo',
