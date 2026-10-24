@@ -73,6 +73,8 @@ declare
   v_edad_max integer;
   v_corte date;
   v_solo_socios boolean;
+  v_estado_torneo text;
+  v_abiertas boolean;
   v_menor public.torneo_menores;
   v_edad integer;
   v_jugador uuid;
@@ -92,12 +94,21 @@ begin
 
   -- Bloquea la categoría: serializa las inscripciones que compiten por su cupo.
   select c.modalidad, c.torneo_id, c.cupo, c.es_infantil, c.genero, c.edad_min, c.edad_max,
-         coalesce(t.fecha_corte_edad, make_date(extract(year from t.fecha_inicio)::int, 12, 31)), t.solo_socios
-    into v_modalidad, v_torneo_id, v_cupo, v_es_infantil, v_genero_cat, v_edad_min, v_edad_max, v_corte, v_solo_socios
+         coalesce(t.fecha_corte_edad, make_date(extract(year from t.fecha_inicio)::int, 12, 31)), t.solo_socios,
+         t.estado, c.inscripciones_abiertas
+    into v_modalidad, v_torneo_id, v_cupo, v_es_infantil, v_genero_cat, v_edad_min, v_edad_max, v_corte, v_solo_socios,
+         v_estado_torneo, v_abiertas
   from public.torneo_categorias c
   join public.torneos t on t.id = c.torneo_id
   where c.id = new.categoria_id
   for update of c;
+
+  -- Interruptor por categoría (20261023183737): no aplica a lo que inscribe el admin.
+  if (tg_op = 'INSERT' or old.estado = 'retirada')
+     and new.inscrita_por_admin is null
+     and not (v_estado_torneo = 'inscripcion' and v_abiertas) then
+    raise exception 'Las inscripciones de esta categoría no están abiertas';
+  end if;
 
   if v_es_infantil and new.menor_id is null then
     raise exception 'Las categorías infantiles son para menores';

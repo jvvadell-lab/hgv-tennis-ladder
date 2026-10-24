@@ -44,3 +44,4 @@
 # Aplicada a mano desde el SQL Editor (no quedó registrada en prod), pero su
 # efecto sí está en el esquema:
 manual allow_usada_estado_reservas_cancha
+20261023183737 torneo_inscripciones_por_categoria
