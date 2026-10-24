@@ -39,13 +39,6 @@ type JugadorInv = JugadorDobles & { telefono: string | null; activo: boolean; es
 
 const cierreDe = (t: Pick<Torneo, 'cierre_inscripciones_at'>) => (t.cierre_inscripciones_at ? new Date(t.cierre_inscripciones_at) : null)
 
-// Ya pasó el cierre de inscripciones (1-nov 23:59 de Caracas): nadie invita
-// ni acepta; solo el admin arma duplas hasta el sorteo.
-export const despuesDelCierre = (t: Pick<Torneo, 'cierre_inscripciones_at'>, momento: Date = ahora()) => {
-  const cierre = cierreDe(t)
-  return !!cierre && momento >= cierre
-}
-
 async function leerCategoria(db: SupabaseClient, id: string): Promise<CategoriaInv | null> {
   const { data, error } = await db.from('torneo_categorias').select(COLUMNAS_CATEGORIA).eq('id', id).maybeSingle()
   if (error) throw error
@@ -173,7 +166,6 @@ export async function enviarInvitacion(
   if (!categoriaAbierta(torneo.estado, categoria) || categoria.sorteo_publicado_at || categoria.cancelada_at) {
     return { ok: false, error: 'Las inscripciones de esta categoría no están abiertas' }
   }
-  if (despuesDelCierre(torneo)) return { ok: false, error: 'Ya cerraron las inscripciones: el admin arma las duplas que faltan' }
 
   await vencerInvitaciones(db, [categoriaId])
   const mia = await inscripcionDe(db, categoriaId, invitaId)
@@ -313,7 +305,7 @@ export async function aceptarInvitacion(db: SupabaseClient, torneo: Torneo, invi
   // la invitación queda vencida con el motivo y se avisa a los dos.
   let motivo: string | null = null
   if (!categoria || !de) motivo = 'Quien te invitó ya no está inscrito'
-  else if (despuesDelCierre(torneo) || !categoriaAbierta(torneo.estado, categoria) || categoria.sorteo_publicado_at || categoria.cancelada_at) motivo = 'Ya cerraron las inscripciones de la categoría'
+  else if (!categoriaAbierta(torneo.estado, categoria) || categoria.sorteo_publicado_at || categoria.cancelada_at) motivo = 'Ya cerraron las inscripciones de la categoría'
   else motivo = errorDupla(categoria, de, yo)
   if (motivo) {
     await terminar(db, [inv], 'vencida', motivo)

@@ -31,6 +31,9 @@ describe('venceInvitacion', () => {
   it('el cierre si llega antes de las 48 h', () => {
     expect(venceInvitacion(new Date('2026-11-01T12:00:00Z'), CIERRE)).toEqual(CIERRE)
   })
+  it('enviada después del cierre programado (categoría todavía abierta): 48 h', () => {
+    expect(venceInvitacion(new Date('2026-11-02T12:00:00Z'), CIERRE).toISOString()).toBe('2026-11-04T12:00:00.000Z')
+  })
   it('sin cierre, siempre 48 h', () => {
     expect(venceInvitacion(new Date('2026-11-01T12:00:00Z'), null).toISOString()).toBe('2026-11-03T12:00:00.000Z')
   })

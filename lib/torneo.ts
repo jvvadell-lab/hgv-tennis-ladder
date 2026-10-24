@@ -366,17 +366,31 @@ export function textoOrigen(origen: string | null): string {
 
 // Orden de los primeros de grupos de distinto tamaño (llave de 3 grupos):
 // promedio por partido de lo que mira la tabla del grupo — partidos
-// ganados, diferencia de sets, diferencia de games — y, si siguen iguales,
-// la letra del grupo. [CONFIRMAR] el último criterio.
+// ganados, diferencia de sets, diferencia de games. Si dos siguen iguales
+// en todo, decide el admin (como el desempate de grupo, §7.4): `manual` es
+// el orden de letras que fijó (torneo_categorias.orden_primeros_manual).
+// Sin él, `empatados` trae las letras que faltan desempatar y el orden es
+// provisional (por letra).
 export function ordenarPrimeros<F extends Pick<FilaTabla, 'pj' | 'pg' | 'sets_favor' | 'sets_contra' | 'games_favor' | 'games_contra'>>(
   primeros: { letra: string; fila: F }[],
-): { letra: string; fila: F }[] {
+  manual: string[] | null = null,
+): { orden: { letra: string; fila: F }[]; empatados: string[] } {
   const prom = (n: number, pj: number) => (pj ? n / pj : 0)
-  return [...primeros].sort((x, y) =>
-    prom(y.fila.pg, y.fila.pj) - prom(x.fila.pg, x.fila.pj) ||
-    prom(y.fila.sets_favor - y.fila.sets_contra, y.fila.pj) - prom(x.fila.sets_favor - x.fila.sets_contra, x.fila.pj) ||
-    prom(y.fila.games_favor - y.fila.games_contra, y.fila.pj) - prom(x.fila.games_favor - x.fila.games_contra, x.fila.pj) ||
-    x.letra.localeCompare(y.letra))
+  const criterios = (x: { fila: F }) => [
+    prom(x.fila.pg, x.fila.pj),
+    prom(x.fila.sets_favor - x.fila.sets_contra, x.fila.pj),
+    prom(x.fila.games_favor - x.fila.games_contra, x.fila.pj),
+  ]
+  const empatados = new Set<string>()
+  const orden = [...primeros].sort((x, y) => {
+    const cx = criterios(x), cy = criterios(y)
+    for (let i = 0; i < cx.length; i++) if (cy[i] !== cx[i]) return cy[i] - cx[i]
+    const mx = manual?.indexOf(x.letra) ?? -1, my = manual?.indexOf(y.letra) ?? -1
+    if (mx >= 0 && my >= 0) return mx - my
+    empatados.add(x.letra).add(y.letra)
+    return x.letra.localeCompare(y.letra)
+  })
+  return { orden, empatados: [...empatados].sort() }
 }
 
 // ---------------------------------------------------------------------------

@@ -245,11 +245,33 @@ describe('avanceMejoresPrimeros (3 grupos)', () => {
 
   it('con grupos de distinto tamaño compara promedios por partido', () => {
     const fila = (pj: number, pg: number, sf: number, sc: number, gf: number, gc: number) => ({ pj, pg, sets_favor: sf, sets_contra: sc, games_favor: gf, games_contra: gc })
-    const orden = ordenarPrimeros([
+    const { orden, empatados } = ordenarPrimeros([
       { letra: 'A', fila: fila(3, 3, 6, 1, 38, 20) },   // grupo de 4: 3 de 3
       { letra: 'B', fila: fila(2, 2, 4, 0, 24, 6) },    // grupo de 3: 2 de 2, mejor diferencia por partido
       { letra: 'C', fila: fila(2, 1, 2, 2, 20, 18) },
     ])
     expect(orden.map((o) => o.letra)).toEqual(['B', 'A', 'C'])
+    expect(empatados).toEqual([])
+  })
+
+  it('empate en todo: lo decide el admin; sin su orden, no avanza', () => {
+    const fila = (pj: number, pg: number, sf: number, sc: number, gf: number, gc: number) => ({ pj, pg, sets_favor: sf, sets_contra: sc, games_favor: gf, games_contra: gc })
+    const iguales = [
+      { letra: 'A', fila: fila(2, 2, 4, 0, 24, 8) },
+      { letra: 'B', fila: fila(2, 2, 4, 0, 24, 8) },
+      { letra: 'C', fila: fila(2, 1, 2, 2, 20, 18) },
+    ]
+    expect(ordenarPrimeros(iguales).empatados).toEqual(['A', 'B'])
+    const conAdmin = ordenarPrimeros(iguales, ['B', 'A', 'C'])
+    expect(conAdmin.empatados).toEqual([])
+    expect(conAdmin.orden.map((o) => o.letra)).toEqual(['B', 'A', 'C'])
+
+    // Mismo marcador en los 3 grupos: los tres primeros empatan.
+    const parejos = ['gA', 'gB', 'gC'].flatMap((g, i) => grupo3(g, 'abc'[i], [set(1, 6, 3), set(2, 6, 3)]))
+    const sin = avanceMejoresPrimeros(grupos, parejos, llave)
+    expect(sin.cambios).toEqual([])
+    expect(sin.avisos.join()).toMatch(/desempate del admin/)
+    const con = avanceMejoresPrimeros(grupos, parejos, llave, ['C', 'A', 'B'])
+    expect(con.cambios.find((c: any) => c.partidoId === 'S1' && c.lado === 'a')).toMatchObject({ inscripcionId: 'c1' })
   })
 })

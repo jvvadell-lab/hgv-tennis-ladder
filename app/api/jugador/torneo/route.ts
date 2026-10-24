@@ -5,7 +5,7 @@ import { torneoVigente } from '@/lib/torneoServidor'
 import { obtenerTasaVigente, tasaParaCalculo } from '@/lib/tasaBcv'
 import { cupoInscripciones, montoInscripcionBs, pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
 import { candidatosPareja, estadoEnDobles, invitacionVigente, type JugadorDobles } from '@/lib/torneoDobles'
-import { COLUMNAS_INVITACION, despuesDelCierre, vencerInvitaciones, vincularInvitacionesPorTelefono, type Invitacion } from '@/lib/torneoDoblesServidor'
+import { COLUMNAS_INVITACION, vencerInvitaciones, vincularInvitacionesPorTelefono, type Invitacion } from '@/lib/torneoDoblesServidor'
 import { ahora } from '@/lib/tiempo'
 import { listasDeEspera, revisarCierreVencido } from '@/lib/torneoCierreServidor'
 import type { Nivel } from '@/lib/torneo'
@@ -188,7 +188,6 @@ export async function GET() {
       invitacionesRecibidas,
       misEsperas,
       cierreInscripcionesAt: torneo.cierre_inscripciones_at,
-      despuesDelCierre: despuesDelCierre(torneo),
       disponibilidad: disponibilidad || { no_disponible: [], nota: null },
       tasa: tasa ? { fecha_vigencia: tasa.fecha_vigencia, eur: tasaEur, montoBs: montoInscripcionBs(torneo.monto_inscripcion_eur, tasa.eur) } : null,
     })

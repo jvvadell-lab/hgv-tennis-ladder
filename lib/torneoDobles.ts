@@ -6,7 +6,8 @@
 // aparte: con una invitación a un jugador de la app o a un teléfono (wa.me),
 // o la arma el admin al cierre con los que quedaron disponibles. Las
 // invitaciones vencen a las 48 h o al cierre de inscripciones, lo que llegue
-// primero; el vencimiento se calcula al leer o actuar (sin cron).
+// primero (o al cerrar el admin la categoría); el vencimiento se calcula al
+// leer o actuar (sin cron).
 
 import { MAX_CATEGORIAS_POR_JUGADOR, type GeneroCategoria, type Nivel, type TorneoCategoria } from './torneo'
 import { errorGeneros, nivelAdmitido, nivelParaTorneo } from './torneoInscripcion'
@@ -25,10 +26,12 @@ export const ETIQUETA_ESTADO_DOBLES: Record<EstadoEnDobles, string> = {
 // Vencimiento de las invitaciones
 // ---------------------------------------------------------------------------
 
-// 48 h después de enviarla, o el cierre de inscripciones si llega antes.
+// 48 h después de enviarla, o el cierre programado si llega antes. Una
+// enviada después del cierre programado (la categoría sigue abierta: la hora
+// no cierra nada) vence a las 48 h, o antes si el admin cierra la categoría.
 export function venceInvitacion(enviadaAt: Date, cierreInscripcionesAt: Date | null): Date {
   const a48h = new Date(enviadaAt.getTime() + HORAS_VIGENCIA_INVITACION * 3600 * 1000)
-  return cierreInscripcionesAt && cierreInscripcionesAt < a48h ? cierreInscripcionesAt : a48h
+  return cierreInscripcionesAt && enviadaAt < cierreInscripcionesAt && cierreInscripcionesAt < a48h ? cierreInscripcionesAt : a48h
 }
 
 export type InvitacionParaEstado = {

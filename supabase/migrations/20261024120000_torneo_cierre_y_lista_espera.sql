@@ -3,7 +3,9 @@
 --
 -- 1. Grupos flexibles: cupo, num_grupos y tamano_grupo de la categoría son
 --    el MÁXIMO, no un requisito exacto (el formato sale de cuántos equipos
---    entran al sorteo, lib/torneoSorteo.ts → gruposFlexibles).
+--    entran al sorteo, lib/torneoSorteo.ts → gruposFlexibles). Con 3 grupos,
+--    si dos primeros empatan en todo, el admin fija su orden
+--    (orden_primeros_manual: letras de mejor a peor).
 -- 2. Cierre manual por categoría (inscripciones_abiertas, ya existe). La
 --    hora de cierre programada (cierre_inscripciones_at) no cierra nada: si
 --    pasa con alguna categoría abierta se avisa a los admins una sola vez
@@ -13,6 +15,7 @@
 --    libera un lugar antes del sorteo. Sin lectura pública.
 
 alter table public.torneo_categorias drop constraint if exists torneo_categorias_grupos_llenan_cupo;
+alter table public.torneo_categorias add column orden_primeros_manual text[] null;
 
 alter table public.torneos add column cierre_vencido_avisado_at timestamptz null;
 

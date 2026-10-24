@@ -14,7 +14,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ahora } from '@/lib/tiempo'
-import { ETIQUETA_FASE, type EstadoTorneo, type Fase } from '@/lib/torneo'
+import { ETIQUETA_FASE, ordenarGrupo, ordenarPrimeros, type EstadoTorneo, type Fase } from '@/lib/torneo'
 import {
   avanceGrupo,
   avanceMejoresPrimeros,
@@ -235,6 +235,69 @@ export async function fijarDesempate(
   return { ok: true, avisos: avance.avisos }
 }
 
+// Desempate del admin entre los primeros de 3 grupos (llave con byes): el
+// orden de las letras, de mejor a peor. Después corre el avance.
+export async function fijarDesempatePrimeros(
+  db: SupabaseClient,
+  p: { categoriaId: string; orden: string[]; adminId: string },
+): Promise<Resultado<{ avisos: string[] }>> {
+  const { data: grupos, error } = await db.from('torneo_grupos').select('letra').eq('categoria_id', p.categoriaId)
+  if (error) throw error
+  const letras = new Set((grupos || []).map((g) => g.letra))
+  if (letras.size !== 3 || p.orden.length !== 3 || new Set(p.orden).size !== 3 || p.orden.some((l) => !letras.has(l))) {
+    return { ok: false, error: 'El orden tiene que tener las 3 letras de los grupos, sin repetir', status: 400 }
+  }
+  const { error: errU } = await db.from('torneo_categorias').update({ orden_primeros_manual: p.orden }).eq('id', p.categoriaId)
+  if (errU) throw errU
+  const avance = await avanzarCategoria(db, p.categoriaId, p.adminId)
+  return { ok: true, avisos: avance.avisos }
+}
+
+// Desempates que esperan al admin: dentro de un grupo completo (puestos
+// empatados en todo, §7.4) y entre los mejores primeros de 3 grupos.
+export type DesempatePendiente =
+  | { tipo: 'grupo'; categoria: string; grupoId: string; letra: string; equipos: { id: string; nombre: string }[] }
+  | { tipo: 'primeros'; categoria: string; categoriaId: string; grupos: { letra: string; nombre: string }[] }
+
+export async function desempatesPendientes(db: SupabaseClient, torneoId: string): Promise<DesempatePendiente[]> {
+  const { data: categorias, error } = await db.from('torneo_categorias').select('id, nombre, orden_primeros_manual').eq('torneo_id', torneoId).order('orden')
+  if (error) throw error
+  const ids = (categorias || []).map((c) => c.id)
+  if (!ids.length) return []
+  const [{ data: partidos, error: errP }, { data: grupos, error: errG }] = await Promise.all([
+    db.from('torneo_partidos').select(COLUMNAS_PARTIDO).in('categoria_id', ids),
+    db.from('torneo_grupos').select('id, letra, categoria_id, torneo_grupo_miembros(equipo_id, desempate_manual)').in('categoria_id', ids).order('letra'),
+  ])
+  if (errP) throw errP
+  if (errG) throw errG
+  const todos = (partidos || []) as unknown as PartidoFila[]
+  const nombres = await nombresInscripciones(db, [...(await competidoresPorId(db, (grupos || []).flatMap((g: any) => g.torneo_grupo_miembros.map((m: any) => m.equipo_id)))).values()])
+
+  const pendientes: DesempatePendiente[] = []
+  for (const c of categorias || []) {
+    const delaCat = (grupos || []).filter((g: any) => g.categoria_id === c.id)
+    const tablas: { letra: string; tabla: ReturnType<typeof ordenarGrupo> }[] = []
+    for (const g of delaCat as any[]) {
+      const delGrupo = todos.filter((p) => p.fase === 'grupo' && p.grupo_id === g.id)
+      if (!delGrupo.length || !delGrupo.every(partidoCerrado)) continue
+      const tabla = ordenarGrupo(delGrupo, g.torneo_grupo_miembros)
+      tablas.push({ letra: g.letra, tabla })
+      const empatados = tabla.filter((f) => f.requiere_sorteo)
+      if (empatados.length) {
+        pendientes.push({ tipo: 'grupo', categoria: c.nombre, grupoId: g.id, letra: g.letra, equipos: empatados.map((f) => ({ id: f.equipo_id, nombre: nombres.get(f.equipo_id) ?? '—' })) })
+      }
+    }
+    const llaveConByes = todos.some((p) => p.categoria_id === c.id && p.fase !== 'grupo' && /^2?P\d$/.test(p.origen_a ?? ''))
+    if (llaveConByes && tablas.length === delaCat.length && tablas.every((t) => !t.tabla.slice(0, 2).some((f) => f.requiere_sorteo))) {
+      const { empatados } = ordenarPrimeros(tablas.map((t) => ({ letra: t.letra, fila: t.tabla[0] })), c.orden_primeros_manual)
+      if (empatados.length) {
+        pendientes.push({ tipo: 'primeros', categoria: c.nombre, categoriaId: c.id, grupos: tablas.map((t) => ({ letra: t.letra, nombre: nombres.get(t.tabla[0].equipo_id) ?? '—' })) })
+      }
+    }
+  }
+  return pendientes
+}
+
 // --- Avance automático ------------------------------------------------------
 
 // Aplica el avance de toda la categoría hasta que no haya más cambios (un
@@ -243,6 +306,9 @@ export async function fijarDesempate(
 export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, adminId: string): Promise<{ avisos: string[] }> {
   const avisos = new Set<string>()
   const completados = new Set<string>()   // partidos de llave que quedaron con los 2 rivales
+
+  const { data: cat, error: errCat } = await db.from('torneo_categorias').select('orden_primeros_manual').eq('id', categoriaId).single()
+  if (errCat) throw errCat
 
   for (let vuelta = 0; vuelta < 10; vuelta++) {
     const [{ data: partidos, error: errP }, { data: grupos, error: errG }] = await Promise.all([
@@ -261,7 +327,7 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
       r.avisos.forEach((a) => avisos.add(a))
     }
     const mejores = avanceMejoresPrimeros(
-      (grupos || []).map((g: any) => ({ id: g.id, letra: g.letra, miembros: g.torneo_grupo_miembros })), todos, llave)
+      (grupos || []).map((g: any) => ({ id: g.id, letra: g.letra, miembros: g.torneo_grupo_miembros })), todos, llave, cat.orden_primeros_manual)
     cambios.push(...mejores.cambios)
     mejores.avisos.forEach((a) => avisos.add(a))
     for (const p of llave.filter(partidoCerrado)) cambios.push(...avanceLlave(p, llave).cambios)

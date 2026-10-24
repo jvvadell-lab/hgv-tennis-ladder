@@ -65,7 +65,6 @@ type Datos = {
   misEsperas: { categoriaId: string; puesto: number }[]
   invitacionesRecibidas: { id: string; categoria: { id: string; nombre: string }; de: string; vence_at: string; inscrito: boolean }[]
   cierreInscripcionesAt: string | null
-  despuesDelCierre: boolean
 }
 
 const fecha = (iso: string) => formatearFechaConAnio(instanteEnCaracas(iso, '12:00'))
@@ -409,7 +408,7 @@ function CuentaRegresiva({ cierre }: { cierre: string }) {
     return () => clearInterval(t)
   }, [])
   const falta = new Date(cierre).getTime() - ahoraMs
-  if (falta <= 0) return <Aviso tipo="info">Las inscripciones cerraron el {formatearFechaHora(cierre)}. El admin arma las duplas que faltan.</Aviso>
+  if (falta <= 0) return <Aviso tipo="info">Pasó el cierre programado ({formatearFechaHora(cierre)}). Las categorías que siguen abiertas aún reciben inscripciones hasta que el admin las cierre.</Aviso>
   const dias = Math.floor(falta / 86_400_000)
   const horas = Math.floor((falta % 86_400_000) / 3_600_000)
   const minutos = Math.floor((falta % 3_600_000) / 60_000)
@@ -521,7 +520,7 @@ function Dupla({ ins, datos, onCambio }: { ins: MiInscripcion; datos: Datos; onC
         </div>
       )}
 
-      {d.estado === 'disponible' && !datos.despuesDelCierre && (
+      {d.estado === 'disponible' && datos.categorias.find((c) => c.id === ins.categoria.id)?.inscripciones_abiertas && datos.torneo?.estado === 'inscripcion' && (
         <div style={{ marginTop: '10px', borderTop: '1px dashed #e2e2e2', paddingTop: '10px' }}>
           <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
             {([['app', 'Jugador de la app'], ['telefono', 'No tiene cuenta (WhatsApp)']] as const).map(([m, t]) => (
@@ -560,7 +559,7 @@ function Dupla({ ins, datos, onCambio }: { ins: MiInscripcion; datos: Datos; onC
             </form>
           )}
           <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0' }}>
-            Una invitación a la vez; vence a las 48 h o al cierre de inscripciones. Si no eliges a nadie quedas disponible y el admin arma las duplas al cierre.
+            Una invitación a la vez; vence a las 48 h, al cierre programado o cuando se cierre la categoría. Si no eliges a nadie quedas disponible y el admin arma las duplas al cierre.
           </p>
         </div>
       )}

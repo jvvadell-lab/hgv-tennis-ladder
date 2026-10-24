@@ -127,13 +127,15 @@ export function avanceGrupo(
 }
 
 // Llave de 3 grupos (cuartos con 2 byes): cuando TODOS los grupos están
-// completos, ordena a los primeros (ordenarPrimeros) y llena 'P1'..'P3' con
+// completos, ordena a los primeros (ordenarPrimeros, con el desempate del
+// admin si dos siguen iguales en todo) y llena 'P1'..'P3' con
 // los primeros y '2P1'..'2P3' con el 2º del grupo de cada uno. Si un 1º o un
 // 2º sigue empatado (falta el desempate del admin), no llena nada y avisa.
 export function avanceMejoresPrimeros(
   grupos: { id: string; letra: string; miembros: MiembroParaTabla[] }[],
   partidos: PartidoAvance[],
   llave: PartidoAvance[],
+  ordenManual: string[] | null = null,
 ): ResultadoAvance {
   const usa = llave.some((p) => lados.some((l) => {
     const o = parsearOrigen(origenDe(p, l) ?? '')
@@ -150,7 +152,10 @@ export function avanceMejoresPrimeros(
   if (empatados.length) {
     return { cambios: [], avisos: empatados.map((l) => `Grupo ${l}: el 1º o el 2º sigue empatado — falta el desempate del admin`) }
   }
-  const orden = ordenarPrimeros(tablas.map((t) => ({ letra: t.letra, fila: t.tabla[0] })))
+  const { orden, empatados: primerosEmpatados } = ordenarPrimeros(tablas.map((t) => ({ letra: t.letra, fila: t.tabla[0] })), ordenManual)
+  if (primerosEmpatados.length) {
+    return { cambios: [], avisos: [`Los primeros de los grupos ${primerosEmpatados.join(' y ')} siguen empatados en todo — falta el desempate del admin para ordenar a los mejores primeros`] }
+  }
   const tablaDe = new Map(tablas.map((t) => [t.letra, t.tabla]))
 
   const cambios: CambioAvance[] = []

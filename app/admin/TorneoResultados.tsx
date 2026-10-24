@@ -58,6 +58,8 @@ export default function TorneoResultados() {
   const [mensaje, setMensaje] = useState('')
   const [avisos, setAvisos] = useState<string[]>([])
   const [error, setError] = useState('')
+  // Sube con cada carga: los desempates pendientes se vuelven a pedir.
+  const [version, setVersion] = useState(0)
 
   const cargar = async () => {
     try {
@@ -65,6 +67,7 @@ export default function TorneoResultados() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar los resultados')
       setPartidos(data.partidos)
+      setVersion((v) => v + 1)
     } catch (err: any) {
       setError(err.message)
     }
@@ -113,6 +116,8 @@ export default function TorneoResultados() {
       {mensaje && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{mensaje}</p>}
       {avisos.map((a) => <p key={a} style={{ background: '#fff4d6', color: '#8a5a00', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>⚠️ {a}</p>)}
       {error && <p style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</p>}
+
+      <Desempates version={version} ocupado={ocupado !== null} onGuardar={(body, exito) => post('desempates', body, exito)} />
 
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px', alignItems: 'center' }}>
         {filtros.map(([id, texto, n]) => (
@@ -200,6 +205,67 @@ export default function TorneoResultados() {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// Desempates que esperan al admin (SPEC §7.4 y §3): puestos empatados en todo
+// dentro de un grupo, o primeros empatados con la llave de 3 grupos. El
+// admin ordena de mejor a peor y guarda; después corre el avance.
+type Pendiente =
+  | { tipo: 'grupo'; categoria: string; grupoId: string; letra: string; equipos: { id: string; nombre: string }[] }
+  | { tipo: 'primeros'; categoria: string; categoriaId: string; grupos: { letra: string; nombre: string }[] }
+
+function Desempates({ version, ocupado, onGuardar }: { version: number; ocupado: boolean; onGuardar: (body: object, exito: string) => Promise<void> }) {
+  const [pendientes, setPendientes] = useState<Pendiente[]>([])
+  const [orden, setOrden] = useState<Record<string, string[]>>({})
+  useEffect(() => {
+    fetch('/api/admin/torneo/resultados/desempates', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        const lista: Pendiente[] = d.pendientes ?? []
+        setPendientes(lista)
+        setOrden(Object.fromEntries(lista.map((p) => [clave(p), p.tipo === 'grupo' ? p.equipos.map((e) => e.id) : p.grupos.map((g) => g.letra)])))
+      })
+      .catch(() => setPendientes([]))
+  }, [version])
+  if (!pendientes.length) return null
+
+  const clave = (p: Pendiente) => (p.tipo === 'grupo' ? p.grupoId : p.categoriaId)
+  const nombre = (p: Pendiente, x: string) => p.tipo === 'grupo' ? p.equipos.find((e) => e.id === x)?.nombre ?? '—' : `1º del grupo ${x} · ${p.grupos.find((g) => g.letra === x)?.nombre ?? '—'}`
+  const mover = (k: string, i: number, d: -1 | 1) => setOrden((o) => {
+    const l = [...o[k]]
+    ;[l[i], l[i + d]] = [l[i + d], l[i]]
+    return { ...o, [k]: l }
+  })
+
+  return (
+    <div style={{ ...tarjeta, border: '2px solid #f0b400' }}>
+      <h4 style={{ margin: '0 0 8px 0', color: 'var(--color-ink)' }}>⚖️ Desempates pendientes</h4>
+      {pendientes.map((p) => {
+        const k = clave(p)
+        return (
+          <div key={k} style={{ borderTop: '1px solid #eee', padding: '8px 0', fontSize: '13px' }}>
+            <strong>{p.categoria} · {p.tipo === 'grupo' ? `Grupo ${p.letra}: empatados en todo` : 'mejores primeros (llave de 3 grupos): empatados en todo'}</strong>
+            <ol style={{ margin: '6px 0', paddingLeft: '20px' }}>
+              {(orden[k] ?? []).map((x, i, l) => (
+                <li key={x} style={{ marginBottom: '4px' }}>
+                  {nombre(p, x)}{' '}
+                  <button disabled={i === 0} onClick={() => mover(k, i, -1)} style={{ fontSize: '11px', cursor: 'pointer' }}>▲</button>
+                  <button disabled={i === l.length - 1} onClick={() => mover(k, i, 1)} style={{ fontSize: '11px', cursor: 'pointer' }}>▼</button>
+                </li>
+              ))}
+            </ol>
+            <button
+              disabled={ocupado}
+              onClick={() => onGuardar(p.tipo === 'grupo' ? { grupoId: k, orden: orden[k] } : { categoriaId: k, orden: orden[k] }, 'Desempate guardado').catch(() => {})}
+              style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: 'var(--color-court)', color: 'white', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
+            >
+              Guardar este orden (de mejor a peor)
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
