@@ -16,13 +16,28 @@ export async function GET() {
     const [{ count, error: errC }, { data: recientes, error: errR }] = await Promise.all([
       db.from('notificaciones').select('id', { count: 'exact', head: true })
         .eq('jugador_id', session.id).eq('leido', false),
-      db.from('notificaciones').select('id, tipo, reto_id, mensaje, leido, created_at')
+      db.from('notificaciones').select('id, tipo, reto_id, torneo_invitacion_id, mensaje, leido, created_at')
         .eq('jugador_id', session.id).order('created_at', { ascending: false }).limit(20),
     ])
     if (errC) throw errC
     if (errR) throw errR
 
-    return NextResponse.json({ ok: true, noLeidas: count || 0, recientes: recientes || [] })
+    // Invitaciones a formar dupla que siguen pendientes: la campana muestra
+    // Aceptar / Rechazar (torneo_invitaciones no se lee con la clave anónima).
+    const invIds = (recientes || []).map((n) => n.torneo_invitacion_id).filter(Boolean) as string[]
+    const { data: invs, error: errI } = invIds.length
+      ? await db.from('torneo_invitaciones').select('id, estado, vence_at, invitado_jugador_id').in('id', invIds)
+      : { data: [] as any[], error: null }
+    if (errI) throw errI
+    const pendiente = new Set((invs || [])
+      .filter((i: any) => i.estado === 'pendiente' && i.invitado_jugador_id === session.id && new Date(i.vence_at) > new Date())
+      .map((i: any) => i.id))
+
+    return NextResponse.json({
+      ok: true,
+      noLeidas: count || 0,
+      recientes: (recientes || []).map((n) => ({ ...n, invitacion_pendiente: !!n.torneo_invitacion_id && pendiente.has(n.torneo_invitacion_id) })),
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al cargar las notificaciones' }, { status: 500 })
   }

@@ -24,15 +24,15 @@ function jugado(a: string, b: string, sets: SetJugado[]): PartidoParaTabla {
   const setsA = sets.filter((s) => s.games_j1 > s.games_j2).length
   const ganaA = ultimo.es_super_tiebreak ? ultimo.games_j1 > ultimo.games_j2 : setsA === 2
   return {
-    inscripcion_a: a, inscripcion_b: b, estado: 'jugado', validado: true, sets,
-    tipo_resultado: 'normal', retirada_inscripcion_id: null,
-    ganador_inscripcion_id: ganaA ? a : b, wo_ausente_inscripcion_id: null,
+    equipo_a: a, equipo_b: b, estado: 'jugado', validado: true, sets,
+    tipo_resultado: 'normal', retirada_equipo_id: null,
+    ganador_equipo_id: ganaA ? a : b, wo_ausente_equipo_id: null,
   }
 }
 const g2_0 = (a: string, b: string, ga = 6, gb = 0) => jugado(a, b, [set(1, ga, gb), set(2, ga, gb)])
 
-const miembros = (...ids: string[]) => ids.map((id) => ({ inscripcion_id: id, desempate_manual: null }))
-const orden = (filas: { inscripcion_id: string }[]) => filas.map((f) => f.inscripcion_id)
+const miembros = (...ids: string[]) => ids.map((id) => ({ equipo_id: id, desempate_manual: null }))
+const orden = (filas: { equipo_id: string }[]) => filas.map((f) => f.equipo_id)
 
 // --- Serpentina ------------------------------------------------------------
 
@@ -82,7 +82,7 @@ describe('crucesTodosContraTodos', () => {
 // --- Llave -----------------------------------------------------------------
 
 describe('generarLlave', () => {
-  const resumen = (n: number, desde: 'cuartos' | 'semis') =>
+  const resumen = (n: number, desde: 'cuartos' | 'semis' | 'final') =>
     generarLlave(n, desde).map((p) => `${p.codigo}=${p.origen_a}/${p.origen_b}`)
 
   it('dobles: 4 grupos desde cuartos', () => {
@@ -102,7 +102,12 @@ describe('generarLlave', () => {
     expect(llave.map((p) => [p.fase, p.orden])).toEqual([['semis', 1], ['semis', 2], ['final', 1]])
   })
 
+  it('infantil de 5–7: 1 grupo y final directa 1A-2A', () => {
+    expect(resumen(1, 'final')).toEqual(['F1=1A/2A'])
+  })
+
   it('rechaza grupos que no cuadran con la llave', () => {
+    expect(() => generarLlave(2, 'final')).toThrow()
     expect(() => generarLlave(2, 'cuartos')).toThrow()
     expect(() => generarLlave(4, 'semis')).toThrow()
   })
@@ -197,6 +202,13 @@ describe('ordenarGrupo', () => {
     expect(tabla.every((f) => f.pg === 1 && !f.requiere_sorteo)).toBe(true)
   })
 
+  it('súper tie-break: vale 1 set y 1-0 en games; sus puntos se registran aparte para revisar empates', () => {
+    const tabla = ordenarGrupo([jugado('C', 'A', [set(1, 6, 4), set(2, 4, 6), st(10, 6)])], miembros('C', 'A'))
+    const c = tabla.find((f) => f.equipo_id === 'C')!
+    expect([c.sets_favor, c.sets_contra, c.games_favor, c.games_contra]).toEqual([2, 1, 11, 10])
+    expect([c.stb_puntos_favor, c.stb_puntos_contra]).toEqual([10, 6])
+  })
+
   it('triple empate resuelto por diferencia de games', () => {
     const partidos = [
       g2_0('A', 'B', 6, 0), // A 12-0
@@ -216,9 +228,9 @@ describe('ordenarGrupo', () => {
     expect(sinSorteo.every((f) => f.requiere_sorteo)).toBe(true)
 
     const conSorteo = ordenarGrupo(partidos, [
-      { inscripcion_id: 'A', desempate_manual: 3 },
-      { inscripcion_id: 'B', desempate_manual: 1 },
-      { inscripcion_id: 'C', desempate_manual: 2 },
+      { equipo_id: 'A', desempate_manual: 3 },
+      { equipo_id: 'B', desempate_manual: 1 },
+      { equipo_id: 'C', desempate_manual: 2 },
     ])
     expect(orden(conSorteo)).toEqual(['B', 'C', 'A'])
     expect(conSorteo.some((f) => f.requiere_sorteo)).toBe(false)
@@ -226,20 +238,20 @@ describe('ordenarGrupo', () => {
 
   it('WO cuenta 2-0 en sets y 12-0 en games para el presente', () => {
     const wo: PartidoParaTabla = {
-      inscripcion_a: 'A', inscripcion_b: 'B', estado: 'wo', validado: true, sets: null,
-      tipo_resultado: 'normal', retirada_inscripcion_id: null,
-      ganador_inscripcion_id: 'B', wo_ausente_inscripcion_id: 'A',
+      equipo_a: 'A', equipo_b: 'B', estado: 'wo', validado: true, sets: null,
+      tipo_resultado: 'normal', retirada_equipo_id: null,
+      ganador_equipo_id: 'B', wo_ausente_equipo_id: 'A',
     }
     const tabla = ordenarGrupo([wo], miembros('A', 'B'))
-    expect(tabla[0]).toMatchObject({ inscripcion_id: 'B', pg: 1, sets_favor: 2, sets_contra: 0, games_favor: 12, games_contra: 0 })
-    expect(tabla[1]).toMatchObject({ inscripcion_id: 'A', pp: 1, sets_favor: 0, sets_contra: 2, games_favor: 0, games_contra: 12 })
+    expect(tabla[0]).toMatchObject({ equipo_id: 'B', pg: 1, sets_favor: 2, sets_contra: 0, games_favor: 12, games_contra: 0 })
+    expect(tabla[1]).toMatchObject({ equipo_id: 'A', pp: 1, sets_favor: 0, sets_contra: 2, games_favor: 0, games_contra: 12 })
   })
 
   it('doble WO: partido perdido para las dos, sin sets ni games', () => {
     const dobleWo: PartidoParaTabla = {
-      inscripcion_a: 'A', inscripcion_b: 'B', estado: 'doble_wo', validado: true, sets: null,
-      tipo_resultado: 'normal', retirada_inscripcion_id: null,
-      ganador_inscripcion_id: null, wo_ausente_inscripcion_id: null,
+      equipo_a: 'A', equipo_b: 'B', estado: 'doble_wo', validado: true, sets: null,
+      tipo_resultado: 'normal', retirada_equipo_id: null,
+      ganador_equipo_id: null, wo_ausente_equipo_id: null,
     }
     const tabla = ordenarGrupo([dobleWo], miembros('A', 'B'))
     for (const f of tabla) expect(f).toMatchObject({ pj: 1, pg: 0, pp: 1, sets_favor: 0, games_favor: 0 })
@@ -256,22 +268,22 @@ describe('ordenarGrupo', () => {
   it('retiro: se le completa el partido al ganador', () => {
     // B se retira 2-6, 1-0 para A → A cierra el set 2 (6-0) y gana el Súper tie-break (1-0).
     const retiro: PartidoParaTabla = {
-      inscripcion_a: 'A', inscripcion_b: 'B', estado: 'jugado', validado: true,
+      equipo_a: 'A', equipo_b: 'B', estado: 'jugado', validado: true,
       sets: [set(1, 2, 6), { numero: 2, games_j1: 1, games_j2: 0, completo: false }],
-      tipo_resultado: 'retiro', retirada_inscripcion_id: 'B',
-      ganador_inscripcion_id: 'A', wo_ausente_inscripcion_id: null,
+      tipo_resultado: 'retiro', retirada_equipo_id: 'B',
+      ganador_equipo_id: 'A', wo_ausente_equipo_id: null,
     }
     const [a, b] = ordenarGrupo([retiro], miembros('A', 'B'))
-    expect(a).toMatchObject({ inscripcion_id: 'A', sets_favor: 2, sets_contra: 1, games_favor: 2 + 6 + 1, games_contra: 6 })
-    expect(b).toMatchObject({ inscripcion_id: 'B', sets_favor: 1, sets_contra: 2 })
+    expect(a).toMatchObject({ equipo_id: 'A', sets_favor: 2, sets_contra: 1, games_favor: 2 + 6 + 1, games_contra: 6 })
+    expect(b).toMatchObject({ equipo_id: 'B', sets_favor: 1, sets_contra: 2 })
   })
 
   it('retiro con el rival en 5 games: el set se cierra 7-5', () => {
     const retiro: PartidoParaTabla = {
-      inscripcion_a: 'A', inscripcion_b: 'B', estado: 'jugado', validado: true,
+      equipo_a: 'A', equipo_b: 'B', estado: 'jugado', validado: true,
       sets: [set(1, 6, 1), { numero: 2, games_j1: 5, games_j2: 5, completo: false }],
-      tipo_resultado: 'retiro', retirada_inscripcion_id: 'B',
-      ganador_inscripcion_id: 'A', wo_ausente_inscripcion_id: null,
+      tipo_resultado: 'retiro', retirada_equipo_id: 'B',
+      ganador_equipo_id: 'A', wo_ausente_equipo_id: null,
     }
     const [a] = ordenarGrupo([retiro], miembros('A', 'B'))
     expect(a).toMatchObject({ sets_favor: 2, sets_contra: 0, games_favor: 6 + 7, games_contra: 1 + 5 })

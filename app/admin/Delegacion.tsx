@@ -108,7 +108,7 @@ type PagoDelegacion = {
   monto_usd_equivalente: number | null
   diferencia_usd: number
   created_at: string
-  jugadores: { nombre: string; telefono: string | null; numero_accion: string | null } | null
+  jugadores: { nombre: string; telefono: string | null; numero_accion: string | null; es_invitado?: boolean | null } | null
   torneo: { nombre: string } | null
   registrado: { nombre: string } | null
   anulador: { nombre: string } | null

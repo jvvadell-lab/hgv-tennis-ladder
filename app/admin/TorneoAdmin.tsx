@@ -1,7 +1,7 @@
 'use client'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { formatearFechaConAnio, formatearFechaHora, instanteEnCaracas } from '@/lib/tiempo'
-import { CANCHAS_TORNEO, ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type CanchaTorneo, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
+import { ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
 import {
   categoriaAbierta,
   DIAS_TORNEO,
@@ -17,13 +17,16 @@ import {
   ETIQUETA_GENERO_MENOR,
   ETIQUETA_PARENTESCO,
   PARENTESCOS,
-  HORARIO_ESCUELA,
   categoriasParaMenor,
   edadAlCorte,
-  parsearPlantillaTurnos,
   type Parentesco,
-  type PlantillaTurnosInfantil,
 } from '@/lib/torneoInfantil'
+import TorneoSorteo from './TorneoSorteo'
+import { GestionCategoria, ResumenTorneo, type EquipoAdmin, type EsperaAdmin, type InvitacionAdmin } from './TorneoDoblesAdmin'
+import { avisoAntesDeCerrar } from '@/lib/torneoCierre'
+import TorneoProgramacion from './TorneoProgramacion'
+import TorneoResultados from './TorneoResultados'
+import HorarioAcademia from '@/app/components/HorarioAcademia'
 
 // Pestaña Torneo del admin (Torneo Navidad, fase 3): inscripciones por
 // categoría con su estado, pagos (validar / rechazar), categoría oficial de
@@ -43,6 +46,7 @@ type Jugador = {
   categoria_torneo: string | null
   telefono: string | null
   email: string | null
+  es_invitado: boolean
 }
 
 type Pago = {
@@ -80,6 +84,8 @@ type Inscripcion = {
   created_at: string
   categoria_certificada_at: string | null
   menor_nombre_publico: string | null
+  invitado_autorizado_at: string | null
+  devolucion_marcada_at: string | null
   jugadores: Jugador[]
   menor: Menor | null
   pagos: Pago[]
@@ -91,13 +97,16 @@ type Categoria = {
   es_infantil: boolean; edad_min: number | null; edad_max: number | null; duracion_min: number
   plantilla_turnos: unknown | null
   inscripciones_abiertas: boolean; inscripciones_cambiadas_at: string | null; admin_cambio: { nombre: string } | null
+  sorteo_publicado_at: string | null; sorteo_metodo: 'bombos' | 'serpentina' | null; cancelada_at: string | null
+  num_grupos: number; llave_desde: string; partidos_minimos: number | null
 }
 
 type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: string | null }
 
 type TorneoAdminDatos = {
   id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number
-  fecha_corte_edad: string | null; solo_socios: boolean
+  fecha_corte_edad: string | null; solo_socios: boolean; cierre_inscripciones_at: string | null
+  sorteo_metodo: 'bombos' | 'serpentina' | null; sorteo_publicado_at: string | null
 }
 
 type Datos = {
@@ -105,8 +114,12 @@ type Datos = {
   fechaCorte: string
   categorias: Categoria[]
   inscripciones: Inscripcion[]
+  equipos: EquipoAdmin[]
+  invitaciones: InvitacionAdmin[]
+  listaEspera: EsperaAdmin[]
   disponibilidad: Disponibilidad[]
   jugadoresActivos: { id: string; nombre: string }[]
+  sorteoPublicadoPor: string | null
 }
 
 // Nombre para mostrar de una inscripción (pareja, jugador o menor).
@@ -135,6 +148,9 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [categoriaSel, setCategoriaSel] = useState<string>('todas')
   const [verRetiradas, setVerRetiradas] = useState(false)
+  // Sube con cada carga: el resumen vuelve a pedir sus contadores.
+  const [version, setVersion] = useState(0)
+  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'programacion' | 'resultados' | 'academia'>('inscripciones')
 
   const cargar = async () => {
     try {
@@ -142,6 +158,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar el torneo')
       setDatos(data)
+      setVersion((v) => v + 1)
       setError('')
     } catch (err: any) {
       setError(err.message)
@@ -226,8 +243,69 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
         </div>
       </div>
 
+      <ResumenTorneo version={version} categoriaSel={categoriaSel} onElegir={(id) => { setCategoriaSel(id); setVista('inscripciones') }} />
+
+      {esAdminCompleto && (
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd', overflowX: 'auto' }}>
+          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['programacion', '📅 Programación'], ['resultados', '🏆 Resultados'], ['academia', '🧒 Horario academia']] as const).map(([id, etiqueta]) => (
+            <button
+              key={id}
+              onClick={() => setVista(id)}
+              style={{
+                padding: '10px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px',
+                color: vista === id ? 'var(--color-ink)' : '#888', borderBottom: vista === id ? '3px solid var(--color-court)' : '3px solid transparent', marginBottom: '-2px',
+              }}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {vista === 'sorteo' && esAdminCompleto && (
+        <TorneoSorteo
+          torneo={torneo}
+          categorias={categorias}
+          equipos={datos.equipos.map((e) => {
+            const ins = [e.inscripcion1_id, e.inscripcion2_id].map((id) => inscripciones.find((i) => i.id === id)).filter(Boolean) as Inscripcion[]
+            return {
+              id: e.id, categoria_id: e.categoria_id, siembra: e.siembra, bombo: e.bombo,
+              nombre: ins.map((i) => (i.menor ? `${i.menor.nombre} ${i.menor.apellido}` : i.jugadores.map((j) => j.nombre).join(' / '))).join(' / '),
+              pendiente: ins.some((i) => i.estado !== 'confirmada'),
+            }
+          })}
+          sinPareja={Object.fromEntries(categorias.filter((c) => c.modalidad === 'doble').map((c) => {
+            const enDupla = new Set(datos.equipos.flatMap((e) => [e.inscripcion1_id, e.inscripcion2_id]))
+            return [c.id, vivas.filter((i) => i.categoria_id === c.id && !enDupla.has(i.id)).length]
+          }))}
+          publicadoPor={datos.sorteoPublicadoPor}
+          onCambio={cargar}
+        />
+      )}
+
+      {vista === 'programacion' && esAdminCompleto && <TorneoProgramacion />}
+
+      {vista === 'resultados' && esAdminCompleto && <TorneoResultados />}
+
+      {vista === 'academia' && esAdminCompleto && (
+        <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+          <HorarioAcademia />
+        </div>
+      )}
+
+      {vista === 'inscripciones' && <>
       {mensaje && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{mensaje}</p>}
       {error && <p style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</p>}
+
+      {esAdminCompleto && (
+        <CertificarEscalera
+          ocupado={ocupado === 'certificar-escalera'}
+          onConfirmar={(temporadaId, jugadorIds) =>
+            accion('certificar-escalera', 'certificar-escalera', { temporadaId, jugadorIds },
+              `Categoría oficial certificada a ${jugadorIds.length} jugador${jugadorIds.length === 1 ? '' : 'es'} de la escalera`)
+          }
+        />
+      )}
 
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
         {[{ id: 'todas', nombre: 'Todas', cupo: 0 }, ...categorias].map((c) => {
@@ -243,7 +321,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                 background: activa ? 'var(--color-ink)' : 'white', color: activa ? 'white' : 'var(--color-ink)',
               }}
             >
-              {c.nombre} <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.8 }}>{c.id === 'todas' ? n : `${n}/${c.cupo}`}</span>
+              {c.nombre} <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.8 }}>{c.id === 'todas' ? n : `${n}/${'modalidad' in c && c.modalidad === 'doble' ? c.cupo * 2 : c.cupo}`}</span>
             </button>
           )
         })}
@@ -263,7 +341,10 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
               <div>
                 <h4 style={{ color: 'var(--color-ink)', margin: '0 0 4px 0' }}>{c.nombre}</h4>
                 <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#666' }}>
-                  {c.modalidad === 'doble' ? 'Dobles' : 'Single'} · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}
+                  {c.modalidad === 'doble'
+                    ? <>Dobles · {nivel} · {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo * 2} jugadores ({c.cupo} parejas)</>
+                    : <>Single · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}</>}
+                  {c.sorteo_publicado_at && <> · 🎲 sorteada</>}
                 </p>
               </div>
               <InscripcionesCategoria
@@ -271,17 +352,26 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                 estadoTorneo={torneo.estado}
                 editable={esAdminCompleto}
                 ocupado={ocupado === `abrir-${c.id}`}
+                avisoCerrar={(() => {
+                  const enDupla = new Set(datos.equipos.flatMap((e) => [e.inscripcion1_id, e.inscripcion2_id]))
+                  const sueltos = c.modalidad === 'doble' ? lista.filter((i) => i.estado !== 'retirada' && !enDupla.has(i.id)).map(nombreInscripcion) : []
+                  return avisoAntesDeCerrar(c.nombre, sueltos, datos.invitaciones.filter((v) => v.categoria_id === c.id).length)
+                })()}
                 onCambiar={(abrir) => accion(`abrir-${c.id}`, 'categoria-inscripciones', { categoriaId: c.id, abiertas: abrir }, `${c.nombre}: inscripciones ${abrir ? 'abiertas' : 'cerradas'}`)}
               />
             </div>
-            {c.es_infantil && (
-              <HorarioCategoria
-                categoria={c}
-                editable={esAdminCompleto}
-                ocupado={ocupado === `plantilla-${c.id}`}
-                onGuardar={(plantilla) => accion(`plantilla-${c.id}`, 'infantil/plantilla', { categoriaId: c.id, plantilla }, `${c.nombre}: horario guardado`)}
-              />
-            )}
+            <GestionCategoria
+              categoria={c}
+              categorias={categorias}
+              inscripciones={lista.filter((i) => i.estado !== 'retirada').map((i) => ({ id: i.id, categoria_id: i.categoria_id, estado: i.estado, nombre: nombreInscripcion(i), esMenor: !!i.menor }))}
+              equipos={datos.equipos}
+              invitaciones={datos.invitaciones}
+              listaEspera={datos.listaEspera}
+              editable={esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && !c.sorteo_publicado_at}
+              cerrada={!categoriaAbierta(torneo.estado, c) || (!!torneo.cierre_inscripciones_at && new Date(torneo.cierre_inscripciones_at).getTime() <= Date.now())}
+              ocupado={ocupado}
+              accion={accion}
+            />
             {lista.length === 0 && <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Sin inscripciones todavía.</p>}
 
             {lista.map((ins, idx) => (
@@ -295,7 +385,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '3px 10px', borderRadius: '999px', background: COLOR_ESTADO[ins.estado].fondo, color: COLOR_ESTADO[ins.estado].texto }}>
                       {ins.estado === 'pendiente_pago' ? 'Pendiente' : ETIQUETA_ESTADO_INSCRIPCION[ins.estado]}
                     </span>
-                    {esAdminCompleto && ins.estado !== 'retirada' && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && (
+                    {esAdminCompleto && ins.estado !== 'retirada' && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && !c.sorteo_publicado_at && (
                       <button
                         disabled={ocupado === `retirar-${ins.id}`}
                         onClick={() => {
@@ -309,12 +399,38 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     )}
                   </span>
                 </div>
-                <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 8px 0' }}>Inscrita el {formatearFechaHora(ins.created_at)}</p>
+                <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 8px 0' }}>
+                  Inscrita el {formatearFechaHora(ins.created_at)}
+                  {ins.devolucion_marcada_at && <strong style={{ color: '#842029' }}> · 💸 pago marcado para devolución el {formatearFechaHora(ins.devolucion_marcada_at)}</strong>}
+                </p>
 
                 {ins.pendientes.length > 0 && (
                   <ul style={{ margin: '0 0 8px 0', paddingLeft: '18px', fontSize: '12px', color: '#8a5a00' }}>
                     {ins.pendientes.map((p) => <li key={`${p.tipo}-${p.jugadorId}`}>{p.texto}</li>)}
                   </ul>
+                )}
+
+                {ins.estado !== 'retirada' && (ins.invitado_autorizado_at || ins.pendientes.some((p) => p.tipo === 'invitado_por_autorizar')) && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12px', margin: '0 0 8px 0' }}>
+                    {ins.invitado_autorizado_at
+                      ? <span style={{ color: '#1e6b34', fontWeight: 'bold' }}>🎟️ Autorizado como invitado / wild card el {formatearFechaHora(ins.invitado_autorizado_at)}</span>
+                      : <span style={{ color: '#8a5a00', fontWeight: 'bold' }}>🎟️ No socio: el torneo es solo para socios</span>}
+                    {esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && (
+                      <button
+                        disabled={ocupado === `invitado-${ins.id}`}
+                        onClick={() => {
+                          const autorizar = !ins.invitado_autorizado_at
+                          if (!confirm(autorizar
+                            ? `¿Autorizar a ${nombreInscripcion(ins)} como invitado / wild card en ${c.nombre}?`
+                            : `¿Quitar la autorización de invitado / wild card a ${nombreInscripcion(ins)}? La inscripción vuelve a quedar pendiente.`)) return
+                          accion(`invitado-${ins.id}`, 'autorizar-invitado', { inscripcionId: ins.id, autorizar }, autorizar ? 'Invitado / wild card autorizado' : 'Autorización quitada')
+                        }}
+                        style={boton(ins.invitado_autorizado_at ? '#c0392b' : '#1e6b34', !ins.invitado_autorizado_at)}
+                      >
+                        {ins.invitado_autorizado_at ? 'Quitar autorización' : 'Autorizar invitado / wild card'}
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {ins.menor ? (
@@ -350,7 +466,10 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                         return (
                           <tr key={j.id} style={{ borderTop: '1px solid #eee', verticalAlign: 'top' }}>
                             <td style={td}>
-                              <div style={{ fontWeight: 'bold' }}>{j.nombre}</div>
+                              <div style={{ fontWeight: 'bold' }}>
+                                {j.nombre}
+                                {j.es_invitado && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 6px', borderRadius: '999px', background: '#efe3ff', color: '#5b2a86' }}>Invitado</span>}
+                              </div>
                               <div style={{ color: '#777' }}>
                                 {ETIQUETA_GENERO_JUGADOR[j.genero] || j.genero} · escalera: {ETIQUETA_NIVEL[j.categoria as Nivel] || j.categoria}
                               </div>
@@ -434,6 +553,117 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           onEnviar={(body) => accion('menor-nuevo', 'infantil/inscribir', body, 'Menor inscrito')}
         />
       )}
+      </>}
+    </div>
+  )
+}
+
+type VistaCertificacion = {
+  temporadas: { id: string; nombre: string; jugadores: number }[]
+  temporada: { id: string; nombre: string } | null
+  total?: number
+  grupos?: { categoria: Nivel; genero: string; jugadores: { id: string; nombre: string }[] }[]
+  yaCertificados?: number
+  inactivos?: number
+  categoriaInvalida?: { id: string; nombre: string; categoria: string }[]
+}
+
+// Certificar de una vez la categoría oficial de los jugadores de la escalera
+// (la de jugadores.categoria). Primero muestra la vista previa por categoría
+// y género; el admin confirma y solo se certifican los que vio.
+function CertificarEscalera({ ocupado, onConfirmar }: {
+  ocupado: boolean
+  onConfirmar: (temporadaId: string, jugadorIds: string[]) => Promise<boolean>
+}) {
+  const [vista, setVista] = useState<VistaCertificacion | null>(null)
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState('')
+
+  const previsualizar = async (temporadaId?: string) => {
+    setCargando(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/admin/torneo/certificar-escalera${temporadaId ? `?temporadaId=${temporadaId}` : ''}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo preparar la vista previa')
+      setVista(data)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const ids = (vista?.grupos || []).flatMap((g) => g.jugadores.map((j) => j.id))
+
+  return (
+    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '16px 20px', marginBottom: '16px', fontSize: '13px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <strong>Certificar a los jugadores de la escalera</strong>
+          <div style={{ color: '#555', marginTop: '2px' }}>
+            Asigna como categoría oficial la de la escalera a quien todavía no tiene una. Los demás siguen con categoría provisional.
+          </div>
+        </div>
+        {!vista && (
+          <button disabled={cargando} onClick={() => previsualizar()} style={boton('var(--color-court)')}>
+            {cargando ? 'Cargando…' : 'Ver quiénes'}
+          </button>
+        )}
+      </div>
+
+      {error && <p style={{ color: '#842029', margin: '8px 0 0 0' }}>{error}</p>}
+
+      {vista && (
+        <div style={{ marginTop: '12px' }}>
+          {vista.temporadas.length === 0 || !vista.temporada ? (
+            <p style={{ margin: 0 }}>No hay ninguna temporada con jugadores en la escalera.</p>
+          ) : (
+            <>
+              <label>
+                Temporada:{' '}
+                <select value={vista.temporada.id} disabled={cargando || ocupado} onChange={(e) => previsualizar(e.target.value)} style={{ ...campoAdmin, width: 'auto', maxWidth: '100%' }}>
+                  {vista.temporadas.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.jugadores} en la escalera)</option>)}
+                </select>
+              </label>
+
+              <p style={{ margin: '10px 0 6px 0' }}>
+                <strong>{vista.total} jugador{vista.total === 1 ? '' : 'es'}</strong> recibirían su categoría oficial
+                {!!vista.yaCertificados && <> · {vista.yaCertificados} ya la tenían</>}
+                {!!vista.inactivos && <> · {vista.inactivos} inactivo{vista.inactivos === 1 ? '' : 's'} (no se tocan)</>}
+              </p>
+
+              {(vista.grupos || []).map((g) => (
+                <div key={`${g.categoria}-${g.genero}`} style={{ marginBottom: '6px' }}>
+                  <strong>{ETIQUETA_NIVEL[g.categoria]} · {ETIQUETA_GENERO_JUGADOR[g.genero] || g.genero}</strong> ({g.jugadores.length}):{' '}
+                  <span style={{ color: '#555' }}>{g.jugadores.map((j) => j.nombre).join(', ')}</span>
+                </div>
+              ))}
+
+              {!!vista.categoriaInvalida?.length && (
+                <p style={{ color: '#8a5a00', margin: '6px 0' }}>
+                  Sin certificar (su categoría de escalera no es un nivel de torneo):{' '}
+                  {vista.categoriaInvalida.map((j) => `${j.nombre} (${j.categoria})`).join(', ')}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <button
+                  disabled={ocupado || cargando || ids.length === 0}
+                  onClick={async () => {
+                    if (!confirm(`¿Certificar la categoría oficial de ${ids.length} jugador${ids.length === 1 ? '' : 'es'} de ${vista.temporada!.nombre}? Se recalculan sus inscripciones.`)) return
+                    if (await onConfirmar(vista.temporada!.id, ids)) setVista(null)
+                  }}
+                  style={boton('var(--color-court)', true)}
+                >
+                  {ocupado ? 'Certificando…' : `Certificar ${ids.length}`}
+                </button>
+                <button disabled={ocupado} onClick={() => setVista(null)} style={boton('#777')}>Cancelar</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -446,15 +676,17 @@ const td: React.CSSProperties = { padding: '8px' }
 // Interruptor abrir/cerrar inscripciones de una categoría, con quién y cuándo
 // la cambió por última vez. Solo acepta inscripciones si además el torneo
 // está en 'inscripcion'.
-function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, onCambiar }: {
+function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, avisoCerrar, onCambiar }: {
   categoria: Categoria
   estadoTorneo: EstadoTorneo
   editable: boolean
   ocupado: boolean
+  avisoCerrar: string | null   // sin pareja / invitaciones pendientes: se muestra antes de cerrar
   onCambiar: (abrir: boolean) => void
 }) {
   const abierta = categoria.inscripciones_abiertas
-  const antesDelSorteo = estadoTorneo === 'borrador' || estadoTorneo === 'inscripcion'
+  // Se puede cerrar y reabrir mientras no se publique el sorteo de la categoría.
+  const antesDelSorteo = (estadoTorneo === 'borrador' || estadoTorneo === 'inscripcion') && !categoria.sorteo_publicado_at && !categoria.cancelada_at
   const recibe = categoriaAbierta(estadoTorneo, categoria)
   return (
     <div style={{ textAlign: 'right' }}>
@@ -470,13 +702,13 @@ function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, on
             disabled={ocupado}
             onClick={() => {
               const texto = abierta
-                ? `¿Cerrar las inscripciones de ${categoria.nombre}? Nadie más podrá inscribirse en ella; las inscripciones hechas se mantienen.`
+                ? `${avisoCerrar ? `⚠️ ${avisoCerrar}\n\n` : ''}¿Cerrar las inscripciones de ${categoria.nombre}? Nadie más podrá inscribirse, invitar ni aceptar invitaciones en ella; las inscripciones y duplas hechas se mantienen y puedes seguir armando duplas, trasladando y certificando hasta el sorteo. Se puede reabrir mientras no publiques su sorteo.`
                 : `¿Abrir las inscripciones de ${categoria.nombre}?${estadoTorneo === 'inscripcion' ? ' Los jugadores podrán inscribirse desde la app.' : ' Recibirá inscripciones cuando abras las del torneo.'}`
               if (confirm(texto)) onCambiar(!abierta)
             }}
             style={boton(abierta ? '#c0392b' : 'var(--color-court)')}
           >
-            {ocupado ? '…' : abierta ? '🔒 Cerrar' : '🔓 Abrir'}
+            {ocupado ? '…' : abierta ? '🔒 Cerrar inscripciones' : categoria.inscripciones_cambiadas_at ? '🔓 Reabrir' : '🔓 Abrir'}
           </button>
         )}
       </div>
@@ -754,63 +986,5 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
         <button type="button" onClick={() => setAbierto(false)} style={boton('#777')}>Cancelar</button>
       </div>
     </form>
-  )
-}
-
-const DIAS_SEMANA = [
-  { n: 1, etiqueta: 'Lun' }, { n: 2, etiqueta: 'Mar' }, { n: 3, etiqueta: 'Mié' }, { n: 4, etiqueta: 'Jue' },
-  { n: 5, etiqueta: 'Vie' }, { n: 6, etiqueta: 'Sáb' }, { n: 0, etiqueta: 'Dom' },
-]
-
-const resumenPlantilla = (p: PlantillaTurnosInfantil) =>
-  `${DIAS_SEMANA.filter((d) => p.dias.includes(d.n)).map((d) => d.etiqueta).join(', ')} · ${p.desde}–${p.hasta} · ${p.canchas.join(' y ')}`
-
-// Horario escuela de una categoría infantil (SPEC §14.5): días, canchas y
-// ventana. Guardarlo no bloquea canchas; eso pasa al programar cada partido.
-function HorarioCategoria({ categoria, editable, ocupado, onGuardar }: {
-  categoria: Categoria
-  editable: boolean
-  ocupado: boolean
-  onGuardar: (plantilla: PlantillaTurnosInfantil) => Promise<boolean>
-}) {
-  const actual = parsearPlantillaTurnos(categoria.plantilla_turnos)
-  const [editando, setEditando] = useState(false)
-  const [p, setP] = useState<PlantillaTurnosInfantil>(actual ?? HORARIO_ESCUELA)
-  const alternar = <T,>(lista: T[], v: T) => (lista.includes(v) ? lista.filter((x) => x !== v) : [...lista, v])
-
-  if (!editando) {
-    return (
-      <p style={{ margin: '-8px 0 14px 0', fontSize: '12px', color: '#555', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-        🕒 Horario escuela: <strong>{actual ? resumenPlantilla(actual) : 'sin definir'}</strong>
-        {editable && <button onClick={() => { setP(actual ?? HORARIO_ESCUELA); setEditando(true) }} style={boton('var(--color-court)')}>Editar horario</button>}
-      </p>
-    )
-  }
-
-  return (
-    <div style={{ background: 'white', borderRadius: '8px', padding: '12px', margin: '-4px 0 14px 0', fontSize: '12px', border: '1px solid #e5e5e5' }}>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
-        <strong>Días:</strong>
-        {DIAS_SEMANA.map((d) => (
-          <label key={d.n}><input type="checkbox" checked={p.dias.includes(d.n)} onChange={() => setP({ ...p, dias: alternar(p.dias, d.n).sort() })} /> {d.etiqueta}</label>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
-        <strong>Canchas:</strong>
-        {CANCHAS_TORNEO.map((c) => (
-          <label key={c}><input type="checkbox" checked={p.canchas.includes(c)} onChange={() => setP({ ...p, canchas: alternar<CanchaTorneo>(p.canchas, c).sort() })} /> {c}</label>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
-        <strong>Desde</strong><input type="time" value={p.desde} onChange={(e) => setP({ ...p, desde: e.target.value })} style={{ ...campoAdmin, width: 'auto' }} />
-        <strong>hasta</strong><input type="time" value={p.hasta} onChange={(e) => setP({ ...p, hasta: e.target.value })} style={{ ...campoAdmin, width: 'auto' }} />
-        <span style={{ color: '#777' }}>(turnos de {categoria.duracion_min} min)</span>
-      </div>
-      <p style={{ color: '#777', margin: '0 0 8px 0' }}>Guardar el horario no bloquea canchas: se bloquean al programar cada partido.</p>
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <button disabled={ocupado} onClick={async () => { if (await onGuardar(p)) setEditando(false) }} style={boton('var(--color-court)', true)}>Guardar</button>
-        <button onClick={() => setEditando(false)} style={boton('#777')}>Cancelar</button>
-      </div>
-    </div>
   )
 }

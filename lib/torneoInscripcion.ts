@@ -85,7 +85,7 @@ export type JugadorParaInscripcion = {
 export type DatosValidacionInscripcion = {
   estadoTorneo: EstadoTorneo
   categoria: Pick<TorneoCategoria, 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo' | 'inscripciones_abiertas'>
-  // [quien se inscribe, pareja] — la pareja solo en dobles.
+  // [quien se inscribe]: también en dobles, cada jugador por separado.
   jugadores: JugadorParaInscripcion[]
   // Inscripciones vivas (no retiradas) en la categoría.
   ocupados: number
@@ -102,17 +102,17 @@ export type ResultadoValidacion =
 // Nivel con el que se valida: el oficial si lo tiene; si no, el de la escalera.
 export const nivelParaTorneo = (j: Pick<JugadorParaInscripcion, 'categoria' | 'categoria_torneo'>) => j.categoria_torneo ?? j.categoria
 
+// Inscripciones que caben en la categoría: en dobles, parejas × 2.
+export const cupoInscripciones = (c: Pick<TorneoCategoria, 'modalidad' | 'cupo'>) => c.cupo * (c.modalidad === 'doble' ? 2 : 1)
+
 export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoValidacion {
   const { categoria, jugadores } = d
   if (d.estadoTorneo !== 'inscripcion') return { ok: false, error: 'Las inscripciones del torneo no están abiertas' }
   if (!categoriaAbierta(d.estadoTorneo, categoria)) return { ok: false, error: ERROR_CATEGORIA_CERRADA }
 
-  if (categoria.modalidad === 'doble') {
-    if (jugadores.length !== 2 || !jugadores[1]) return { ok: false, error: 'Elige a tu pareja para inscribirte en dobles' }
-    if (jugadores[0].id === jugadores[1].id) return { ok: false, error: 'Tu pareja tiene que ser otro jugador' }
-  } else if (jugadores.length !== 1) {
-    return { ok: false, error: 'En single te inscribes sin pareja' }
-  }
+  // Cada jugador se inscribe solo, también en dobles: la pareja se forma
+  // aparte (lib/torneoDobles.ts).
+  if (jugadores.length !== 1) return { ok: false, error: 'Cada jugador se inscribe por separado' }
 
   for (const j of jugadores) {
     if (!j.activo || j.estado_verificacion === 'no_permitido') {
@@ -120,7 +120,8 @@ export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoVali
     }
   }
 
-  const errGenero = errorGeneros(categoria.genero, jugadores.map((j) => j.genero))
+  // En el Mixto entra cualquiera de los dos géneros; la dupla se revisa al formarla.
+  const errGenero = categoria.genero === 'mixto' ? null : errorGeneros(categoria.genero, jugadores.map((j) => j.genero))
   if (errGenero) return { ok: false, error: errGenero }
 
   for (const j of jugadores) {
@@ -140,7 +141,8 @@ export function validarInscripcion(d: DatosValidacionInscripcion): ResultadoVali
     }
   }
 
-  if (d.ocupados >= categoria.cupo) return { ok: false, error: 'La categoría ya no tiene cupo' }
+  // En dobles el cupo es de parejas: cada una ocupa dos inscripciones.
+  if (d.ocupados >= cupoInscripciones(categoria)) return { ok: false, error: 'La categoría ya no tiene cupo' }
 
   return { ok: true, provisionales: jugadores.filter((j) => !j.categoria_torneo).map((j) => j.id) }
 }
@@ -154,11 +156,13 @@ export function mensajeErrorBaseInscripcion(mensaje: string): string | null {
     'La categoría ya no tiene cupo',
     'El jugador ya está inscrito en esta categoría',
     'Un jugador puede inscribirse en máximo 2 categorías del torneo',
-    'Una inscripción de dobles necesita pareja',
-    'Una inscripción de single no lleva pareja',
+    'Cada jugador se inscribe por separado: la pareja se forma aparte',
+    'La categoría ya tiene todas sus parejas',
+    'Uno de los jugadores ya está en una dupla de esta categoría',
+    'El Mixto es para una pareja de un caballero y una dama',
     'La edad del menor no corresponde a la categoría',
     'El género del menor no corresponde a la categoría',
-    'El torneo es solo para socios: falta el N.º de acción del menor',
+    'El torneo es solo para socios: falta la autorización del admin como invitado / wild card',
     'El menor ya está inscrito en esta categoría',
     'Un menor puede inscribirse en máximo 2 categorías del torneo',
     'Un menor solo puede inscribirse en una categoría infantil',
@@ -179,12 +183,17 @@ export type Pendiente =
   | { tipo: 'categoria_incompatible'; jugadorId: string } // la oficial no admite esta categoría
   // Infantil (lib/torneoInfantil.ts): jugadorId = id del menor.
   | { tipo: 'categoria_por_certificar'; jugadorId: string }
+  // Torneo solo para socios: un invitado (o menor sin N.º de acción) necesita
+  // la autorización del admin como invitado / wild card.
+  | { tipo: 'invitado_por_autorizar'; jugadorId: string }
 
 export type DatosEstadoInscripcion = {
   estado: EstadoInscripcion
   nivelCategoria: Nivel | null
-  jugadores: { id: string; categoria_torneo: string | null }[]
+  jugadores: { id: string; categoria_torneo: string | null; es_invitado: boolean }[]
   pagos: { jugador_id: string; validado: boolean }[]
+  soloSocios: boolean
+  invitadoAutorizado: boolean   // torneo_inscripciones.invitado_autorizado_at
 }
 
 export function pendientesInscripcion(d: DatosEstadoInscripcion): Pendiente[] {
@@ -196,6 +205,7 @@ export function pendientesInscripcion(d: DatosEstadoInscripcion): Pendiente[] {
     }
     if (!j.categoria_torneo) pendientes.push({ tipo: 'categoria', jugadorId: j.id })
     else if (!nivelAdmitido(d.nivelCategoria, j.categoria_torneo)) pendientes.push({ tipo: 'categoria_incompatible', jugadorId: j.id })
+    if (d.soloSocios && j.es_invitado && !d.invitadoAutorizado) pendientes.push({ tipo: 'invitado_por_autorizar', jugadorId: j.id })
   }
   return pendientes
 }
@@ -215,6 +225,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
       case 'categoria': return 'Falta que el admin confirme tu categoría'
       case 'categoria_incompatible': return 'Tu categoría oficial no corresponde a esta categoría'
       case 'categoria_por_certificar': return 'Falta que el admin certifique la categoría'
+      case 'invitado_por_autorizar': return 'Eres invitado: falta que el admin te autorice (invitado / wild card)'
     }
   }
   switch (p.tipo) {
@@ -223,6 +234,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
     case 'categoria': return `Falta confirmar la categoría de ${nombre}`
     case 'categoria_incompatible': return `La categoría oficial de ${nombre} no corresponde a esta categoría`
     case 'categoria_por_certificar': return `Falta certificar la categoría de ${nombre}`
+    case 'invitado_por_autorizar': return `${nombre} no es socio: falta autorizarlo como invitado / wild card`
   }
 }
 

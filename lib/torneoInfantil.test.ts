@@ -126,9 +126,8 @@ describe('validarInscripcionMenor', () => {
   it('género', () => {
     expect(error({ categoria: { ...verde, genero: 'caballeros', cupo: 16, es_infantil: true, inscripciones_abiertas: true } })).toMatch(/solo para niños/)
   })
-  it('solo socios exige N.º de acción', () => {
-    expect(error({ soloSocios: true })).toMatch(/solo para socios/)
-    expect(error({ soloSocios: true, menor: { ...datos().menor, numero_accion: '123' } })).toBeNull()
+  it('solo socios: sin N.º de acción igual se inscribe (queda pendiente de autorización)', () => {
+    expect(error({ soloSocios: true })).toBeNull()
   })
   it('máximo 2 categorías y sin repetir', () => {
     expect(error({ categoriasDelMenor: ['ver'] })).toMatch(/ya está inscrito en Pelota Verde/)
@@ -139,7 +138,7 @@ describe('validarInscripcionMenor', () => {
 })
 
 describe('estado de la inscripción del menor', () => {
-  const base = { estado: 'pendiente_pago' as const, menorId: 'm1', representanteJugadorId: 'rep', certificada: true, pagos: [] as { jugador_id: string; validado: boolean }[] }
+  const base = { estado: 'pendiente_pago' as const, menorId: 'm1', representanteJugadorId: 'rep', certificada: true, pagos: [] as { jugador_id: string; validado: boolean }[], soloSocios: true, menorConAccion: true, invitadoAutorizado: false }
 
   it('confirmada con pago del representante validado y categoría certificada', () => {
     expect(estadoInscripcionMenorCalculado({ ...base, pagos: [{ jugador_id: 'rep', validado: true }] })).toBe('confirmada')
@@ -153,6 +152,11 @@ describe('estado de la inscripción del menor', () => {
     expect(pendientesInscripcionMenor({ ...base, pagos: [{ jugador_id: 'otro', validado: true }] }).map((p) => p.tipo)).toEqual(['pago'])
   })
   it('la retirada no se toca', () => expect(estadoInscripcionMenorCalculado({ ...base, estado: 'retirada' })).toBe('retirada'))
+  it('solo socios: un menor sin N.º de acción necesita la autorización del admin (invitado / wild card)', () => {
+    const pagado = { ...base, menorConAccion: false, pagos: [{ jugador_id: 'rep', validado: true }] }
+    expect(pendientesInscripcionMenor(pagado).map((p) => p.tipo)).toEqual(['invitado_por_autorizar'])
+    expect(estadoInscripcionMenorCalculado({ ...pagado, invitadoAutorizado: true })).toBe('confirmada')
+  })
 })
 
 describe('ficha del menor', () => {

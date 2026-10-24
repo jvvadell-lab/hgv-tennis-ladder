@@ -7,6 +7,7 @@ import {
 } from '@/lib/reservas'
 import { sumarDiasEnCaracas, finDelDiaEnCaracas, formatearHora, formatearFechaCorta } from '@/lib/tiempo'
 import { buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
+import { bloqueoPorInvitado } from '@/lib/invitados'
 
 const CANCHAS_VALIDAS = ['HGV1', 'HGV2']
 
@@ -56,6 +57,10 @@ export async function POST(request: Request) {
     }
 
     const db = supabaseServer()
+
+    // Invitado sin habilitar: solo torneos (escalera, retos y reservas son para socios).
+    const bloqueoInvitado = await bloqueoPorInvitado(db, session.id)
+    if (bloqueoInvitado) return NextResponse.json({ error: bloqueoInvitado }, { status: 403 })
 
     // Traemos las reservas recientes del jugador (últimos días + próximas), para
     // revisar tanto si tiene una sin resolver, como si le toca esperar alguna penalidad.

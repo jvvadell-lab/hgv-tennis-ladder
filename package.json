@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:staging": "tsx scripts/dev-staging.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "simular": "tsx scripts/simular-torneo.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.1",
@@ -31,6 +33,7 @@
     "eslint-config-next": "16.2.10",
     "sharp": "^0.35.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }

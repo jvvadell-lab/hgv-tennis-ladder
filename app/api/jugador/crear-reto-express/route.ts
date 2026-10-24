@@ -9,6 +9,7 @@ import {
 } from '@/lib/escaleraExpress'
 import { buscarBloqueoCancha, mensajeBloqueo } from '@/lib/choquesCancha'
 import { DURACION_RETO_MIN } from '@/lib/reservas'
+import { bloqueoPorInvitado } from '@/lib/invitados'
 
 // Crea un reto de Escalera Express: horario y cancha fijos (elegidos de una lista
 // cerrada, no un datetime libre), rango ampliado a 5 posiciones, y siempre para
@@ -38,6 +39,10 @@ export async function POST(request: Request) {
     }
 
     const db = supabaseServer()
+
+    // Invitado sin habilitar: solo torneos (escalera, retos y reservas son para socios).
+    const bloqueoInvitado = await bloqueoPorInvitado(db, session.id)
+    if (bloqueoInvitado) return NextResponse.json({ error: bloqueoInvitado }, { status: 403 })
 
     const { data: temporada, error: errTemp } = await db
       .from('temporadas')

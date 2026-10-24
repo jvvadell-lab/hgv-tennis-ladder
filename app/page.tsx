@@ -6,7 +6,7 @@ import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 
 type Session = {
-  role: 'admin' | 'jugador'
+  role: 'admin' | 'jugador' | 'academia'
   id: string
   nombre: string
 } | null
@@ -327,6 +327,19 @@ export default function Home() {
         }}>
           Galería
         </Link>
+        <Link href="/torneo" style={{
+          backgroundColor: 'transparent',
+          color: 'var(--color-chalk)',
+          padding: '14px 30px',
+          borderRadius: '4px',
+          textDecoration: 'none',
+          fontWeight: 700,
+          fontSize: '15px',
+          fontFamily: 'var(--font-body)',
+          border: '1px solid rgba(247,243,234,0.4)',
+        }}>
+          🎄 Torneo Navidad
+        </Link>
         <Link href="/reservas" style={{
           backgroundColor: 'transparent',
           color: 'var(--color-chalk)',
@@ -341,7 +354,21 @@ export default function Home() {
           Reservar Cancha
         </Link>
         {!checking && session ? (
-          session.role === 'admin' && (
+          session.role === 'academia' ? (
+            <Link href="/academia" style={{
+              backgroundColor: 'transparent',
+              color: 'var(--color-chalk)',
+              padding: '14px 30px',
+              borderRadius: '4px',
+              textDecoration: 'none',
+              fontWeight: 700,
+              fontSize: '15px',
+              fontFamily: 'var(--font-body)',
+              border: '1px solid rgba(247,243,234,0.4)',
+            }}>
+              Horario academia
+            </Link>
+          ) : session.role === 'admin' && (
             <Link href="/admin" style={{
               backgroundColor: 'transparent',
               color: 'var(--color-chalk)',

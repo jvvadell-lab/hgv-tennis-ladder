@@ -1,0 +1,53 @@
+# Migraciones aplicadas en PRODUCCIÓN (supabase_migrations.schema_migrations
+# de znfsxpmmlxezzeasjtqa al 22-oct-2026): versión y nombre. Su efecto ya
+# viene en esquema-produccion.sql, así que scripts/staging-db.sh solo las
+# registra como aplicadas y aplica encima las del repo que NO están aquí.
+# Actualizar este archivo (y el esquema) cuando se aplique una migración en prod.
+20260817201936 create_plantillas_flyer
+20260820134134 allow_null_posicion_before_sorteo
+20260820140106 unique_jugador_por_temporada_ladder
+20260820144547 cerrar_insert_directo_retos
+20260820213149 crear_tabla_notificaciones
+20260820221158 cerrar_insert_directo_reservas
+20260831142541 jugadores_ocupados_unico_reto_activo
+20260831210452 retiro_y_sets_estructurados
+20260831212001 cerrar_insert_directo_resultados
+20260903012745 retirar_de_escalafon_renumera
+20260909200930 retos_add_estado_cancelado
+20260909201500 retos_un_rechazo_por_temporada
+20260910014253 escalera_express
+20260910183622 retos_recordatorios_resultado
+20260913134258 fix_ascender_ganador_escalera_express
+20260914164013 retos_multiples_rechazos_con_penalidad
+20260917154735 retos_historial_reagendado
+20260922170523 temporadas_cooldown_pausado
+20260929162024 delegacion_pagos
+20260929165322 delegacion_referencia_obligatoria
+20260929170442 delegacion_lotes_uniforme
+20260930133350 reservas_cancha_sin_solapes
+20260930152547 tasas_bcv_precios_prendas
+20260930190446 reservas_confirmacion_geo
+20261001133529 uniformes_variantes_prendas
+20261001141345 bloqueos_cancha
+20261009134131 uniformes_chaqueta_dama
+20261015125712 delegacion_telefono_externo
+20261015144946 delegacion_socio_no_registrado
+20261016160045 torneo_navidad
+20261017161637 torneo_fase3_inscripcion
+20261017161705 torneo_navidad_2026_datos
+20261019193627 torneo_infantil
+20261019193641 torneo_infantil_datos
+20261022124304 jugadores_cerrar_columnas_anon
+20261023131159 uniformes_linea
+20261023142847 cerrar_notificaciones_permisos_flyer
+20261023143110 torneo_sorteo
+# Aplicada a mano desde el SQL Editor (no quedó registrada en prod), pero su
+# efecto sí está en el esquema:
+manual allow_usada_estado_reservas_cancha
+20261023183737 torneo_inscripciones_por_categoria
+20261024033820 torneo_programacion
+20261024033920 invitados_wild_card
+20261024033946 torneo_resultados
+20261024034140 torneo_inscripcion_individual
+20261024034209 torneo_navidad_fechas
+20261024034239 torneo_cierre_y_lista_espera

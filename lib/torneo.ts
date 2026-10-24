@@ -94,6 +94,16 @@ export type Torneo = {
   monto_inscripcion_eur: number
   fecha_corte_edad: string | null  // edad de los menores; null = 31-dic del año de fecha_inicio
   solo_socios: boolean
+  sorteo_metodo: 'bombos' | 'serpentina' | null
+  sorteo_publicado_por: string | null
+  sorteo_publicado_at: string | null
+  programacion_publicada_at: string | null
+  programacion_publicada_por: string | null
+  // Cierre de inscripciones (cuenta regresiva y vencimiento de las
+  // invitaciones de dobles). El cierre en sí lo hace el admin a mano.
+  cierre_inscripciones_at: string | null
+  fecha_sorteo: string | null   // 'YYYY-MM-DD', informativa
+  cierre_vencido_avisado_at: string | null   // aviso a los admins de categorías abiertas tras el cierre programado
   created_at: string
 }
 
@@ -120,6 +130,13 @@ export type TorneoCategoria = {
   inscripciones_abiertas: boolean          // además del torneo en 'inscripcion'
   inscripciones_cambiadas_por: string | null
   inscripciones_cambiadas_at: string | null
+  // Sorteo por categoría; cancelada = no se sortea (fusionada_en = destino).
+  sorteo_metodo: 'bombos' | 'serpentina' | null
+  sorteo_publicado_por: string | null
+  sorteo_publicado_at: string | null
+  cancelada_at: string | null
+  cancelada_por: string | null
+  fusionada_en: string | null
   created_at: string
 }
 
@@ -127,15 +144,28 @@ export type TorneoInscripcion = {
   id: string
   categoria_id: string
   jugador1_id: string | null    // null si es de un menor
-  jugador2_id: string | null    // null en single
+  jugador2_id: string | null    // siempre null: cada jugador se inscribe solo (la dupla es torneo_equipos)
   menor_id: string | null       // inscripción infantil (SPEC §14)
   menor_nombre_publico: string | null
   categoria_certificada_por: string | null
   categoria_certificada_at: string | null
   inscrita_por_admin: string | null
-  siembra: number | null
   estado: EstadoInscripcion
   inscrita_por: string | null
+  created_at: string
+}
+
+// Competidor del cuadro: la dupla en dobles, una inscripción en single e
+// infantil (se crea sola). Grupos y partidos apuntan aquí.
+export type TorneoEquipo = {
+  id: string
+  categoria_id: string
+  inscripcion1_id: string
+  inscripcion2_id: string | null
+  estado: 'activo' | 'disuelto'
+  origen: 'individual' | 'invitacion' | 'admin'
+  siembra: number | null
+  bombo: number | null          // sorteo por bombos (SPEC §3)
   created_at: string
 }
 
@@ -147,7 +177,7 @@ export type TorneoGrupo = {
 
 export type TorneoGrupoMiembro = {
   grupo_id: string
-  inscripcion_id: string
+  equipo_id: string
   siembra: number
   desempate_manual: number | null
 }
@@ -160,22 +190,23 @@ export type TorneoPartido = {
   orden: number
   origen_a: string | null       // '1A', '2B', 'G:C1'…
   origen_b: string | null
-  inscripcion_a: string | null  // j1 en `sets`
-  inscripcion_b: string | null  // j2 en `sets`
+  equipo_a: string | null  // j1 en `sets`
+  equipo_b: string | null  // j2 en `sets`
   cancha: CanchaTorneo | null
   fecha_hora: string | null
   estado: EstadoPartido
   sets: SetJugado[] | null
   tipo_resultado: TipoResultado
-  retirada_inscripcion_id: string | null
-  ganador_inscripcion_id: string | null
-  wo_ausente_inscripcion_id: string | null
+  retirada_equipo_id: string | null
+  ganador_equipo_id: string | null
+  wo_ausente_equipo_id: string | null
   reportado_por: string | null
   reportado_at: string | null
   validado: boolean
   validado_at: string | null
   validado_por: string | null
   bloqueo_id: string | null
+  handicap_equipo_id: string | null   // Mixto: pareja que empieza cada game 15-0 (SPEC §4.1)
   created_at: string
 }
 
@@ -253,10 +284,16 @@ export type PartidoLlave = {
 export type Origen =
   | { tipo: 'grupo'; puesto: number; letra: string }   // '1A' = 1º del grupo A
   | { tipo: 'ganador'; codigo: string }                // 'G:C1' = ganador de C1
+  // Llave de 3 grupos (cuartos con 2 byes): se conocen al cerrar TODOS los
+  // grupos. 'P1' = el mejor de los primeros; '2P1' = el 2º del grupo de P1.
+  | { tipo: 'mejor_primero'; k: number }
+  | { tipo: 'segundo_de_mejor'; k: number }
 
 export function parsearOrigen(origen: string): Origen | null {
   const pos = origen.match(/^([1-9])([A-Z])$/)
   if (pos) return { tipo: 'grupo', puesto: Number(pos[1]), letra: pos[2] }
+  const mejor = origen.match(/^(2?)P([1-9])$/)
+  if (mejor) return mejor[1] ? { tipo: 'segundo_de_mejor', k: Number(mejor[2]) } : { tipo: 'mejor_primero', k: Number(mejor[2]) }
   const gan = origen.match(/^G:([CSF][1-9]\d*)$/)
   if (gan) return { tipo: 'ganador', codigo: gan[1] }
   return null
@@ -271,14 +308,30 @@ const FASES_LLAVE: FaseLlave[] = ['cuartos', 'semis', 'final']
 // a los ganadores en orden (S1 = G:C1 vs G:C2…).
 //   4 grupos (cuartos): C1 = 1A-2B · C2 = 1C-2D · C3 = 1B-2A · C4 = 1D-2C
 //   2 grupos (semis):   S1 = 1A-2B · S2 = 1B-2A
-export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde): PartidoLlave[] {
-  const esperados: Record<LlaveDesde, number> = { cuartos: 4, semis: 2 }
+//   1 grupo (final):    F1 = 1A-2A (3–5 inscritos, SPEC §3)
+//   3 grupos (cuartos con 2 byes, 9–11 inscritos): los dos mejores primeros
+//   pasan directo a semis, en los extremos; el 3º de los primeros juega con
+//   el 2º del grupo de P2, y los 2º de los grupos de P1 y P3 entre sí. Así
+//   dos del mismo grupo siempre quedan en mitades opuestas:
+//     C1 = P3-2P2 · C2 = 2P1-2P3 · S1 = P1 vs G:C1 · S2 = P2 vs G:C2
+export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde | 'final'): PartidoLlave[] {
+  if (numGrupos === 3 && llaveDesde === 'cuartos') {
+    return [
+      { fase: 'cuartos', orden: 1, codigo: 'C1', origen_a: 'P3', origen_b: '2P2' },
+      { fase: 'cuartos', orden: 2, codigo: 'C2', origen_a: '2P1', origen_b: '2P3' },
+      { fase: 'semis', orden: 1, codigo: 'S1', origen_a: 'P1', origen_b: 'G:C1' },
+      { fase: 'semis', orden: 2, codigo: 'S2', origen_a: 'P2', origen_b: 'G:C2' },
+      { fase: 'final', orden: 1, codigo: 'F1', origen_a: 'G:S1', origen_b: 'G:S2' },
+    ]
+  }
+  const esperados: Record<LlaveDesde | 'final', number> = { cuartos: 4, semis: 2, final: 1 }
   if (numGrupos !== esperados[llaveDesde]) {
     throw new Error(`Una llave desde ${llaveDesde} necesita ${esperados[llaveDesde]} grupos (con 1º y 2º clasificados); hay ${numGrupos}`)
   }
 
   const primera: [string, string][] = []
-  for (const puestoA of [0, 1]) {
+  if (llaveDesde === 'final') primera.push(['1A', '2A'])
+  else for (const puestoA of [0, 1]) {
     for (let g = 0; g < numGrupos; g += 2) {
       // puestoA = 0: 1(par) vs 2(impar) · puestoA = 1: 1(impar) vs 2(par)
       const uno = letraGrupo(g + puestoA)
@@ -301,6 +354,45 @@ export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde): Partido
   return partidos
 }
 
+// Texto de un origen para mostrar mientras el partido no tiene rivales.
+export function textoOrigen(origen: string | null): string {
+  const o = origen ? parsearOrigen(origen) : null
+  if (!o) return origen ?? '—'
+  if (o.tipo === 'grupo') return `${o.puesto}º ${o.letra}`
+  if (o.tipo === 'ganador') return `Gan. ${o.codigo}`
+  if (o.tipo === 'mejor_primero') return `${o.k}º mejor 1º`
+  return `2º del grupo del ${o.k}º mejor 1º`
+}
+
+// Orden de los primeros de grupos de distinto tamaño (llave de 3 grupos):
+// promedio por partido de lo que mira la tabla del grupo — partidos
+// ganados, diferencia de sets, diferencia de games. Si dos siguen iguales
+// en todo, decide el admin (como el desempate de grupo, §7.4): `manual` es
+// el orden de letras que fijó (torneo_categorias.orden_primeros_manual).
+// Sin él, `empatados` trae las letras que faltan desempatar y el orden es
+// provisional (por letra).
+export function ordenarPrimeros<F extends Pick<FilaTabla, 'pj' | 'pg' | 'sets_favor' | 'sets_contra' | 'games_favor' | 'games_contra'>>(
+  primeros: { letra: string; fila: F }[],
+  manual: string[] | null = null,
+): { orden: { letra: string; fila: F }[]; empatados: string[] } {
+  const prom = (n: number, pj: number) => (pj ? n / pj : 0)
+  const criterios = (x: { fila: F }) => [
+    prom(x.fila.pg, x.fila.pj),
+    prom(x.fila.sets_favor - x.fila.sets_contra, x.fila.pj),
+    prom(x.fila.games_favor - x.fila.games_contra, x.fila.pj),
+  ]
+  const empatados = new Set<string>()
+  const orden = [...primeros].sort((x, y) => {
+    const cx = criterios(x), cy = criterios(y)
+    for (let i = 0; i < cx.length; i++) if (cy[i] !== cx[i]) return cy[i] - cx[i]
+    const mx = manual?.indexOf(x.letra) ?? -1, my = manual?.indexOf(y.letra) ?? -1
+    if (mx >= 0 && my >= 0) return mx - my
+    empatados.add(x.letra).add(y.letra)
+    return x.letra.localeCompare(y.letra)
+  })
+  return { orden, empatados: [...empatados].sort() }
+}
+
 // ---------------------------------------------------------------------------
 // Marcador
 // ---------------------------------------------------------------------------
@@ -313,7 +405,7 @@ export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde): Partido
 //  * 1-1 en sets → el 3º es obligatorio y es Super Tiebreak;
 //  * 2-0 → no hay 3º.
 // Con retiro se admite lo realmente jugado hasta el momento del retiro.
-// j1 = inscripcion_a, j2 = inscripcion_b.
+// j1 = equipo_a, j2 = equipo_b.
 export function validarMarcadorTorneo(sets: unknown, tipoResultado: TipoResultado): string | null {
   const error = validarSets(sets, tipoResultado)
   if (error) return error
@@ -342,14 +434,14 @@ export function validarMarcadorTorneo(sets: unknown, tipoResultado: TipoResultad
 
 export type PartidoParaTabla = Pick<
   TorneoPartido,
-  | 'inscripcion_a' | 'inscripcion_b' | 'estado' | 'validado' | 'sets' | 'tipo_resultado'
-  | 'retirada_inscripcion_id' | 'ganador_inscripcion_id' | 'wo_ausente_inscripcion_id'
+  | 'equipo_a' | 'equipo_b' | 'estado' | 'validado' | 'sets' | 'tipo_resultado'
+  | 'retirada_equipo_id' | 'ganador_equipo_id' | 'wo_ausente_equipo_id'
 >
 
-export type MiembroParaTabla = Pick<TorneoGrupoMiembro, 'inscripcion_id' | 'desempate_manual'>
+export type MiembroParaTabla = Pick<TorneoGrupoMiembro, 'equipo_id' | 'desempate_manual'>
 
 export type FilaTabla = {
-  inscripcion_id: string
+  equipo_id: string
   posicion: number
   pj: number
   pg: number
@@ -358,27 +450,33 @@ export type FilaTabla = {
   sets_contra: number
   games_favor: number
   games_contra: number
+  // Puntos de los súper tie-breaks jugados: no cuentan para el orden (el
+  // STB vale 1 set y 1-0 en games), quedan para revisar un empate (SPEC §7).
+  stb_puntos_favor: number
+  stb_puntos_contra: number
   // true si quedó empatada con otra(s) en todos los criterios y falta el
   // sorteo del admin (desempate_manual) — la posición mostrada es provisional.
   requiere_sorteo: boolean
 }
 
-type Conteo = { setsA: number; setsB: number; gamesA: number; gamesB: number }
+type Conteo = { setsA: number; setsB: number; gamesA: number; gamesB: number; stbA: number; stbB: number }
 
-// Sets y games de un partido validado, desde el lado de inscripcion_a.
+// Sets y games de un partido validado, desde el lado de equipo_a.
 //  * WO: el presente gana 2-0 en sets y 12-0 en games (6-0, 6-0). [CONFIRMAR]
 //  * Doble WO: no suma sets ni games a nadie.
-//  * Súper tie-break: 1 set y 1-0 en games para quien lo gana — no se
-//    suman sus puntos. [CONFIRMAR]
+//  * Súper tie-break: 1 set y 1-0 en games para quien lo gana — sus puntos
+//    no se suman a los games; se registran aparte (stb_puntos_*) para
+//    revisar los empates (aprobado 20-oct-2026).
 //  * Retiro: se cuenta lo jugado y se le completa el partido al ganador:
 //    el set interrumpido lo cierra él (6-x, o 7-5 / 7-6 si el rival ya
 //    tenía 5 o 6), y los sets que falten van 6-0 (o Súper tie-break 1-0
-//    si ya estaban 1-1). [CONFIRMAR con la Comisión]
+//    si ya estaban 1-1). Aprobado 20-oct-2026: el partido va a favor de la
+//    otra dupla, con lo jugado + lo que falta completado.
 function conteoPartido(p: PartidoParaTabla): Conteo {
-  const c: Conteo = { setsA: 0, setsB: 0, gamesA: 0, gamesB: 0 }
+  const c: Conteo = { setsA: 0, setsB: 0, gamesA: 0, gamesB: 0, stbA: 0, stbB: 0 }
   if (p.estado === 'doble_wo') return c
   if (p.estado === 'wo') {
-    if (p.ganador_inscripcion_id === p.inscripcion_a) { c.setsA = 2; c.gamesA = 12 } else { c.setsB = 2; c.gamesB = 12 }
+    if (p.ganador_equipo_id === p.equipo_a) { c.setsA = 2; c.gamesA = 12 } else { c.setsB = 2; c.gamesB = 12 }
     return c
   }
 
@@ -390,6 +488,8 @@ function conteoPartido(p: PartidoParaTabla): Conteo {
     if (s.es_super_tiebreak) {
       if (ganaA) c.gamesA++
       else c.gamesB++
+      c.stbA += s.games_j1
+      c.stbB += s.games_j2
     } else {
       c.gamesA += s.games_j1
       c.gamesB += s.games_j2
@@ -398,7 +498,7 @@ function conteoPartido(p: PartidoParaTabla): Conteo {
 
   if (p.tipo_resultado !== 'retiro') return c
 
-  const ganaA = p.ganador_inscripcion_id === p.inscripcion_a
+  const ganaA = p.ganador_equipo_id === p.equipo_a
   const sumar = (setsGanador: number, gamesGanador: number, gamesPerdedor: number) => {
     if (ganaA) { c.setsA += setsGanador; c.gamesA += gamesGanador; c.gamesB += gamesPerdedor }
     else { c.setsB += setsGanador; c.gamesB += gamesGanador; c.gamesA += gamesPerdedor }
@@ -437,39 +537,42 @@ function conteoPartido(p: PartidoParaTabla): Conteo {
 export function ordenarGrupo(partidos: PartidoParaTabla[], miembros: MiembroParaTabla[]): FilaTabla[] {
   const filas = new Map<string, Omit<FilaTabla, 'posicion' | 'requiere_sorteo'>>()
   for (const m of miembros) {
-    filas.set(m.inscripcion_id, {
-      inscripcion_id: m.inscripcion_id, pj: 0, pg: 0, pp: 0,
+    filas.set(m.equipo_id, {
+      equipo_id: m.equipo_id, pj: 0, pg: 0, pp: 0,
       sets_favor: 0, sets_contra: 0, games_favor: 0, games_contra: 0,
+      stb_puntos_favor: 0, stb_puntos_contra: 0,
     })
   }
 
   const contados = partidos.filter(
     (p) => p.validado && ['jugado', 'wo', 'doble_wo'].includes(p.estado) &&
-      p.inscripcion_a != null && p.inscripcion_b != null &&
-      filas.has(p.inscripcion_a) && filas.has(p.inscripcion_b),
+      p.equipo_a != null && p.equipo_b != null &&
+      filas.has(p.equipo_a) && filas.has(p.equipo_b),
   )
 
   for (const p of contados) {
-    const a = filas.get(p.inscripcion_a!)!
-    const b = filas.get(p.inscripcion_b!)!
+    const a = filas.get(p.equipo_a!)!
+    const b = filas.get(p.equipo_b!)!
     const c = conteoPartido(p)
     a.pj++; b.pj++
-    if (p.ganador_inscripcion_id === p.inscripcion_a) { a.pg++; b.pp++ }
-    else if (p.ganador_inscripcion_id === p.inscripcion_b) { b.pg++; a.pp++ }
+    if (p.ganador_equipo_id === p.equipo_a) { a.pg++; b.pp++ }
+    else if (p.ganador_equipo_id === p.equipo_b) { b.pg++; a.pp++ }
     else { a.pp++; b.pp++ }
     a.sets_favor += c.setsA; a.sets_contra += c.setsB; a.games_favor += c.gamesA; a.games_contra += c.gamesB
     b.sets_favor += c.setsB; b.sets_contra += c.setsA; b.games_favor += c.gamesB; b.games_contra += c.gamesA
+    a.stb_puntos_favor += c.stbA; a.stb_puntos_contra += c.stbB
+    b.stb_puntos_favor += c.stbB; b.stb_puntos_contra += c.stbA
   }
 
-  const manual = new Map(miembros.map((m) => [m.inscripcion_id, m.desempate_manual]))
+  const manual = new Map(miembros.map((m) => [m.equipo_id, m.desempate_manual]))
   const sinResolver = new Set<string>()
 
   // Ganador del partido entre dos inscripciones, o null si no hay uno decidido.
   const directo = (x: string, y: string): string | null => {
     const p = contados.find(
-      (q) => (q.inscripcion_a === x && q.inscripcion_b === y) || (q.inscripcion_a === y && q.inscripcion_b === x),
+      (q) => (q.equipo_a === x && q.equipo_b === y) || (q.equipo_a === y && q.equipo_b === x),
     )
-    const g = p?.ganador_inscripcion_id
+    const g = p?.ganador_equipo_id
     return g === x || g === y ? g : null
   }
 

@@ -22,6 +22,12 @@ export async function POST(request: Request) {
       .eq('email', email)
       .maybeSingle()
 
+    if (admin && admin.pin === pin && admin.nivel === 'academia') {
+      // El profesor de la academia: rol propio, solo ve /academia.
+      await crearSession({ role: 'academia', id: admin.id, nombre: admin.nombre, nivel: 'academia' })
+      return NextResponse.json({ role: 'academia', nombre: admin.nombre, nivel: 'academia' })
+    }
+
     if (admin && admin.pin === pin) {
       await crearSession({ role: 'admin', id: admin.id, nombre: admin.nombre, nivel: admin.nivel || 'completo' })
       return NextResponse.json({ role: 'admin', nombre: admin.nombre, nivel: admin.nivel || 'completo' })

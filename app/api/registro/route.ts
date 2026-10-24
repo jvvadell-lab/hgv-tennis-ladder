@@ -2,6 +2,7 @@ import { NextResponse, after } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { validarRegistro } from '@/lib/registro'
 import { enviarCorreoBienvenida, verificarCarnetRegistro } from '@/lib/registroServidor'
+import { vincularInvitacionesPorTelefono } from '@/lib/torneoDoblesServidor'
 
 const MENSAJE_EMAIL_DUPLICADO =
   'Ya existe un jugador registrado con ese correo. Si es tuyo, usa "¿Olvidaste tu PIN?" en la página de inicio de sesión.'
@@ -14,12 +15,10 @@ const MENSAJE_EMAIL_DUPLICADO =
 export async function POST(request: Request) {
   try {
     const entrada = await request.json().catch(() => null)
-    const resultado = validarRegistro(entrada, { supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '' })
+    const resultado = validarRegistro(entrada, { supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '', permitirInvitado: true })
     if (!resultado.ok) return NextResponse.json({ error: resultado.error }, { status: 400 })
-    // es_invitado llega con la rama del torneo: hasta que esa columna exista,
-    // permitirInvitado queda apagado, validarRegistro rechaza el registro como
-    // invitado y la columna solo se manda cuando es true.
-    const { es_invitado, ...datos } = resultado.datos
+    // Invitado (no socio): sin N.º de acción ni carné (lib/invitados.ts).
+    const datos = resultado.datos
 
     const db = supabaseServer()
 
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
     // token se genera aquí y solo viaja en el correo de bienvenida.
     const { data: nuevo, error } = await db
       .from('jugadores')
-      .insert([{ ...datos, ...(es_invitado ? { es_invitado } : {}), activo: true, token_verificacion: crypto.randomUUID() }])
+      .insert([{ ...datos, activo: true, token_verificacion: crypto.randomUUID() }])
       .select('id')
       .single()
     if (error) {
@@ -49,6 +48,8 @@ export async function POST(request: Request) {
       await Promise.allSettled([
         enviarCorreoBienvenida(db, nuevo.id),
         verificarCarnetRegistro(db, nuevo.id),
+        // Invitaciones a formar dupla en el torneo hechas a su teléfono antes de que tuviera cuenta.
+        vincularInvitacionesPorTelefono(db, nuevo.id, datos.telefono),
       ]).then((r) => r.forEach((x) => x.status === 'rejected' && console.error('[registro] después del alta:', x.reason)))
     })
 

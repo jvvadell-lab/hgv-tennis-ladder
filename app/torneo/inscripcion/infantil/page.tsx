@@ -183,7 +183,13 @@ export default function InscripcionInfantil() {
             )}
 
             {torneo?.estado === 'inscripcion' && datos.representados.length > 0 && <FormInscribir datos={datos} onCambio={cargar} />}
-            {torneo && torneo.estado === 'borrador' && <Aviso tipo="info">Las inscripciones abrirán pronto. Ya puedes dejar lista la ficha de tu hijo/a.</Aviso>}
+            {torneo && torneo.estado === 'borrador' && (
+              <Aviso tipo="info">
+                {datos.representados.some((m: any) => m.inscripciones?.some((i: any) => i.estado !== 'retirada'))
+                  ? 'Las inscripciones están cerradas. Si te falta, todavía puedes reportar el pago.'
+                  : 'Las inscripciones abrirán pronto. Ya puedes dejar lista la ficha de tu hijo/a.'}
+              </Aviso>
+            )}
             {!torneo && <Aviso tipo="info">No hay un torneo en organización por ahora.</Aviso>}
           </>
         )}
@@ -326,7 +332,7 @@ function FormFicha({ ficha, onCancelar, onListo }: { ficha: Representado | null;
             {PARENTESCOS.map((p) => <option key={p} value={p}>{ETIQUETA_PARENTESCO[p]}</option>)}
           </select>
         </div>
-        <div><label style={labelStyle}>N.º de acción (opcional)</label><input {...campo('numero_accion')} style={inputStyle} /></div>
+        <div><label style={labelStyle}>N.º de acción del socio (sin acción entra como invitado, si el admin lo autoriza)</label><input {...campo('numero_accion')} style={inputStyle} /></div>
       </div>
       <p style={{ ...labelStyle, margin: '14px 0 6px 0' }}>Contacto de emergencia</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
