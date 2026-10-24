@@ -144,6 +144,7 @@ export async function GET() {
           } : null,
           candidatos: pareja ? [] : candidatosPareja({
             yo: yo as JugadorDobles, categoria, jugadores: (candidatos || []) as JugadorDobles[], estadoEnCategoria, esperandoA, categoriasDe,
+            meInvitaron: new Set(recibidas.filter((v) => v.categoria_id === categoria.id).map((v) => insPorId.get(v.invita_inscripcion_id)?.jugador1_id).filter(Boolean)),
           }),
         }
       }

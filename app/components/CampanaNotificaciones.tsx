@@ -5,6 +5,8 @@ type Notificacion = {
   id: string
   tipo: string
   reto_id: string | null
+  torneo_invitacion_id: string | null
+  invitacion_pendiente?: boolean   // invitación a formar dupla: Aceptar / Rechazar
   mensaje: string
   leido: boolean
   created_at: string
@@ -14,6 +16,9 @@ export default function CampanaNotificaciones({ jugadorId }: { jugadorId: string
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([])
   const [noLeidas, setNoLeidas] = useState(0)
   const [abierto, setAbierto] = useState(false)
+  const [respondiendo, setRespondiendo] = useState<string | null>(null)
+  const [aviso, setAviso] = useState('')
+  const [recarga, setRecarga] = useState(0)
   const contenedorRef = useRef<HTMLSpanElement>(null)
 
   // Las notificaciones salen de /api/jugador/notificaciones (con la sesión):
@@ -45,7 +50,7 @@ export default function CampanaNotificaciones({ jugadorId }: { jugadorId: string
       clearInterval(intervalo)
       document.removeEventListener('visibilitychange', alVolver)
     }
-  }, [jugadorId])
+  }, [jugadorId, recarga])
 
   useEffect(() => {
     function alHacerClickFuera(e: MouseEvent) {
@@ -56,6 +61,22 @@ export default function CampanaNotificaciones({ jugadorId }: { jugadorId: string
     document.addEventListener('mousedown', alHacerClickFuera)
     return () => document.removeEventListener('mousedown', alHacerClickFuera)
   }, [])
+
+  async function responder(notif: Notificacion, accion: 'aceptar' | 'rechazar') {
+    setRespondiendo(notif.id); setAviso('')
+    try {
+      const res = await fetch('/api/jugador/torneo/invitaciones', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion, invitacionId: notif.torneo_invitacion_id }),
+      })
+      const data = await res.json()
+      setAviso(res.ok ? (accion === 'aceptar' ? '🤝 ¡Dupla formada!' + (data.inscripcionNueva ? ' Falta reportar tu pago.' : '') : 'Invitación rechazada') : data.error || 'No se pudo responder')
+      await marcarLeida(notif)
+      setRecarga((r) => r + 1)
+    } finally {
+      setRespondiendo(null)
+    }
+  }
 
   async function marcarLeida(notif: Notificacion) {
     if (notif.leido) return
@@ -122,8 +143,8 @@ export default function CampanaNotificaciones({ jugadorId }: { jugadorId: string
             </span>
           ) : (
             notificaciones.map((n) => (
+              <span key={n.id} style={{ display: 'block' }}>
               <a
-                key={n.id}
                 href={n.tipo?.startsWith('torneo_') ? '/torneo/inscripcion' : '/ladder'}
                 onClick={() => marcarLeida(n)}
                 style={{
@@ -151,7 +172,32 @@ export default function CampanaNotificaciones({ jugadorId }: { jugadorId: string
                   })}
                 </span>
               </a>
+              {n.invitacion_pendiente && (
+                <span style={{ display: 'flex', gap: '8px', padding: '0 14px 10px' }}>
+                  {(['aceptar', 'rechazar'] as const).map((a) => (
+                    <button
+                      key={a}
+                      disabled={respondiendo === n.id}
+                      onClick={() => responder(n, a)}
+                      style={{
+                        padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                        border: '1px solid var(--color-ball)',
+                        background: a === 'aceptar' ? 'var(--color-ball)' : 'transparent',
+                        color: a === 'aceptar' ? 'var(--color-ink)' : 'var(--color-chalk)',
+                      }}
+                    >
+                      {a === 'aceptar' ? 'Aceptar' : 'Rechazar'}
+                    </button>
+                  ))}
+                </span>
+              )}
+              </span>
             ))
+          )}
+          {aviso && (
+            <span style={{ display: 'block', color: 'var(--color-ball)', fontSize: '12px', padding: '8px 14px 12px', borderTop: '1px solid rgba(77,101,117,0.4)' }}>
+              {aviso}
+            </span>
           )}
         </span>
       )}

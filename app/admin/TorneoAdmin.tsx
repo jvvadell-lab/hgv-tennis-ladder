@@ -22,6 +22,7 @@ import {
   type Parentesco,
 } from '@/lib/torneoInfantil'
 import TorneoSorteo from './TorneoSorteo'
+import { GestionCategoria, ResumenTorneo, type EquipoAdmin, type InvitacionAdmin } from './TorneoDoblesAdmin'
 import TorneoProgramacion from './TorneoProgramacion'
 import TorneoResultados from './TorneoResultados'
 import HorarioAcademia from '@/app/components/HorarioAcademia'
@@ -82,9 +83,8 @@ type Inscripcion = {
   created_at: string
   categoria_certificada_at: string | null
   menor_nombre_publico: string | null
-  siembra: number | null
-  bombo: number | null
   invitado_autorizado_at: string | null
+  devolucion_marcada_at: string | null
   jugadores: Jugador[]
   menor: Menor | null
   pagos: Pago[]
@@ -96,13 +96,15 @@ type Categoria = {
   es_infantil: boolean; edad_min: number | null; edad_max: number | null; duracion_min: number
   plantilla_turnos: unknown | null
   inscripciones_abiertas: boolean; inscripciones_cambiadas_at: string | null; admin_cambio: { nombre: string } | null
+  sorteo_publicado_at: string | null; sorteo_metodo: 'bombos' | 'serpentina' | null; cancelada_at: string | null
+  num_grupos: number; llave_desde: string; partidos_minimos: number | null
 }
 
 type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: string | null }
 
 type TorneoAdminDatos = {
   id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number
-  fecha_corte_edad: string | null; solo_socios: boolean
+  fecha_corte_edad: string | null; solo_socios: boolean; cierre_inscripciones_at: string | null
   sorteo_metodo: 'bombos' | 'serpentina' | null; sorteo_publicado_at: string | null
 }
 
@@ -111,6 +113,8 @@ type Datos = {
   fechaCorte: string
   categorias: Categoria[]
   inscripciones: Inscripcion[]
+  equipos: EquipoAdmin[]
+  invitaciones: InvitacionAdmin[]
   disponibilidad: Disponibilidad[]
   jugadoresActivos: { id: string; nombre: string }[]
   sorteoPublicadoPor: string | null
@@ -142,6 +146,8 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [categoriaSel, setCategoriaSel] = useState<string>('todas')
   const [verRetiradas, setVerRetiradas] = useState(false)
+  // Sube con cada carga: el resumen vuelve a pedir sus contadores.
+  const [version, setVersion] = useState(0)
   const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'programacion' | 'resultados' | 'academia'>('inscripciones')
 
   const cargar = async () => {
@@ -150,6 +156,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar el torneo')
       setDatos(data)
+      setVersion((v) => v + 1)
       setError('')
     } catch (err: any) {
       setError(err.message)
@@ -234,6 +241,8 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
         </div>
       </div>
 
+      <ResumenTorneo version={version} categoriaSel={categoriaSel} onElegir={(id) => { setCategoriaSel(id); setVista('inscripciones') }} />
+
       {esAdminCompleto && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd', overflowX: 'auto' }}>
           {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['programacion', '📅 Programación'], ['resultados', '🏆 Resultados'], ['academia', '🧒 Horario academia']] as const).map(([id, etiqueta]) => (
@@ -255,7 +264,18 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
         <TorneoSorteo
           torneo={torneo}
           categorias={categorias}
-          inscripciones={inscripciones.map((i) => ({ id: i.id, categoria_id: i.categoria_id, estado: i.estado, siembra: i.siembra, bombo: i.bombo, nombre: nombreInscripcion(i) }))}
+          equipos={datos.equipos.map((e) => {
+            const ins = [e.inscripcion1_id, e.inscripcion2_id].map((id) => inscripciones.find((i) => i.id === id)).filter(Boolean) as Inscripcion[]
+            return {
+              id: e.id, categoria_id: e.categoria_id, siembra: e.siembra, bombo: e.bombo,
+              nombre: ins.map((i) => (i.menor ? `${i.menor.nombre} ${i.menor.apellido}` : i.jugadores.map((j) => j.nombre).join(' / '))).join(' / '),
+              pendiente: ins.some((i) => i.estado !== 'confirmada'),
+            }
+          })}
+          sinPareja={Object.fromEntries(categorias.filter((c) => c.modalidad === 'doble').map((c) => {
+            const enDupla = new Set(datos.equipos.flatMap((e) => [e.inscripcion1_id, e.inscripcion2_id]))
+            return [c.id, vivas.filter((i) => i.categoria_id === c.id && !enDupla.has(i.id)).length]
+          }))}
           publicadoPor={datos.sorteoPublicadoPor}
           onCambio={cargar}
         />
@@ -299,7 +319,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                 background: activa ? 'var(--color-ink)' : 'white', color: activa ? 'white' : 'var(--color-ink)',
               }}
             >
-              {c.nombre} <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.8 }}>{c.id === 'todas' ? n : `${n}/${c.cupo}`}</span>
+              {c.nombre} <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.8 }}>{c.id === 'todas' ? n : `${n}/${'modalidad' in c && c.modalidad === 'doble' ? c.cupo * 2 : c.cupo}`}</span>
             </button>
           )
         })}
@@ -319,7 +339,10 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
               <div>
                 <h4 style={{ color: 'var(--color-ink)', margin: '0 0 4px 0' }}>{c.nombre}</h4>
                 <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#666' }}>
-                  {c.modalidad === 'doble' ? 'Dobles' : 'Single'} · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}
+                  {c.modalidad === 'doble'
+                    ? <>Dobles · {nivel} · {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo * 2} jugadores ({c.cupo} parejas)</>
+                    : <>Single · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}</>}
+                  {c.sorteo_publicado_at && <> · 🎲 sorteada</>}
                 </p>
               </div>
               <InscripcionesCategoria
@@ -330,6 +353,17 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                 onCambiar={(abrir) => accion(`abrir-${c.id}`, 'categoria-inscripciones', { categoriaId: c.id, abiertas: abrir }, `${c.nombre}: inscripciones ${abrir ? 'abiertas' : 'cerradas'}`)}
               />
             </div>
+            <GestionCategoria
+              categoria={c}
+              categorias={categorias}
+              inscripciones={lista.filter((i) => i.estado !== 'retirada').map((i) => ({ id: i.id, categoria_id: i.categoria_id, estado: i.estado, nombre: nombreInscripcion(i), esMenor: !!i.menor }))}
+              equipos={datos.equipos}
+              invitaciones={datos.invitaciones}
+              editable={esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && !c.sorteo_publicado_at}
+              cerrada={!categoriaAbierta(torneo.estado, c) || (!!torneo.cierre_inscripciones_at && new Date(torneo.cierre_inscripciones_at).getTime() <= Date.now())}
+              ocupado={ocupado}
+              accion={accion}
+            />
             {lista.length === 0 && <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Sin inscripciones todavía.</p>}
 
             {lista.map((ins, idx) => (
@@ -343,7 +377,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '3px 10px', borderRadius: '999px', background: COLOR_ESTADO[ins.estado].fondo, color: COLOR_ESTADO[ins.estado].texto }}>
                       {ins.estado === 'pendiente_pago' ? 'Pendiente' : ETIQUETA_ESTADO_INSCRIPCION[ins.estado]}
                     </span>
-                    {esAdminCompleto && ins.estado !== 'retirada' && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && (
+                    {esAdminCompleto && ins.estado !== 'retirada' && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && !c.sorteo_publicado_at && (
                       <button
                         disabled={ocupado === `retirar-${ins.id}`}
                         onClick={() => {
@@ -357,7 +391,10 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     )}
                   </span>
                 </div>
-                <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 8px 0' }}>Inscrita el {formatearFechaHora(ins.created_at)}</p>
+                <p style={{ fontSize: '11px', color: '#888', margin: '2px 0 8px 0' }}>
+                  Inscrita el {formatearFechaHora(ins.created_at)}
+                  {ins.devolucion_marcada_at && <strong style={{ color: '#842029' }}> · 💸 pago marcado para devolución el {formatearFechaHora(ins.devolucion_marcada_at)}</strong>}
+                </p>
 
                 {ins.pendientes.length > 0 && (
                   <ul style={{ margin: '0 0 8px 0', paddingLeft: '18px', fontSize: '12px', color: '#8a5a00' }}>

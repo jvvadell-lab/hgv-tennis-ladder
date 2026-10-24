@@ -139,6 +139,7 @@ export type CandidatoPareja = {
   // inscrito y esperando respuesta de otro; no_inscrito = aún no se inscribió.
   estado: 'disponible' | 'invitacion_enviada' | 'no_inscrito'
   esperandoA: string | null   // solo en invitacion_enviada
+  meInvito: boolean           // la invitación que espera es a mí: se acepta arriba
   seleccionable: boolean
 }
 
@@ -156,6 +157,8 @@ export function candidatosPareja(d: {
   esperandoA: Map<string, string>
   // Categorías (ids) en que está inscrito cada jugador en el torneo.
   categoriasDe: Map<string, string[]>
+  // Los que me enviaron una invitación pendiente en esta categoría.
+  meInvitaron?: Set<string>
 }): CandidatoPareja[] {
   const genero = generoPareja(d.categoria.genero, d.yo)
   const lista: CandidatoPareja[] = []
@@ -171,6 +174,7 @@ export function candidatosPareja(d: {
       nombre: j.nombre,
       estado: estado ?? 'no_inscrito',
       esperandoA: estado === 'invitacion_enviada' ? d.esperandoA.get(j.id) ?? null : null,
+      meInvito: !!d.meInvitaron?.has(j.id),
       seleccionable: estado !== 'invitacion_enviada',
     })
   }

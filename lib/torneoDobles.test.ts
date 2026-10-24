@@ -126,7 +126,11 @@ describe('candidatosPareja', () => {
   it('disponibles arriba; los que esperan en gris, sin poder elegirlos', () => {
     expect(lista[0]).toMatchObject({ estado: 'disponible', seleccionable: true })
     expect(lista[2]).toMatchObject({ estado: 'no_inscrito', seleccionable: true })
-    expect(lista[3]).toEqual({ id: 'cris', nombre: 'CRIS', estado: 'invitacion_enviada', esperandoA: 'Marta', seleccionable: false })
+    expect(lista[3]).toEqual({ id: 'cris', nombre: 'CRIS', estado: 'invitacion_enviada', esperandoA: 'Marta', meInvito: false, seleccionable: false })
+  })
+  it('marca a quien me invitó (se acepta arriba)', () => {
+    const l = candidatosPareja({ yo, categoria: dobleDamasSexta, jugadores, estadoEnCategoria: estado, esperandoA: new Map([['cris', 'ANA']]), categoriasDe: new Map(), meInvitaron: new Set(['cris']) })
+    expect(l.find((c) => c.id === 'cris')).toMatchObject({ meInvito: true, seleccionable: false })
   })
   it('en el Mixto, solo el otro género', () => {
     const l = candidatosPareja({ yo, categoria: mixto, jugadores, estadoEnCategoria: new Map(), esperandoA: new Map(), categoriasDe: new Map() })

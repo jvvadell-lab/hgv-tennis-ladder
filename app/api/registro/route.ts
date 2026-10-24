@@ -2,6 +2,7 @@ import { NextResponse, after } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { validarRegistro } from '@/lib/registro'
 import { enviarCorreoBienvenida, verificarCarnetRegistro } from '@/lib/registroServidor'
+import { vincularInvitacionesPorTelefono } from '@/lib/torneoDoblesServidor'
 
 const MENSAJE_EMAIL_DUPLICADO =
   'Ya existe un jugador registrado con ese correo. Si es tuyo, usa "¿Olvidaste tu PIN?" en la página de inicio de sesión.'
@@ -47,6 +48,8 @@ export async function POST(request: Request) {
       await Promise.allSettled([
         enviarCorreoBienvenida(db, nuevo.id),
         verificarCarnetRegistro(db, nuevo.id),
+        // Invitaciones a formar dupla en el torneo hechas a su teléfono antes de que tuviera cuenta.
+        vincularInvitacionesPorTelefono(db, nuevo.id, datos.telefono),
       ]).then((r) => r.forEach((x) => x.status === 'rejected' && console.error('[registro] después del alta:', x.reason)))
     })
 
