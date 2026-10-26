@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { inicioDelDiaEnCaracas, finDelDiaEnCaracas } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
+import type { PatrocinantePublico } from '@/lib/patrocinantes'
+import BannerTorneo, { type TorneoPortada } from '@/app/components/BannerTorneo'
+import CintaPatrocinantes from '@/app/components/CintaPatrocinantes'
+
+// Portada. Orden pensado para el celular: encabezado compacto, anuncio del
+// club, banner del torneo vigente, accesos, "en cancha hoy" y la cinta de
+// patrocinantes. El torneo y los patrocinantes vienen de /api/publico/portada
+// (la clave anónima no los lee); anuncio, retos y reservas igual que antes.
 
 type Session = {
   role: 'admin' | 'jugador' | 'academia'
@@ -33,6 +41,8 @@ type ReservaHoy = {
   jugadores: { nombre: string } | null
 }
 
+type Portada = { torneo: TorneoPortada | null; patrocinantes: PatrocinantePublico[] }
+
 function nombreCanchaCorta(cancha: string, nombreForanea: string | null) {
   if (cancha === 'FORANEA') return nombreForanea || 'Foránea'
   if (cancha === 'HGV1') return 'HGV 1'
@@ -40,16 +50,10 @@ function nombreCanchaCorta(cancha: string, nombreForanea: string | null) {
   return cancha
 }
 
-// Divisor de "línea de cancha" — doble línea fina, como la línea de fondo
-// y la línea de servicio de una cancha de tenis. Es la firma visual de la marca.
-function LineaDeCancha() {
-  return (
-    <div style={{ width: '100%', maxWidth: '420px', margin: '0 auto' }}>
-      <div style={{ height: '1px', background: 'rgba(212,225,87,0.55)', marginBottom: '5px' }} />
-      <div style={{ height: '1px', background: 'rgba(212,225,87,0.25)' }} />
-    </div>
-  )
-}
+const horaCaracas = (iso: string) =>
+  new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
+
+type Acceso = { href: string; titulo: string; detalle: string; icono: string; destacado?: boolean }
 
 export default function Home() {
   const [session, setSession] = useState<Session>(null)
@@ -58,12 +62,20 @@ export default function Home() {
   const [partidosHoy, setPartidosHoy] = useState<PartidoHoy[]>([])
   const [reservasHoy, setReservasHoy] = useState<ReservaHoy[]>([])
   const [cargandoPartidosHoy, setCargandoPartidosHoy] = useState(true)
+  const [portada, setPortada] = useState<Portada | null>(null)
 
   useEffect(() => {
     fetch('/api/me')
       .then((r) => r.json())
       .then((data) => setSession(data.session))
       .finally(() => setChecking(false))
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/publico/portada')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPortada(d ? { torneo: d.torneo, patrocinantes: d.patrocinantes || [] } : { torneo: null, patrocinantes: [] }))
+      .catch(() => setPortada({ torneo: null, patrocinantes: [] }))
   }, [])
 
   useEffect(() => {
@@ -81,28 +93,25 @@ export default function Home() {
     const inicioHoy = inicioDelDiaEnCaracas(new Date())
     const finHoy = finDelDiaEnCaracas(new Date())
 
-    supabase
+    const retos = supabase
       .from('retos')
       .select('id, cancha, nombre_cancha_foranea, fecha_propuesta, retador:retador_id(nombre), retado:retado_id(nombre)')
       .eq('estado', 'aceptado')
       .gte('fecha_propuesta', inicioHoy.toISOString())
       .lte('fecha_propuesta', finHoy.toISOString())
       .order('fecha_propuesta', { ascending: true })
-      .then(({ data }) => {
-        setPartidosHoy((data as any) || [])
-      })
+      .then(({ data }) => setPartidosHoy((data as any) || []))
 
-    supabase
+    const reservas = supabase
       .from('reservas_cancha')
       .select('id, cancha, fecha_hora, jugadores:jugador_id(nombre)')
       .in('estado', ESTADOS_RESERVA_OCUPAN_CANCHA)
       .gte('fecha_hora', inicioHoy.toISOString())
       .lte('fecha_hora', finHoy.toISOString())
       .order('fecha_hora', { ascending: true })
-      .then(({ data }) => {
-        setReservasHoy((data as any) || [])
-        setCargandoPartidosHoy(false)
-      })
+      .then(({ data }) => setReservasHoy((data as any) || []))
+
+    Promise.all([retos, reservas]).finally(() => setCargandoPartidosHoy(false))
   }, [])
 
   async function cerrarSesion() {
@@ -110,364 +119,115 @@ export default function Home() {
     window.location.reload()
   }
 
-  return (
-    <main className="court-bg" style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      padding: '60px 20px 40px',
-    }}>
-      {/* Logo y título */}
-      <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-        <img
-          src="/logo-hgv.png"
-          alt="Escudo HGV Tennis Club"
-          style={{
-            width: '161px',
-            height: '161px',
-            objectFit: 'contain',
-            margin: '0 auto 18px auto',
-            display: 'block',
-            filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.45))',
-          }}
-        />
-        <h1 style={{
-          fontFamily: 'var(--font-display)',
-          fontWeight: 900,
-          color: 'var(--color-chalk)',
-          fontSize: 'clamp(34px, 6vw, 54px)',
-          margin: 0,
-          letterSpacing: '-0.01em',
-          lineHeight: 1,
-        }}>
-          HGV Tennis Club
-        </h1>
-        <p style={{
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--color-ball)',
-          fontSize: '13px',
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-          margin: '14px 0 0 0',
-        }}>
-          Challenger Ladder · 2026
-        </p>
-        <div style={{ margin: '20px 0' }}>
-          <LineaDeCancha />
-        </div>
-        <p style={{
-          color: 'rgba(247,243,234,0.75)',
-          fontSize: '16px',
-          maxWidth: '380px',
-          margin: '0 auto',
-          lineHeight: 1.5,
-        }}>
-          Compite, sube posiciones y conviértete en el campeón del club
-        </p>
-        {!checking && session && (
-          <p style={{ fontSize: '14px', marginTop: '18px' }}>
-            <span style={{ color: 'rgba(247,243,234,0.6)' }}>Conectado como </span>
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)' }}>{session.nombre}</span>
-            <span style={{ color: 'rgba(247,243,234,0.6)' }}>
-              {' — '}
-              <button
-                onClick={cerrarSesion}
-                style={{
-                  background: 'none', border: 'none', color: 'rgba(247,243,234,0.85)', textDecoration: 'underline',
-                  cursor: 'pointer', fontSize: 'inherit', padding: 0, fontFamily: 'var(--font-body)',
-                }}
-              >
-                Cerrar sesión
-              </button>
-            </span>
-          </p>
-        )}
-      </div>
+  const torneo = portada?.torneo ?? null
+  const patrocinantes = portada?.patrocinantes ?? []
+  const principales = patrocinantes.filter((p) => p.nivel === 'principal')
 
-      {/* Anuncio del club */}
-      {anuncio && (
-        <div className="anuncio-banner" style={{
-          background: 'linear-gradient(135deg, #d4e157 0%, #b9c93f 100%)',
-          borderRadius: '12px', padding: '18px 26px', marginBottom: '32px',
-          maxWidth: '480px', textAlign: 'center',
-        }}>
-          <p style={{
-            fontFamily: 'var(--font-mono)', color: '#1b2e10', fontSize: '11px',
-            letterSpacing: '0.14em', textTransform: 'uppercase', margin: 0, fontWeight: 700,
-          }}>
-            📢 Anuncio del club
-          </p>
-          <h3 style={{
-            fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)',
-            fontSize: 'clamp(18px, 3.5vw, 22px)', margin: '4px 0 0 0',
-          }}>
-            {anuncio.titulo}
-          </h3>
-          {anuncio.descripcion && (
-            <p style={{ color: '#1b2e10', fontSize: '13px', margin: '6px 0 0 0' }}>
-              {anuncio.descripcion}
-            </p>
+  const accesos: Acceso[] = [
+    { href: '/torneo', titulo: 'Torneo', detalle: torneo?.estado === 'inscripcion' ? 'Inscripciones abiertas' : 'Llaves y calendario', icono: '🏆', destacado: !!torneo },
+    { href: '/reservas', titulo: 'Reservar', detalle: 'Cancha HGV 1 y HGV 2', icono: '📅' },
+    { href: '/ladder', titulo: 'Escalera', detalle: 'Escalafón y retos', icono: '🪜' },
+    { href: '/galeria', titulo: 'Galería', detalle: 'Fotos de partidos', icono: '📸' },
+  ]
+  if (!checking && session?.role === 'admin') accesos.push({ href: '/admin', titulo: 'Panel admin', detalle: 'Gestión del club', icono: '⚙️' })
+  if (!checking && session?.role === 'academia') accesos.push({ href: '/academia', titulo: 'Academia', detalle: 'Horario de clases', icono: '🎾' })
+  if (!checking && session?.role === 'jugador') accesos.push({ href: '/perfil', titulo: 'Mi perfil', detalle: 'Datos y carné', icono: '👤' })
+
+  const enCancha = [
+    ...partidosHoy.map((p) => ({ tipo: 'escalera' as const, hora: p.fecha_propuesta, data: p })),
+    ...reservasHoy.map((r) => ({ tipo: 'casual' as const, hora: r.fecha_hora, data: r })),
+  ].sort((a, b) => (a.hora < b.hora ? -1 : 1))
+
+  return (
+    <main className="court-bg portada">
+      {/* Encabezado compacto */}
+      <header className="portada-header">
+        <Link href="/" className="portada-marca">
+          <img src="/logo-hgv.png" alt="" width={56} height={56} />
+          <span>
+            <strong>HGV Tennis Club</strong>
+            <small>Hermandad Gallega de Valencia</small>
+          </span>
+        </Link>
+        <div className="portada-sesion">
+          {checking ? null : session ? (
+            <>
+              <span className="portada-nombre">{session.nombre.split(' ')[0]}</span>
+              <button onClick={cerrarSesion}>Salir</button>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className="portada-entrar">Entrar</Link>
+              <Link href="/register" className="portada-registro">Registrarme</Link>
+            </>
           )}
         </div>
-      )}
+      </header>
 
-      {/* Partidos de hoy */}
-      {!cargandoPartidosHoy && (partidosHoy.length > 0 || reservasHoy.length > 0) && (
-        <div style={{
-          background: 'rgba(247,243,234,0.06)', border: '1px solid rgba(247,243,234,0.12)',
-          borderTop: '2px solid var(--color-ball)', borderRadius: '4px',
-          padding: '18px 22px', marginBottom: '32px', maxWidth: '480px', width: '100%',
-        }}>
-          <p style={{
-            fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px',
-            letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 10px 0', fontWeight: 700, textAlign: 'center',
-          }}>
-            🎾 En cancha hoy
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {[
-              ...partidosHoy.map((p) => ({ tipo: 'escalera' as const, hora: p.fecha_propuesta, data: p })),
-              ...reservasHoy.map((r) => ({ tipo: 'casual' as const, hora: r.fecha_hora, data: r })),
-            ]
-              .sort((a, b) => (a.hora < b.hora ? -1 : 1))
-              .map((item) => (
-                <div key={`${item.tipo}-${item.data.id}`} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px',
-                  fontSize: '13px', color: 'var(--color-chalk)', padding: '6px 0',
-                  borderBottom: '1px solid rgba(247,243,234,0.08)',
-                }}>
+      <div className="portada-contenido">
+        {/* Anuncio del club */}
+        {anuncio && (
+          <div className="anuncio-banner portada-anuncio">
+            <p>📢 Anuncio del club</p>
+            <h3>{anuncio.titulo}</h3>
+            {anuncio.descripcion && <span>{anuncio.descripcion}</span>}
+          </div>
+        )}
+
+        {/* Banner 1: torneo vigente (Copa Navidad) — lo ve todo el mundo */}
+        {portada === null ? (
+          <div className="banner-torneo-esqueleto" aria-hidden="true" />
+        ) : torneo ? (
+          <BannerTorneo torneo={torneo} conectado={!!session} principales={principales} />
+        ) : null}
+
+        {/* Accesos */}
+        <nav className="portada-accesos" aria-label="Secciones">
+          {accesos.map((a) => (
+            <Link key={a.href} href={a.href} className="portada-acceso" data-destacado={a.destacado || undefined}>
+              <span className="portada-acceso-icono" aria-hidden="true">{a.icono}</span>
+              <strong>{a.titulo}</strong>
+              <small>{a.detalle}</small>
+            </Link>
+          ))}
+        </nav>
+
+        {/* En cancha hoy: retos de la escalera y reservas casuales */}
+        {!cargandoPartidosHoy && enCancha.length > 0 && (
+          <section className="portada-hoy" aria-labelledby="portada-hoy-titulo">
+            <p id="portada-hoy-titulo">🎾 En cancha hoy</p>
+            <ul>
+              {enCancha.map((item) => (
+                <li key={`${item.tipo}-${item.data.id}`}>
                   {item.tipo === 'escalera' ? (
                     <span>
                       <strong>{item.data.retador?.nombre || '—'}</strong> vs <strong>{item.data.retado?.nombre || '—'}</strong>
-                      <span style={{ color: 'var(--color-ball)', fontSize: '11px' }}> · escalera</span>
+                      <em> · escalera</em>
                     </span>
                   ) : (
                     <span>
                       <strong>{item.data.jugadores?.nombre || 'Socio'}</strong>
-                      <span style={{ color: 'rgba(247,243,234,0.6)', fontSize: '11px' }}> · reserva casual</span>
+                      <em> · reserva</em>
                     </span>
                   )}
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', whiteSpace: 'nowrap' }}>
-                    {new Date(item.hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })}
+                  <span className="portada-hoy-hora">
+                    {horaCaracas(item.hora)}
                     {' · '}
                     {item.tipo === 'escalera'
                       ? nombreCanchaCorta(item.data.cancha, item.data.nombre_cancha_foranea)
                       : nombreCanchaCorta(item.data.cancha, null)}
                   </span>
-                </div>
+                </li>
               ))}
-          </div>
-        </div>
-      )}
-
-      {/* Tarjetas de información */}
-      <div style={{
-        display: 'flex',
-        gap: '16px',
-        marginBottom: '38px',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        maxWidth: '620px',
-      }}>
-        {[
-          { icon: '👥', title: 'Jugadores', desc: 'Regístrate y únete a la escalera' },
-          { icon: '⚔️', title: 'Desafíos', desc: 'Reta a jugadores sobre ti' },
-          { icon: '📊', title: 'Ranking', desc: 'Sube posiciones ganando partidos' }
-        ].map((card) => (
-          <div key={card.title} style={{
-            backgroundColor: 'rgba(247,243,234,0.06)',
-            borderRadius: '4px',
-            padding: '22px 20px',
-            width: '164px',
-            textAlign: 'center',
-            border: '1px solid rgba(247,243,234,0.12)',
-            borderTop: '2px solid var(--color-ball)',
-          }}>
-            <div style={{ fontSize: '30px', marginBottom: '10px' }}>{card.icon}</div>
-            <h3 style={{
-              fontFamily: 'var(--font-display)',
-              color: 'var(--color-ball)',
-              margin: '0 0 6px 0',
-              fontSize: '17px',
-              fontWeight: 700,
-            }}>
-              {card.title}
-            </h3>
-            <p style={{ color: 'rgba(247,243,234,0.7)', margin: 0, fontSize: '13px', lineHeight: 1.4 }}>{card.desc}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Botones */}
-      <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <Link href="/ladder" style={{
-          backgroundColor: 'var(--color-ball)',
-          color: 'var(--color-ink)',
-          padding: '14px 30px',
-          borderRadius: '4px',
-          textDecoration: 'none',
-          fontWeight: 700,
-          fontSize: '15px',
-          fontFamily: 'var(--font-body)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-        }}>
-          Ver Escalera
-        </Link>
-        <Link href="/galeria" style={{
-          backgroundColor: 'transparent',
-          color: 'var(--color-chalk)',
-          padding: '14px 30px',
-          borderRadius: '4px',
-          textDecoration: 'none',
-          fontWeight: 700,
-          fontSize: '15px',
-          fontFamily: 'var(--font-body)',
-          border: '1px solid rgba(247,243,234,0.4)',
-        }}>
-          Galería
-        </Link>
-        <Link href="/torneo" style={{
-          backgroundColor: 'transparent',
-          color: 'var(--color-chalk)',
-          padding: '14px 30px',
-          borderRadius: '4px',
-          textDecoration: 'none',
-          fontWeight: 700,
-          fontSize: '15px',
-          fontFamily: 'var(--font-body)',
-          border: '1px solid rgba(247,243,234,0.4)',
-        }}>
-          🎄 Torneo Navidad
-        </Link>
-        <Link href="/reservas" style={{
-          backgroundColor: 'transparent',
-          color: 'var(--color-chalk)',
-          padding: '14px 30px',
-          borderRadius: '4px',
-          textDecoration: 'none',
-          fontWeight: 700,
-          fontSize: '15px',
-          fontFamily: 'var(--font-body)',
-          border: '1px solid rgba(247,243,234,0.4)',
-        }}>
-          Reservar Cancha
-        </Link>
-        {!checking && session ? (
-          session.role === 'academia' ? (
-            <Link href="/academia" style={{
-              backgroundColor: 'transparent',
-              color: 'var(--color-chalk)',
-              padding: '14px 30px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              fontWeight: 700,
-              fontSize: '15px',
-              fontFamily: 'var(--font-body)',
-              border: '1px solid rgba(247,243,234,0.4)',
-            }}>
-              Horario academia
-            </Link>
-          ) : session.role === 'admin' && (
-            <Link href="/admin" style={{
-              backgroundColor: 'transparent',
-              color: 'var(--color-chalk)',
-              padding: '14px 30px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              fontWeight: 700,
-              fontSize: '15px',
-              fontFamily: 'var(--font-body)',
-              border: '1px solid rgba(247,243,234,0.4)',
-            }}>
-              Panel Admin
-            </Link>
-          )
-        ) : (
-          <>
-            <Link href="/register" style={{
-              backgroundColor: 'transparent',
-              color: 'var(--color-chalk)',
-              padding: '14px 30px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              fontWeight: 700,
-              fontSize: '15px',
-              fontFamily: 'var(--font-body)',
-              border: '1px solid rgba(247,243,234,0.4)',
-            }}>
-              Registrarse
-            </Link>
-            <Link href="/login" style={{
-              backgroundColor: 'transparent',
-              color: 'var(--color-ball)',
-              padding: '14px 30px',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              fontWeight: 700,
-              fontSize: '15px',
-              fontFamily: 'var(--font-body)',
-              border: '1px solid var(--color-ball)',
-            }}>
-              Iniciar Sesión
-            </Link>
-          </>
+            </ul>
+          </section>
         )}
-      </div>
 
-      {/* Patrocinantes */}
-      <div style={{ marginTop: '56px', textAlign: 'center' }}>
-        <p style={{
-          fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.5)', fontSize: '10px',
-          letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 16px 0',
-        }}>
-          Con el apoyo de nuestros patrocinantes
-        </p>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
-          {[
-            { nombre: "Cauchos Q'Barato", archivo: 'cauchos-qbarato.png', instagram: 'cauchosqbarato' },
-            { nombre: 'Timoboll', archivo: 'timoboll.png', instagram: 'autopartesjafenza' },
-            { nombre: 'PetSmall', archivo: 'petsmall.png', instagram: 'petsmall' },
-          ].map((s) => (
-            <a
-              key={s.instagram}
-              href={`https://instagram.com/${s.instagram}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ textDecoration: 'none', display: 'block' }}
-            >
-              <div style={{
-                background: 'var(--color-chalk)', borderRadius: '10px', padding: '12px 16px',
-                width: '180px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
-              }}>
-                <img
-                  src={`https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/${s.archivo}`}
-                  alt={s.nombre}
-                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                />
-              </div>
-              <p style={{
-                fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.6)', fontSize: '13px',
-                margin: '6px 0 0 0',
-              }}>
-                @{s.instagram}
-              </p>
-            </a>
-          ))}
-        </div>
-      </div>
+        {/* Banner 2: patrocinantes */}
+        <CintaPatrocinantes patrocinantes={patrocinantes} />
 
-      {/* Footer */}
-      <p style={{
-        color: 'rgba(247,243,234,0.35)',
-        fontSize: '12px',
-        fontFamily: 'var(--font-mono)',
-        marginTop: '20px',
-        letterSpacing: '0.04em',
-      }}>
-        © 2026 HGV Tennis Club
-      </p>
+        <p className="portada-footer">© 2026 HGV Tennis Club · Comisión de Tenis</p>
+      </div>
     </main>
   )
 }
