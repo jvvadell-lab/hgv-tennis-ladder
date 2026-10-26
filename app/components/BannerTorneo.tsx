@@ -166,12 +166,12 @@ export default function BannerTorneo({ torneo, conectado, principales }: {
         )}
 
         <div className="banner-torneo-acciones">
-          {torneo.estado === 'inscripcion' && hayAbiertas && (
+          {/* Botón directo a la inscripción mientras el torneo no ha arrancado
+              (en borrador la página de inscripción avisa que aún no abre). */}
+          {!enJuego && (
             <>
-              <Link href={destino('/torneo/inscripcion')} className="banner-torneo-cta">Inscribirme</Link>
-              {infantilAbierta && (
-                <Link href={destino('/torneo/inscripcion/infantil')} className="banner-torneo-secundario">Infantil y juvenil</Link>
-              )}
+              <Link href={destino('/torneo/inscripcion')} className="banner-torneo-cta">Inscribirme en la Copa</Link>
+              <Link href={destino('/torneo/inscripcion/infantil')} className="banner-torneo-secundario">Infantil y juvenil</Link>
             </>
           )}
           {enJuego && <Link href="/torneo" className="banner-torneo-cta">Ver llaves y calendario</Link>}

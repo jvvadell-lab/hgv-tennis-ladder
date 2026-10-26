@@ -124,7 +124,10 @@ export default function Home() {
   const principales = patrocinantes.filter((p) => p.nivel === 'principal')
 
   const accesos: Acceso[] = [
-    { href: '/torneo', titulo: 'Torneo', detalle: torneo?.estado === 'inscripcion' ? 'Inscripciones abiertas' : 'Llaves y calendario', icono: '🏆', destacado: !!torneo },
+    // Antes de que arranque el torneo, el acceso lleva directo a la inscripción.
+    torneo && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion')
+      ? { href: '/torneo/inscripcion', titulo: 'Inscripción', detalle: 'Copa Navidad', icono: '🏆', destacado: true }
+      : { href: '/torneo', titulo: 'Torneo', detalle: 'Llaves y calendario', icono: '🏆', destacado: !!torneo },
     { href: '/reservas', titulo: 'Reservar', detalle: 'Cancha HGV 1 y HGV 2', icono: '📅' },
     { href: '/ladder', titulo: 'Escalera', detalle: 'Escalafón y retos', icono: '🪜' },
     { href: '/galeria', titulo: 'Galería', detalle: 'Fotos de partidos', icono: '📸' },
