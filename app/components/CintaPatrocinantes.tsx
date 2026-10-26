@@ -10,7 +10,7 @@ function Tarjeta({ p, oculto }: { p: PatrocinantePublico; oculto?: boolean }) {
   const href = enlaceDe(p)
   const contenido = (
     <>
-      <div className="cinta-patro-logo">
+      <div className="cinta-patro-logo" data-fondo={p.fondo}>
         {p.logo_url ? <img src={p.logo_url} alt={oculto ? '' : p.nombre} loading="lazy" /> : <strong>{p.nombre}</strong>}
       </div>
       {p.promo

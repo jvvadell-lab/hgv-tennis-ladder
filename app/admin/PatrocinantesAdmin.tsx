@@ -8,7 +8,7 @@ import type { Patrocinante } from '@/lib/patrocinantes'
 
 type Borrador = Omit<Patrocinante, 'id'> & { id?: string }
 
-const VACIO: Borrador = { nombre: '', logo_url: null, instagram: '', enlace_url: '', promo: '', nivel: 'estandar', orden: 0, activo: true }
+const VACIO: Borrador = { nombre: '', logo_url: null, instagram: '', enlace_url: '', promo: '', nivel: 'estandar', fondo: 'claro', orden: 0, activo: true }
 
 // Reduce el logo a 480 px de ancho en WebP (conserva la transparencia, a
 // diferencia de comprimirImagen que pasa a JPEG con fondo negro).
@@ -161,9 +161,16 @@ export default function PatrocinantesAdmin() {
               </select>
             </div>
             <div>
+              <label style={estiloLabel}>Fondo de la tarjeta</label>
+              <select style={estiloInput} value={editando.fondo} onChange={(e) => setEditando({ ...editando, fondo: e.target.value as Borrador['fondo'] })}>
+                <option value="claro">Claro (logos de color u oscuros)</option>
+                <option value="oscuro">Oscuro (logos blancos)</option>
+              </select>
+            </div>
+            <div>
               <label style={estiloLabel}>Logo (PNG con fondo transparente, ideal)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '96px', height: '54px', borderRadius: '6px', background: 'var(--color-chalk)', border: '1px solid #e2dccd', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', boxSizing: 'border-box' }}>
+                <div style={{ width: '96px', height: '54px', borderRadius: '6px', background: editando.fondo === 'oscuro' ? '#1b2026' : 'var(--color-chalk)', border: '1px solid #e2dccd', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', boxSizing: 'border-box' }}>
                   {editando.logo_url
                     ? <img src={editando.logo_url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     : <span style={{ fontSize: '11px', color: '#999' }}>Sin logo</span>}
@@ -203,7 +210,7 @@ export default function PatrocinantesAdmin() {
               <button aria-label="Subir" onClick={() => mover(i, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '12px', padding: 0, lineHeight: 1.2 }}>▲</button>
               <button aria-label="Bajar" onClick={() => mover(i, 1)} disabled={i === lista.length - 1} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '12px', padding: 0, lineHeight: 1.2 }}>▼</button>
             </div>
-            <div style={{ width: '80px', height: '44px', borderRadius: '6px', background: 'var(--color-chalk)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', boxSizing: 'border-box', flexShrink: 0 }}>
+            <div style={{ width: '80px', height: '44px', borderRadius: '6px', background: p.fondo === 'oscuro' ? '#1b2026' : 'var(--color-chalk)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', boxSizing: 'border-box', flexShrink: 0 }}>
               {p.logo_url ? <img src={p.logo_url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span style={{ fontSize: '10px', color: '#999' }}>Sin logo</span>}
             </div>
             <div style={{ flex: 1, minWidth: '140px' }}>

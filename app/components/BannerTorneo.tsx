@@ -187,8 +187,8 @@ export default function BannerTorneo({ torneo, conectado, principales }: {
                 ? <img src={p.logo_url} alt={p.nombre} loading="lazy" />
                 : <strong>{p.nombre}</strong>
               return href
-                ? <a key={p.id} href={href} target="_blank" rel="noopener noreferrer">{logo}</a>
-                : <span key={p.id}>{logo}</span>
+                ? <a key={p.id} href={href} target="_blank" rel="noopener noreferrer" data-fondo={p.fondo}>{logo}</a>
+                : <span key={p.id} data-fondo={p.fondo}>{logo}</span>
             })}
           </div>
         )}

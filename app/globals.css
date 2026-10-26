@@ -509,6 +509,7 @@ textarea:focus-visible {
   text-decoration: none;
   font-size: 13px;
 }
+.banner-torneo-presenta [data-fondo='oscuro'] { background: #1b2026; }
 .banner-torneo-presenta img { max-height: 28px; max-width: 110px; object-fit: contain; }
 
 .banner-torneo-copos { position: absolute; inset: 0; pointer-events: none; }
@@ -591,6 +592,7 @@ textarea:focus-visible {
   color: var(--color-ink);
   transition: transform 0.2s ease;
 }
+.cinta-patro-logo[data-fondo='oscuro'] { background: #1b2026; border: 1px solid rgba(247, 243, 234, 0.18); }
 .cinta-patro-item:hover .cinta-patro-logo { transform: translateY(-2px) scale(1.03); }
 .cinta-patro-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .cinta-patro-ig { margin: 0; font-family: var(--font-mono); font-size: 12px; color: rgba(247, 243, 234, 0.65); }

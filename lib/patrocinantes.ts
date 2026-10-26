@@ -3,6 +3,7 @@
 // servidor.
 
 export type NivelPatrocinante = 'principal' | 'estandar'
+export type FondoLogo = 'claro' | 'oscuro'
 
 export type Patrocinante = {
   id: string
@@ -12,14 +13,15 @@ export type Patrocinante = {
   enlace_url: string | null
   promo: string | null
   nivel: NivelPatrocinante
+  fondo: FondoLogo
   orden: number
   activo: boolean
 }
 
 // Lo que ve la portada (sin auditoría).
-export type PatrocinantePublico = Pick<Patrocinante, 'id' | 'nombre' | 'logo_url' | 'instagram' | 'enlace_url' | 'promo' | 'nivel'>
+export type PatrocinantePublico = Pick<Patrocinante, 'id' | 'nombre' | 'logo_url' | 'instagram' | 'enlace_url' | 'promo' | 'nivel' | 'fondo'>
 
-export const COLUMNAS_PUBLICAS = 'id, nombre, logo_url, instagram, enlace_url, promo, nivel'
+export const COLUMNAS_PUBLICAS = 'id, nombre, logo_url, instagram, enlace_url, promo, nivel, fondo'
 
 // "@petsmall", "instagram.com/petsmall/" o "petsmall" → "petsmall".
 export function normalizarInstagram(valor: unknown): string | null {
@@ -56,7 +58,7 @@ export function validarPatrocinante(body: any): { ok: true; datos: DatosPatrocin
   if (promo.length > 120) return { ok: false, error: 'La promo es muy larga (máximo 120 caracteres).' }
 
   const logo = typeof body?.logo_url === 'string' ? body.logo_url.trim() : ''
-  if (logo && !/^https:\/\/\S+$/.test(logo)) return { ok: false, error: 'La URL del logo no es válida.' }
+  if (logo && !/^(https:\/\/\S+|\/[\w./-]+)$/.test(logo)) return { ok: false, error: 'La URL del logo no es válida.' }
 
   const orden = Number.isFinite(Number(body?.orden)) ? Math.round(Number(body.orden)) : 0
 
@@ -69,6 +71,7 @@ export function validarPatrocinante(body: any): { ok: true; datos: DatosPatrocin
       enlace_url: enlace || null,
       promo: promo || null,
       nivel: body?.nivel === 'principal' ? 'principal' : 'estandar',
+      fondo: body?.fondo === 'oscuro' ? 'oscuro' : 'claro',
       orden,
       activo: body?.activo !== false,
     },

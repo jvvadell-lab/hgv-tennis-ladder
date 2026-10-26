@@ -25,7 +25,7 @@ export async function GET() {
     if (error) return error
     const { data, error: errDb } = await supabaseServer()
       .from('patrocinantes')
-      .select('id, nombre, logo_url, instagram, enlace_url, promo, nivel, orden, activo')
+      .select('id, nombre, logo_url, instagram, enlace_url, promo, nivel, fondo, orden, activo')
       .order('orden')
       .order('created_at')
     if (errDb) throw errDb
