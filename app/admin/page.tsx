@@ -14,6 +14,7 @@ import {
   finDelDiaEnCaracas, formatearFechaCorta, minutosDesdeMedianocheEnCaracas,
 } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
+import PatrocinantesAdmin from './PatrocinantesAdmin'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -2435,6 +2436,7 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+              {!esAdminLimitado && <PatrocinantesAdmin />}
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                 <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>👋 Bienvenido al Panel de Administración</h3>
                 <p style={{ color: '#666' }}>Desde aquí puedes gestionar jugadores, desafíos, resultados y el escalafón del club.</p>
