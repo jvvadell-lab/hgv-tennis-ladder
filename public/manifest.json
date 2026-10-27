@@ -2,7 +2,7 @@
   "name": "HGV Tennis Club — Escalera de Retos",
   "short_name": "HGV Tennis",
   "description": "Escalera de retos del club HGV Tennis Club — retos, escalafón, reservas y más.",
-  "start_url": "/ladder",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

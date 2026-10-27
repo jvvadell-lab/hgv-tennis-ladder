@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 import AvisoYaLlegue from '@/app/components/AvisoYaLlegue'
+import CintaPatrocinantes from '@/app/components/CintaPatrocinantes'
+import type { PatrocinantePublico } from '@/lib/patrocinantes'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador, type CampoSet } from '@/lib/resultados'
@@ -189,6 +191,7 @@ export default function LadderPage() {
   // de que abra (o cierre) la ventana no vería aparecer (ni desaparecer) la grilla
   // sola, tendría que recargar.
   const [, reevaluarVentanaExpress] = useState(0)
+  const [patrocinantes, setPatrocinantes] = useState<PatrocinantePublico[]>([])
 
   // Al abrir el formulario de retar, bajamos la pantalla de una vez hasta ahí
   // — así el jugador no tiene que buscarlo manualmente más abajo en la tabla.
@@ -208,6 +211,14 @@ export default function LadderPage() {
         if (data.session?.genero) setGenero(data.session.genero)
       })
       .finally(() => setCheckingSession(false))
+  }, [])
+
+  // Patrocinantes activos (los mismos de la portada, sin sesión requerida).
+  useEffect(() => {
+    fetch('/api/publico/portada')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPatrocinantes(d?.patrocinantes || []))
+      .catch(() => {})
   }, [])
 
   // 2. Cargar temporada activa
@@ -2577,46 +2588,9 @@ export default function LadderPage() {
           )}
         </div>
 
-        <div style={{ marginTop: '40px', textAlign: 'center' }}>
-          <p style={{
-            fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.5)', fontSize: '10px',
-            letterSpacing: '0.14em', textTransform: 'uppercase', margin: '0 0 16px 0',
-          }}>
-            Con el apoyo de nuestros patrocinantes
-          </p>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
-            {[
-              { nombre: "Cauchos Q'Barato", archivo: 'cauchos-qbarato.png', instagram: 'cauchosqbarato' },
-              { nombre: 'Timoboll', archivo: 'timoboll.png', instagram: 'autopartesjafenza' },
-              { nombre: 'PetSmall', archivo: 'petsmall.png', instagram: 'petsmall' },
-            ].map((s) => (
-              <a
-                key={s.instagram}
-                href={`https://instagram.com/${s.instagram}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ textDecoration: 'none', display: 'block' }}
-              >
-                <div style={{
-                  background: 'var(--color-chalk)', borderRadius: '10px', padding: '12px 16px',
-                  width: '180px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
-                }}>
-                  <img
-                    src={`https://znfsxpmmlxezzeasjtqa.supabase.co/storage/v1/object/public/fotos-partidos/Sponsors/${s.archivo}`}
-                    alt={s.nombre}
-                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                  />
-                </div>
-                <p style={{
-                  fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.6)', fontSize: '13px',
-                  margin: '6px 0 0 0',
-                }}>
-                  @{s.instagram}
-                </p>
-              </a>
-            ))}
-          </div>
+        {/* Misma cinta que la portada: se administra desde Admin → Patrocinantes. */}
+        <div style={{ marginTop: '40px' }}>
+          <CintaPatrocinantes patrocinantes={patrocinantes} />
         </div>
 
         <div style={{ textAlign: 'center', marginTop: '20px', marginBottom: '20px' }}>
