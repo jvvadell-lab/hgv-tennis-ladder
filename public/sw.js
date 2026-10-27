@@ -4,7 +4,7 @@
 // estáticos versionados (íconos, JS/CSS del build) — así no se queda pegado
 // mostrando una versión vieja de la app después de un deploy.
 
-const CACHE_NAME = 'hgv-tennis-v1'
+const CACHE_NAME = 'hgv-tennis-v2'
 const OFFLINE_URL = '/ladder'
 
 self.addEventListener('install', (event) => {
