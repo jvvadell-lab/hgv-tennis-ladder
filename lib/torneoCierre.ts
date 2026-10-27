@@ -4,7 +4,7 @@
 //
 // El admin cierra cada categoría cuando quiere (normalmente al llenarse) y
 // la puede reabrir mientras no publique su sorteo. La hora de cierre
-// programada (1-nov 23:59 de Caracas) NO cierra nada: si pasa con alguna
+// programada (4-nov 23:59 de Caracas) NO cierra nada: si pasa con alguna
 // categoría abierta, el panel lo alerta y se avisa a los admins. Las
 // invitaciones pendientes sí vencen a esa hora (lib/torneoDobles.ts).
 

@@ -21,18 +21,18 @@ const j = (id: string, genero: string, categoria: string, oficial: string | null
 const dobleDamasSexta = { id: 'dds', genero: 'damas' as const, categoria_nivel: 'sexta' as const }
 const mixto = { id: 'mix', genero: 'mixto' as const, categoria_nivel: null }
 
-// Cierre: domingo 1-nov-2026, 23:59 de Caracas (UTC-4) = 2-nov 03:59 UTC.
-const CIERRE = new Date('2026-11-02T03:59:00Z')
+// Cierre: miércoles 4-nov-2026, 23:59 de Caracas (UTC-4) = 5-nov 03:59 UTC.
+const CIERRE = new Date('2026-11-05T03:59:00Z')
 
 describe('venceInvitacion', () => {
   it('48 h después de enviarla', () => {
     expect(venceInvitacion(new Date('2026-10-27T14:00:00Z'), CIERRE).toISOString()).toBe('2026-10-29T14:00:00.000Z')
   })
   it('el cierre si llega antes de las 48 h', () => {
-    expect(venceInvitacion(new Date('2026-11-01T12:00:00Z'), CIERRE)).toEqual(CIERRE)
+    expect(venceInvitacion(new Date('2026-11-04T12:00:00Z'), CIERRE)).toEqual(CIERRE)
   })
   it('enviada después del cierre programado (categoría todavía abierta): 48 h', () => {
-    expect(venceInvitacion(new Date('2026-11-02T12:00:00Z'), CIERRE).toISOString()).toBe('2026-11-04T12:00:00.000Z')
+    expect(venceInvitacion(new Date('2026-11-05T12:00:00Z'), CIERRE).toISOString()).toBe('2026-11-07T12:00:00.000Z')
   })
   it('sin cierre, siempre 48 h', () => {
     expect(venceInvitacion(new Date('2026-11-01T12:00:00Z'), null).toISOString()).toBe('2026-11-03T12:00:00.000Z')
