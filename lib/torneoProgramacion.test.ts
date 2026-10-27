@@ -229,6 +229,25 @@ describe('proponerProgramacion', () => {
     }
   })
 
+  it('Torneo Navidad 2026 (6-nov → 11-dic): las 4 categorías de adultos llenas caben, con margen', () => {
+    const fem = { ...dobles, id: 'df', nombre: 'Doble Femenino', orden: 2 }
+    const mixto = { ...dobles, id: 'mx', nombre: 'Mixto', orden: 3 }
+    const partidos = [
+      ...partidosDe(dobles, jugadores('m', 12, 2)),
+      ...partidosDe(fem, jugadores('f', 12, 2)),
+      ...partidosDe(mixto, Array.from({ length: 12 }, (_, k) => [`m${k + 1}`, `f${k + 1}`])),   // el Mixto sale de los mismos jugadores
+      ...partidosDe(single, jugadores('m', 8)),
+    ]
+    const ctx = { ...ctxBase(partidos), fechaInicio: '2026-11-06' }
+    const { horarios, sinHorario } = proponerProgramacion(ctx, new Map())
+    expect(sinHorario).toEqual([])
+    verificar(ctx, horarios)
+    const inicios = [...horarios.values()].map((h) => h.inicio).sort((a, b) => a - b)
+    expect(fechaISOEnCaracas(new Date(inicios[0]))).toBe('2026-11-06')
+    const libres = turnosAdultos('2026-11-06', '2026-12-10', 90).length - (partidos.length - 4)
+    expect(libres).toBe(12)
+  })
+
   it('respeta los horarios fijos y no los mueve', () => {
     const partidos = partidosDe(single, jugadores('s', 8))
     const fijo = { cancha: 'HGV2' as const, inicio: en('2026-11-02', '19:00') }

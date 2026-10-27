@@ -6,14 +6,14 @@ const cat = (extra: object = {}) => ({
   id: 'c', nombre: 'Doble Femenino Sexta', modalidad: 'doble' as const, cupo: 12,
   inscripciones_abiertas: true, sorteo_publicado_at: null as string | null, cancelada_at: null as string | null, ...extra,
 })
-const CIERRE = '2026-11-02T03:59:00Z'   // 1-nov 23:59 de Caracas
+const CIERRE = '2026-11-05T03:59:00Z'   // 4-nov 23:59 de Caracas
 
 describe('cierre manual por categoría', () => {
   it('se cierra y se reabre mientras no se publique su sorteo', () => {
     expect(errorCambioApertura('inscripcion', cat(), false)).toBeNull()
     expect(errorCambioApertura('inscripcion', cat({ inscripciones_abiertas: false }), true)).toBeNull()
-    expect(errorCambioApertura('inscripcion', cat({ sorteo_publicado_at: '2026-11-02T12:00:00Z' }), true)).toMatch(/ya se sorteó/)
-    expect(errorCambioApertura('inscripcion', cat({ cancelada_at: '2026-11-02T12:00:00Z' }), true)).toMatch(/cancelada/)
+    expect(errorCambioApertura('inscripcion', cat({ sorteo_publicado_at: '2026-11-05T12:00:00Z' }), true)).toMatch(/ya se sorteó/)
+    expect(errorCambioApertura('inscripcion', cat({ cancelada_at: '2026-11-05T12:00:00Z' }), true)).toMatch(/cancelada/)
     expect(errorCambioApertura('sorteado', cat(), true)).toMatch(/ya terminó/)
   })
 
@@ -39,8 +39,8 @@ describe('cierre programado vencido', () => {
   const torneo = { estado: 'inscripcion' as const, cierre_inscripciones_at: CIERRE }
   const categorias = [cat(), cat({ id: 'd', nombre: 'Mixto', inscripciones_abiertas: false }), cat({ id: 'e', nombre: 'Single', sorteo_publicado_at: CIERRE })]
   it('antes de la hora no alerta; después, lista las categorías que siguen abiertas', () => {
-    expect(cierreVencido(torneo, categorias, new Date('2026-11-02T03:58:00Z'))).toEqual([])
-    expect(cierreVencido(torneo, categorias, new Date('2026-11-02T03:59:00Z')).map((c) => c.nombre)).toEqual(['Doble Femenino Sexta'])
+    expect(cierreVencido(torneo, categorias, new Date('2026-11-05T03:58:00Z'))).toEqual([])
+    expect(cierreVencido(torneo, categorias, new Date('2026-11-05T03:59:00Z')).map((c) => c.nombre)).toEqual(['Doble Femenino Sexta'])
   })
   it('sin hora programada o con el torneo cerrado, no alerta', () => {
     expect(cierreVencido({ ...torneo, cierre_inscripciones_at: null }, categorias, new Date('2027-01-01'))).toEqual([])

@@ -8,7 +8,7 @@ Decisiones del 20-oct-2026: sorteo por bombos o serpentina (§3), WO (§6), hand
 
 | Regla | Valor |
 |---|---|
-| Fechas | Cierre de inscripciones **domingo 1-nov-2026, 23:59** (hora de Caracas) · sorteo **lunes 2-nov** · primeros partidos **miércoles 4-nov** (`fecha_inicio`) · finales y premiación el **viernes 11-dic** (`fecha_fin`), el día de las finales de adultos (decidido 23-oct-2026; antes empezaba el 2-nov) |
+| Fechas | Cierre de inscripciones **miércoles 4-nov-2026, 23:59** (hora de Caracas) · sorteo **jueves 5-nov** · primeros partidos **viernes 6-nov** (`fecha_inicio`) · finales y premiación el **viernes 11-dic** (`fecha_fin`), el día de las finales de adultos (decidido 27-oct-2026; antes: cierre 1-nov, sorteo 2-nov e inicio 4-nov, decididos el 23-oct) |
 | Categorías | Doble Masculino Sexta (12 parejas), Doble Femenino Sexta (12), Mixto con handicap (12), Single Caballeros Quinta (8 jugadores) |
 | Dobles | 4 grupos de 3, todos contra todos. Pasan 1º y 2º → cuartos, semis, final |
 | Single | 2 grupos de 4, todos contra todos. Pasan 1º y 2º → semis cruzadas, final |
@@ -103,11 +103,11 @@ RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas 
 
 ### 2.3 Cierre MANUAL por categoría y lista de espera (decidido 23-oct-2026)
 
-- El admin cierra cada categoría cuando lo decide (normalmente al completar el cupo, aunque falte tiempo para el 1-nov): «Cerrar inscripciones» en su tarjeta, con confirmación; queda registrado quién y cuándo (`inscripciones_cambiadas_por/_at`). Se puede **reabrir** mientras no se publique el sorteo de esa categoría.
+- El admin cierra cada categoría cuando lo decide (normalmente al completar el cupo, aunque falte tiempo para el 4-nov): «Cerrar inscripciones» en su tarjeta, con confirmación; queda registrado quién y cuándo (`inscripciones_cambiadas_por/_at`). Se puede **reabrir** mientras no se publique el sorteo de esa categoría.
 - Antes de cerrar, si hay jugadores sin pareja o invitaciones pendientes, la confirmación lo dice con la lista («Quedan N sin pareja: arma la dupla, trasládalos o marca su devolución»). Al cerrar, las invitaciones pendientes **vencen** (con aviso).
 - Categoría cerrada: el servidor rechaza inscripciones, invitaciones y aceptaciones de jugadores. El admin sigue armando duplas, trasladando, certificando e inscribiendo desde la lista de espera hasta publicar su sorteo.
 - **Cupo lleno:** aunque la categoría siga abierta, el servidor no acepta más inscripciones (dobles: parejas × 2; lo repite el trigger).
-- **La hora programada (1-nov 23:59 de Caracas) no cierra nada.** Si pasa con alguna categoría abierta: alerta «cierre programado vencido» en el panel y correo a los admins, una sola vez (`torneos.cierre_vencido_avisado_at`; se revisa al abrir el panel o la pantalla de un jugador, sin cron nuevo). Las invitaciones pendientes **sí** vencen a esa hora; mientras la categoría siga abierta se pueden enviar nuevas (vencen a las 48 h o al cerrar el admin la categoría) — decidido 23-oct-2026. La cuenta regresiva de los jugadores sigue mostrando el 1-nov. (Los admins no tienen campana en la app: el aviso va por correo.)
+- **La hora programada (4-nov 23:59 de Caracas) no cierra nada.** Si pasa con alguna categoría abierta: alerta «cierre programado vencido» en el panel y correo a los admins, una sola vez (`torneos.cierre_vencido_avisado_at`; se revisa al abrir el panel o la pantalla de un jugador, sin cron nuevo). Las invitaciones pendientes **sí** vencen a esa hora; mientras la categoría siga abierta se pueden enviar nuevas (vencen a las 48 h o al cerrar el admin la categoría) — decidido 23-oct-2026. La cuenta regresiva de los jugadores sigue mostrando el 4-nov. (Los admins no tienen campana en la app: el aviso va por correo.)
 - **Lista de espera** (`torneo_lista_espera`, sin lectura pública): con la categoría cerrada o llena, el jugador se anota (sin pago) y puede salir. Si una dupla o un inscrito se retira antes del sorteo, el admin ve la lista en orden de llegada e inscribe al siguiente (con aviso; le queda el pago pendiente).
 
 ### 2.4 Pago pendiente (confirmado 23-oct-2026)
