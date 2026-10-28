@@ -15,7 +15,7 @@ import {
 } from '@/lib/torneoInfantil'
 import { categoriaAbierta } from '@/lib/torneoInscripcion'
 import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
-import NavJugador from '@/app/components/NavJugador'
+import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
 
 // "Inscribir a mi hijo/a" (Torneo Navidad, sección Infantil — SPEC §14):
 // fichas de mis representados (reutilizables en torneos futuros),
@@ -96,6 +96,7 @@ function Aviso({ tipo, children }: { tipo: 'ok' | 'error' | 'info'; children: Re
 export default function InscripcionInfantil() {
   const [checking, setChecking] = useState(true)
   const [esJugador, setEsJugador] = useState(false)
+  const [rol, setRol] = useState<string | null>(null)
   const [datos, setDatos] = useState<Datos | null>(null)
   const [error, setError] = useState('')
   const [editando, setEditando] = useState<Representado | 'nuevo' | null>(null)
@@ -111,6 +112,7 @@ export default function InscripcionInfantil() {
     fetch('/api/me')
       .then((r) => r.json())
       .then(async (d) => {
+        setRol(d.session?.role ?? null)
         if (d.session?.role !== 'jugador') return
         setEsJugador(true)
         await cargar()
@@ -121,7 +123,8 @@ export default function InscripcionInfantil() {
 
   if (checking) {
     return (
-      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)' }} className="loading-row"><span className="spinner spinner-chalk" /> Cargando…</p>
       </main>
     )
@@ -130,7 +133,9 @@ export default function InscripcionInfantil() {
   if (!esJugador) {
     return (
       <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)', marginBottom: '16px' }}>Debes iniciar sesión como jugador para inscribir a tu hijo/a en el torneo.</p>
+        <BotonPanelAdmin rol={rol} />
         <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Iniciar sesión</a>
       </main>
     )

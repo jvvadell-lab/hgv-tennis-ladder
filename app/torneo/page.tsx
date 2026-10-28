@@ -87,7 +87,8 @@ export default function TorneoPublico() {
 
   if (!datos) {
     return (
-      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)' }} className="loading-row">{error || <><span className="spinner spinner-chalk" /> Cargando torneo…</>}</p>
       </main>
     )

@@ -16,7 +16,7 @@ import {
 } from '@/lib/torneoInscripcion'
 import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
 import { ETIQUETA_ESTADO_DOBLES, enlaceWhatsApp, mensajeInvitacionWhatsApp, telefonoLegible, type CandidatoPareja, type EstadoEnDobles } from '@/lib/torneoDobles'
-import NavJugador from '@/app/components/NavJugador'
+import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
 
 // "Inscribirme en el Torneo Navidad": inscripción individual por categoría
 // (también en dobles: cada jugador se inscribe y paga solo), estado de cada
@@ -91,6 +91,7 @@ const COLOR_ESTADO: Record<EstadoInscripcion, { fondo: string; texto: string; et
 export default function InscripcionTorneo() {
   const [checking, setChecking] = useState(true)
   const [esJugador, setEsJugador] = useState(false)
+  const [rol, setRol] = useState<string | null>(null)
   const [datos, setDatos] = useState<Datos | null>(null)
   const [error, setError] = useState('')
 
@@ -105,6 +106,7 @@ export default function InscripcionTorneo() {
     fetch('/api/me')
       .then((r) => r.json())
       .then(async (d) => {
+        setRol(d.session?.role ?? null)
         if (d.session?.role !== 'jugador') return
         setEsJugador(true)
         await cargar()
@@ -115,7 +117,8 @@ export default function InscripcionTorneo() {
 
   if (checking) {
     return (
-      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)' }} className="loading-row"><span className="spinner spinner-chalk" /> Cargando…</p>
       </main>
     )
@@ -124,7 +127,9 @@ export default function InscripcionTorneo() {
   if (!esJugador) {
     return (
       <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)', marginBottom: '16px' }}>Debes iniciar sesión como jugador para inscribirte en el torneo.</p>
+        <BotonPanelAdmin rol={rol} />
         <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Iniciar sesión</a>
       </main>
     )
