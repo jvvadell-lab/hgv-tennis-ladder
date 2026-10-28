@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import TasaBcv from '@/app/components/TasaBcv'
 import { hoyEnCaracas, instanteEnCaracas, formatearFechaCorta } from '@/lib/tiempo'
-import NavJugador from '@/app/components/NavJugador'
+import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -328,9 +328,10 @@ export default function PerfilPage() {
     }
   }
 
-  if (checking || (session && loading)) {
+  if (checking || (session?.role === 'jugador' && loading)) {
     return (
-      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)' }} className="loading-row"><span className="spinner spinner-chalk" /> Cargando…</p>
       </main>
     )
@@ -339,7 +340,9 @@ export default function PerfilPage() {
   if (!session || session.role !== 'jugador') {
     return (
       <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)', marginBottom: '16px' }}>Debes iniciar sesión como jugador para ver tu perfil.</p>
+        <BotonPanelAdmin rol={session?.role} />
         <a href="/login" style={{ color: 'var(--color-ball)', fontWeight: 'bold' }}>Iniciar sesión</a>
       </main>
     )

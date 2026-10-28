@@ -31,3 +31,17 @@ export default function NavJugador() {
     </nav>
   )
 }
+
+// En los avisos "Debes iniciar sesión como jugador…": si quien entró es un
+// admin, le damos la salida directa a su panel.
+export function BotonPanelAdmin({ rol }: { rol?: string | null }) {
+  if (rol !== 'admin') return null
+  return (
+    <Link href="/admin" style={{
+      display: 'inline-block', marginBottom: '16px', background: 'var(--color-ball)', color: 'var(--color-ink)',
+      fontWeight: 700, textDecoration: 'none', padding: '12px 24px', borderRadius: '4px', fontSize: '14px',
+    }}>
+      ⚙️ Ir al panel admin
+    </Link>
+  )
+}

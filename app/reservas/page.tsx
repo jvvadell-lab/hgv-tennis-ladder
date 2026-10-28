@@ -11,7 +11,7 @@ import { detectarBloqueo, franjaBloqueo, type BloqueoCancha } from '@/lib/choque
 import { dentroDeVentana, formatearDistancia } from '@/lib/geoClub'
 import { confirmarLlegada } from '@/lib/confirmarLlegada'
 import AvisoYaLlegue from '@/app/components/AvisoYaLlegue'
-import NavJugador from '@/app/components/NavJugador'
+import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -284,16 +284,19 @@ export default function ReservasPage() {
 
   if (checking) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="loading-row">
-        <span className="spinner" /> Cargando…
-      </div>
+      <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <NavJugador />
+        <p style={{ color: 'var(--color-chalk)' }} className="loading-row"><span className="spinner spinner-chalk" /> Cargando…</p>
+      </main>
     )
   }
 
   if (!session || session.role !== 'jugador') {
     return (
       <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
+        <NavJugador />
         <p style={{ color: 'var(--color-chalk)', fontSize: '18px', marginBottom: '20px' }}>🔒 Necesitas ser socio registrado para reservar cancha.</p>
+        <BotonPanelAdmin rol={session?.role} />
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <a
             href="/register?next=/reservas"

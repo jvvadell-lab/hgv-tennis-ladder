@@ -1428,7 +1428,14 @@ export default function LadderPage() {
   }
 
   if (checkingSession) {
-    return <CentroMensaje texto="Cargando..." conSpinner />
+    return (
+      <main className="court-bg" style={{ minHeight: '100vh', padding: '30px 16px' }}>
+        <NavJugador />
+        <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+          <CentroMensaje texto="Cargando..." conSpinner />
+        </div>
+      </main>
+    )
   }
 
   return (
