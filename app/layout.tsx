@@ -42,6 +42,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#0f1b26",
+  // Necesario para que env(safe-area-inset-bottom) valga en el iPhone (barra NavJugador).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

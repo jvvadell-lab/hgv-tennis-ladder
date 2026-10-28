@@ -5,6 +5,7 @@ import { formatearFechaHora } from '@/lib/tiempo'
 import { ETIQUETA_FASE, PREFIJO_FASE, type EstadoPartido, type Fase, textoOrigen } from '@/lib/torneo'
 import type { SetJugado, TipoResultado } from '@/lib/resultados'
 import { textoMarcador } from '@/lib/torneoResultados'
+import NavJugador from '@/app/components/NavJugador'
 
 // "Mis partidos" (SPEC §9, fase 6): mis partidos del torneo vigente (y los
 // de los menores que represento), con rival, horario y resultado, y el
@@ -135,10 +136,11 @@ export default function MisPartidos() {
   )
 
   return (
-    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', padding: '20px 16px' }}>
+    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px' }}>
+      <NavJugador />
       <div style={{
         background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)',
-        padding: 'clamp(20px, 5vw, 36px)', width: '100%', maxWidth: '560px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', alignSelf: 'flex-start',
+        padding: 'clamp(20px, 5vw, 36px)', width: '100%', maxWidth: '560px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
       }}>
         <div style={{ textAlign: 'center' }}>
           <p style={{ fontSize: '34px', margin: 0 }}>🎄🎾</p>
@@ -209,7 +211,7 @@ export default function MisPartidos() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: '28px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[['/torneo', '🏆 Grupos y llave'], ['/torneo/inscripcion', '🎄 Mi inscripción'], ['/perfil', '👤 Mi perfil']].map(([href, texto]) => (
+          {[['/torneo', '🏆 Grupos y llave'], ['/torneo/inscripcion', '🎄 Mi inscripción']].map(([href, texto]) => (
             <a key={href} href={href} style={{ color: 'var(--color-ink)', fontSize: '14px', fontWeight: 700, textDecoration: 'none', border: '1px solid var(--color-court)', borderRadius: '4px', padding: '9px 20px' }}>{texto}</a>
           ))}
         </div>

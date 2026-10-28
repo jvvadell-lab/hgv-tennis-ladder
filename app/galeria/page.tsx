@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { formatearFechaConAnio, formatearFechaLarga } from '@/lib/tiempo'
+import NavJugador from '@/app/components/NavJugador'
 
 type FotoGaleria = {
   id: string
@@ -66,6 +67,7 @@ export default function GaleriaPage() {
       minHeight: '100vh',
       padding: '48px 20px',
     }}>
+      <NavJugador />
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '34px' }}>
           <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '83px', height: '83px', objectFit: 'contain', margin: '0 auto 10px auto', display: 'block' }} />

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import TasaBcv from '@/app/components/TasaBcv'
 import { hoyEnCaracas, instanteEnCaracas, formatearFechaCorta } from '@/lib/tiempo'
+import NavJugador from '@/app/components/NavJugador'
 
 type Session = {
   role: 'admin' | 'jugador'
@@ -345,7 +346,8 @@ export default function PerfilPage() {
   }
 
   return (
-    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <NavJugador />
       <div style={{
         background: 'var(--color-chalk)',
         borderRadius: '4px',
@@ -868,19 +870,6 @@ export default function PerfilPage() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <a href="/ladder" style={{
-            display: 'inline-block',
-            color: 'var(--color-ink)',
-            fontSize: '15px',
-            fontWeight: 700,
-            fontFamily: 'var(--font-body)',
-            textDecoration: 'none',
-            border: '1px solid var(--color-court)',
-            borderRadius: '4px',
-            padding: '10px 24px',
-          }}>
-            🎾 Volver a la escalera
-          </a>
           <a href="/galeria" style={{
             display: 'inline-block',
             color: 'var(--color-ink)',

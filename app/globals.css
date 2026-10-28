@@ -621,3 +621,84 @@ textarea:focus-visible {
   .cinta-patro-pista { animation: none; flex-wrap: wrap; justify-content: center; width: auto; }
   .cinta-patro-pista > [aria-hidden='true'] { display: none; }
 }
+
+/* NavJugador: fila de botones arriba en pantalla ancha, barra fija abajo en el celular */
+.nav-jugador {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto 20px auto;
+  box-sizing: border-box;
+}
+.nav-jugador-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(247, 243, 234, 0.08);
+  border: 1px solid rgba(247, 243, 234, 0.18);
+  color: var(--color-chalk);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.nav-jugador-item:hover { background: rgba(247, 243, 234, 0.15); border-color: rgba(212, 225, 87, 0.5); }
+.nav-jugador-item[aria-current="page"] {
+  background: var(--color-ball);
+  border-color: var(--color-ball);
+  color: var(--color-ink);
+}
+.nav-jugador-icono { font-size: 16px; line-height: 1; }
+
+@media (max-width: 767px) {
+  .nav-jugador {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    max-width: none;
+    margin: 0;
+    gap: 0;
+    flex-wrap: nowrap;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    background: rgba(15, 27, 38, 0.96);
+    border-top: 1px solid rgba(212, 225, 87, 0.35);
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.3);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+  .nav-jugador-item {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    font-size: 11px;
+    color: rgba(247, 243, 234, 0.75);
+  }
+  .nav-jugador-item:hover { background: transparent; }
+  .nav-jugador-item[aria-current="page"] {
+    background: rgba(212, 225, 87, 0.14);
+    color: var(--color-ball);
+  }
+  .nav-jugador-icono { font-size: 20px; }
+  /* Espacio al final del contenido para que la barra fija no tape nada. */
+  main:has(.nav-jugador) {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media print {
+  .nav-jugador { display: none; }
+}
