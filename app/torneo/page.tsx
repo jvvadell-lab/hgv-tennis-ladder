@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fechaISOEnCaracas, formatearFechaConAnio, formatearFechaCorta, formatearFechaLarga, formatearHora, instanteEnCaracas } from '@/lib/tiempo'
 import { ETIQUETA_ESTADO_TORNEO, ETIQUETA_FASE, PREFIJO_FASE, type EstadoTorneo, type Fase, textoOrigen } from '@/lib/torneo'
 import type { SetJugado } from '@/lib/resultados'
+import NavJugador from '@/app/components/NavJugador'
 
 // Vista pública del Torneo Navidad (SPEC §9): pestañas Adultos | Infantil y
 // una por categoría con la tabla de grupos en vivo, el calendario por día y
@@ -99,7 +100,8 @@ export default function TorneoPublico() {
   const nombre = (id: string | null) => (id ? datos.nombres[id] ?? '—' : null)
 
   return (
-    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', padding: '20px 16px' }}>
+    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px' }}>
+      <NavJugador />
       <div style={{ background: 'var(--color-chalk)', borderRadius: '8px', padding: '22px 16px', width: '100%', maxWidth: '1040px', boxSizing: 'border-box', minWidth: 0 }}>
         {!torneo ? (
           <p style={{ margin: 0 }}>No hay un torneo en curso.</p>
@@ -113,7 +115,7 @@ export default function TorneoPublico() {
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '12px' }}>
                 {[
                   ...(torneo.estado === 'inscripcion' ? [['/torneo/inscripcion', '✍️ Inscribirme']] : []),
-                  ['/ladder', '🎾 Escalera'], ['/perfil', '👤 Mi perfil'],
+                  ['/torneo/mis-partidos', '📋 Mis partidos'],
                 ].map(([href, texto]) => (
                   <a key={href} href={href} style={{ color: 'var(--color-ink)', fontSize: '13px', fontWeight: 700, textDecoration: 'none', border: '1px solid var(--color-court)', borderRadius: '4px', padding: '7px 14px' }}>{texto}</a>
                 ))}

@@ -129,7 +129,7 @@ export default function Home() {
       ? { href: '/torneo/inscripcion', titulo: 'Inscripción', detalle: 'Copa Navidad', icono: '🏆', destacado: true }
       : { href: '/torneo', titulo: 'Torneo', detalle: 'Llaves y calendario', icono: '🏆', destacado: !!torneo },
     { href: '/reservas', titulo: 'Reservar', detalle: 'Cancha HGV 1 y HGV 2', icono: '📅' },
-    { href: '/ladder', titulo: 'Escalera', detalle: 'Escalafón y retos', icono: '🪜' },
+    { href: '/ladder', titulo: 'Escalera 2026', detalle: 'Escalafón y retos', icono: '🪜' },
     { href: '/galeria', titulo: 'Galería', detalle: 'Fotos de partidos', icono: '📸' },
   ]
   if (!checking && session?.role === 'admin') accesos.push({ href: '/admin', titulo: 'Panel admin', detalle: 'Gestión del club', icono: '⚙️' })

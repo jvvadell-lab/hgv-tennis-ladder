@@ -15,6 +15,7 @@ import {
 } from '@/lib/torneoInfantil'
 import { categoriaAbierta } from '@/lib/torneoInscripcion'
 import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
+import NavJugador from '@/app/components/NavJugador'
 
 // "Inscribir a mi hijo/a" (Torneo Navidad, sección Infantil — SPEC §14):
 // fichas de mis representados (reutilizables en torneos futuros),
@@ -138,10 +139,11 @@ export default function InscripcionInfantil() {
   const torneo = datos?.torneo
 
   return (
-    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', padding: '20px 16px' }}>
+    <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px' }}>
+      <NavJugador />
       <div style={{
         background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)',
-        padding: 'clamp(20px, 5vw, 36px)', width: '100%', maxWidth: '560px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', alignSelf: 'flex-start',
+        padding: 'clamp(20px, 5vw, 36px)', width: '100%', maxWidth: '560px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
           <p style={{ fontSize: '34px', margin: 0 }}>🎄🧒🎾</p>
@@ -195,7 +197,7 @@ export default function InscripcionInfantil() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: '28px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[['/torneo/inscripcion', '🎄 Mi inscripción'], ['/perfil', '👤 Mi perfil']].map(([href, texto]) => (
+          {[['/torneo/inscripcion', '🎄 Mi inscripción'], ['/torneo/mis-partidos', '📋 Mis partidos']].map(([href, texto]) => (
             <a key={href} href={href} style={{
               color: 'var(--color-ink)', fontSize: '14px', fontWeight: 700, textDecoration: 'none',
               border: '1px solid var(--color-court)', borderRadius: '4px', padding: '9px 20px',

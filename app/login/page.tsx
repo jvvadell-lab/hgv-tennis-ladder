@@ -8,7 +8,7 @@ function LoginForm() {
   const nextParam = searchParams.get('next') || ''
   // Solo aceptamos rutas internas relativas (empiezan con "/" pero no "//"),
   // para que nadie pueda armar un enlace que redirija a un sitio externo.
-  const destinoDespuesDeLogin = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/ladder'
+  const destinoDespuesDeLogin = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/'
 
   const [formData, setFormData] = useState({ email: '', pin: '' })
   const [message, setMessage] = useState('')

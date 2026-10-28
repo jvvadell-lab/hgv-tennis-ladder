@@ -11,6 +11,7 @@ import { detectarBloqueo, franjaBloqueo, type BloqueoCancha } from '@/lib/choque
 import { dentroDeVentana, formatearDistancia } from '@/lib/geoClub'
 import { confirmarLlegada } from '@/lib/confirmarLlegada'
 import AvisoYaLlegue from '@/app/components/AvisoYaLlegue'
+import NavJugador from '@/app/components/NavJugador'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -319,6 +320,7 @@ export default function ReservasPage() {
 
   return (
     <main className="court-bg" style={{ minHeight: '100vh', padding: '40px 20px' }}>
+      <NavJugador />
       <div style={{ maxWidth: '520px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <img src="/logo-hgv.png" alt="Escudo HGV" style={{ width: '72px', height: '72px', objectFit: 'contain', margin: '0 auto 14px auto', display: 'block' }} />

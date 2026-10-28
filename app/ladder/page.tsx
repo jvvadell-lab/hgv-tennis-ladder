@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabaseClient'
 import CampanaNotificaciones from '@/app/components/CampanaNotificaciones'
 import AvisoYaLlegue from '@/app/components/AvisoYaLlegue'
 import CintaPatrocinantes from '@/app/components/CintaPatrocinantes'
+import NavJugador from '@/app/components/NavJugador'
+import type { TorneoPortada } from '@/app/components/BannerTorneo'
 import type { PatrocinantePublico } from '@/lib/patrocinantes'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
@@ -192,6 +194,9 @@ export default function LadderPage() {
   // sola, tendría que recargar.
   const [, reevaluarVentanaExpress] = useState(0)
   const [patrocinantes, setPatrocinantes] = useState<PatrocinantePublico[]>([])
+  // Estado de la Copa vigente (null = no hay) y si estoy inscrito, para el botón de arriba.
+  const [estadoCopa, setEstadoCopa] = useState<TorneoPortada['estado'] | null>(null)
+  const [inscritoEnCopa, setInscritoEnCopa] = useState(false)
 
   // Al abrir el formulario de retar, bajamos la pantalla de una vez hasta ahí
   // — así el jugador no tiene que buscarlo manualmente más abajo en la tabla.
@@ -213,13 +218,26 @@ export default function LadderPage() {
       .finally(() => setCheckingSession(false))
   }, [])
 
-  // Patrocinantes activos (los mismos de la portada, sin sesión requerida).
+  // Patrocinantes activos y torneo vigente (los mismos de la portada, sin sesión requerida).
   useEffect(() => {
     fetch('/api/publico/portada')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setPatrocinantes(d?.patrocinantes || []))
+      .then((d) => {
+        setPatrocinantes(d?.patrocinantes || [])
+        setEstadoCopa(d?.torneo?.estado ?? null)
+      })
       .catch(() => {})
   }, [])
+
+  // Con la Copa sorteada o en curso, "Mis partidos" solo si estoy inscrito (yo o un menor que represento).
+  const copaEnJuego = estadoCopa === 'sorteado' || estadoCopa === 'en_curso'
+  useEffect(() => {
+    if (!copaEnJuego || session?.role !== 'jugador') return
+    fetch('/api/jugador/torneo/partidos')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setInscritoEnCopa((d?.mias?.length ?? 0) > 0))
+      .catch(() => {})
+  }, [copaEnJuego, session?.role])
 
   // 2. Cargar temporada activa
   useEffect(() => {
@@ -1419,6 +1437,7 @@ export default function LadderPage() {
       padding: '30px 16px',
       fontFamily: 'Arial, sans-serif',
     }}>
+      <NavJugador />
       <div style={{ maxWidth: '760px', margin: '0 auto' }}>
 
         {/* Header */}
@@ -1506,31 +1525,23 @@ export default function LadderPage() {
           )}
         </div>
 
-        {/* Botón grande de Reservar Cancha — bien visible, jugadores caen acá */}
-        {/* directo después de iniciar sesión y no siempre pasan por el inicio. */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <Link href="/reservas" style={{
-            display: 'inline-block',
-            background: 'var(--color-ball)',
-            color: 'var(--color-ink)',
-            padding: '18px 40px',
-            borderRadius: '10px',
-            textDecoration: 'none',
-            fontWeight: 900,
-            fontSize: '18px',
-            fontFamily: 'var(--font-display)',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
-            width: '100%',
-            maxWidth: '380px',
-            boxSizing: 'border-box',
-          }}>
-            🎾 Reservar Cancha
-          </Link>
-          <div style={{ marginTop: '12px' }}>
-            <Link href="/torneo" style={{ color: 'var(--color-ball)', fontWeight: 700, fontSize: '15px', textDecoration: 'underline' }}>
-              🎄 Torneo Navidad: grupos, calendario y llaves
-            </Link>
-          </div>
+        {/* Botones grandes: la Copa (mientras haya una vigente) y Reservar Cancha. */}
+        {/* Los jugadores caen acá directo y no siempre pasan por el inicio. */}
+        <div style={{ textAlign: 'center', marginBottom: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          {estadoCopa === 'inscripcion' && (
+            <Link href="/torneo/inscripcion" style={btnGrande}>🎄 Inscribirme en la Copa</Link>
+          )}
+          {copaEnJuego && (
+            <>
+              <Link href="/torneo" style={btnGrande}>🎄 Ver la Copa</Link>
+              {inscritoEnCopa && (
+                <Link href="/torneo/mis-partidos" style={{ color: 'var(--color-ball)', fontWeight: 700, fontSize: '15px', textDecoration: 'underline' }}>
+                  📋 Mis partidos de la Copa
+                </Link>
+              )}
+            </>
+          )}
+          <Link href="/reservas" style={btnGrande}>🎾 Reservar Cancha</Link>
         </div>
 
         {!temporadaId && (
@@ -2769,6 +2780,22 @@ const btnRetar: React.CSSProperties = {
   fontSize: '13px',
   fontWeight: 'bold',
   cursor: 'pointer',
+}
+
+const btnGrande: React.CSSProperties = {
+  display: 'inline-block',
+  background: 'var(--color-ball)',
+  color: 'var(--color-ink)',
+  padding: '18px 40px',
+  borderRadius: '10px',
+  textDecoration: 'none',
+  fontWeight: 900,
+  fontSize: '18px',
+  fontFamily: 'var(--font-display)',
+  boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+  width: '100%',
+  maxWidth: '380px',
+  boxSizing: 'border-box',
 }
 
 const btnRetarDeshabilitado: React.CSSProperties = {
