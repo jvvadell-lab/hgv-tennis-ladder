@@ -1,4 +1,4 @@
-// Prueba la migración 20261028144500_torneo_precios_inscripcion en un
+// Prueba la migración 20261028164247_torneo_precios_inscripcion en un
 // Postgres local (PGlite), sobre copias reducidas de las tablas del torneo
 // (solo las columnas que usan la función y el trigger del monto).
 import { readFileSync } from 'node:fs'
@@ -7,7 +7,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 const MIGRACION = readFileSync(
-  join(__dirname, '../migrations/20261028144500_torneo_precios_inscripcion.sql'),
+  join(__dirname, '../migrations/20261028164247_torneo_precios_inscripcion.sql'),
   'utf8',
 )
 
