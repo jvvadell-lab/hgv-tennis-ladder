@@ -9,6 +9,7 @@ import { cierreVencido, errorAnotarseEnEspera, ordenEspera } from '@/lib/torneoC
 import { errorGeneros, mensajeErrorBaseInscripcion, nivelAdmitido, nivelParaTorneo } from '@/lib/torneoInscripcion'
 import { correoTorneo, escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
 import type { Nivel } from '@/lib/torneo'
+import { textoMontoCorto } from '@/lib/torneoPrecios'
 
 type Resultado<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -117,7 +118,7 @@ export async function inscribirDesdeEspera(db: SupabaseClient, torneo: Torneo, e
   const { data: ins, error: errI } = await db
     .from('torneo_inscripciones')
     .insert({ categoria_id: e.categoria_id, jugador1_id: e.jugador_id, inscrita_por_admin: adminId })
-    .select('id')
+    .select('id, monto_eur, monto_motivo')
     .single()
   if (errI) return { ok: false, error: mensajeErrorBaseInscripcion(errI.message) ?? errI.message }
   await db.from('torneo_lista_espera')
@@ -128,7 +129,7 @@ export async function inscribirDesdeEspera(db: SupabaseClient, torneo: Torneo, e
     tipo: 'torneo_lista_espera_inscrito',
     mensaje: `🎉 Se liberó un lugar en ${cat.nombre}: el admin te inscribió desde la lista de espera. Falta reportar tu pago.`,
     asunto: `🎉 Entraste en ${cat.nombre} — ${torneo.nombre}`,
-    cuerpoHtml: () => `<p>Se liberó un lugar en <strong>${escaparHtml(cat.nombre)}</strong> y el admin te inscribió desde la lista de espera.</p><p>Falta reportar tu pago (${torneo.monto_inscripcion_eur} € en Bs. a la tasa BCV del euro)${''}. En dobles, el admin te ayuda a formar la dupla.</p>`,
+    cuerpoHtml: () => `<p>Se liberó un lugar en <strong>${escaparHtml(cat.nombre)}</strong> y el admin te inscribió desde la lista de espera.</p><p>Falta reportar tu pago (${textoMontoCorto({ monto_eur: Number(ins.monto_eur), motivo: ins.monto_motivo })} en Bs. a la tasa BCV del euro). En dobles, el admin te ayuda a formar la dupla.</p>`,
   })
   return { ok: true, inscripcionId: ins.id }
 }

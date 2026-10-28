@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { escaparHtml, notificarJugadores, torneoVigente } from '@/lib/torneoServidor'
 import { mensajeErrorBaseInscripcion, validarInscripcion, type JugadorParaInscripcion } from '@/lib/torneoInscripcion'
 import type { TorneoCategoria } from '@/lib/torneo'
+import { textoMontoCorto } from '@/lib/torneoPrecios'
 
 // Inscripción del jugador con sesión en una categoría del torneo vigente.
 // También en dobles cada jugador se inscribe y paga solo: la pareja se forma
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     const { data: nueva, error: errIns } = await db
       .from('torneo_inscripciones')
       .insert({ categoria_id: categoria.id, jugador1_id: session.id, inscrita_por: session.id })
-      .select('id')
+      .select('id, monto_eur, monto_motivo')
       .single()
     if (errIns) {
       const claro = mensajeErrorBaseInscripcion(errIns.message)
@@ -81,13 +82,13 @@ export async function POST(request: Request) {
       cuerpoHtml: () => `
         <p>Te inscribiste en <strong>${escaparHtml(categoria.nombre)}</strong> del <strong>${escaparHtml(torneo.nombre)}</strong>.</p>
         <div style="background: #fff8e1; border-left: 4px solid #f0b400; padding: 12px 16px; margin: 18px 0; border-radius: 4px;">
-          Tu inscripción queda <strong>pendiente</strong> hasta que se valide tu pago (${torneo.monto_inscripcion_eur} €, en Bs. a la tasa BCV del euro del día del pago)${validacion.provisionales.length ? ' y el admin confirme tu categoría' : ''}.
+          Tu inscripción queda <strong>pendiente</strong> hasta que se valide tu pago (${textoMontoCorto({ monto_eur: Number(nueva.monto_eur), motivo: nueva.monto_motivo })}, en Bs. a la tasa BCV del euro del día del pago)${validacion.provisionales.length ? ' y el admin confirme tu categoría' : ''}.
         </div>
         ${dobles ? '<p>Tu lugar ya está reservado. Invita a tu pareja desde la app; si no eliges a nadie, quedas <strong>disponible</strong> y el admin arma las duplas al cierre de inscripciones.</p>' : ''}
       `,
     })
 
-    return NextResponse.json({ ok: true, inscripcionId: nueva.id, provisionales: validacion.provisionales })
+    return NextResponse.json({ ok: true, inscripcionId: nueva.id, provisionales: validacion.provisionales, monto: { monto_eur: Number(nueva.monto_eur), motivo: nueva.monto_motivo } })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al inscribirte' }, { status: 500 })
   }

@@ -10,7 +10,7 @@ import { TIPOS_PAGO_TORNEO, montoInscripcionBs } from '@/lib/torneoInscripcion'
 // también el de su pareja), o el de la inscripción de un menor que representa
 // (el pago queda a su nombre, SPEC §14.2). Mismo flujo que los pagos de la escalera: queda
 // sin validar hasta que el admin lo confirme. El monto lo calcula el
-// servidor: monto en € del torneo × tasa BCV del euro vigente el día del
+// servidor: monto en € fijado en la inscripción (SPEC §2.5) × tasa BCV del euro vigente el día del
 // pago, y la tasa usada queda en pagos.tasa_bcv_eur.
 export async function POST(request: Request) {
   try {
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     const { data: ins, error: errIns } = await db
       .from('torneo_inscripciones')
-      .select('id, estado, jugador1_id, jugador2_id, torneo_categorias:categoria_id(torneo_id), torneo_menores:menor_id(representante_jugador_id)')
+      .select('id, estado, jugador1_id, jugador2_id, monto_eur, torneo_categorias:categoria_id(torneo_id), torneo_menores:menor_id(representante_jugador_id)')
       .eq('id', inscripcionId)
       .maybeSingle()
     if (errIns) throw errIns
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     const tasa = await obtenerTasaVigente(db, fechaPago)
     if (!tasa) return NextResponse.json({ error: 'No hay tasa BCV registrada para esa fecha. Avísale al administrador.' }, { status: 400 })
     const tasaEur = tasaParaCalculo(tasa.eur)
-    const monto = montoInscripcionBs(torneo.monto_inscripcion_eur, tasa.eur)
+    const monto = montoInscripcionBs(Number(ins.monto_eur), tasa.eur)
 
     const { data: creados, error } = await db
       .from('pagos')

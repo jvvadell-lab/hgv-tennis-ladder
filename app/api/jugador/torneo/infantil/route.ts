@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { torneoVigente } from '@/lib/torneoServidor'
+import { montoProximaInscripcion, torneoVigente } from '@/lib/torneoServidor'
 import { COLUMNAS_MENOR, categoriasInfantiles } from '@/lib/torneoInfantilServidor'
 import { obtenerTasaVigente, tasaParaCalculo } from '@/lib/tasaBcv'
-import { montoInscripcionBs, textoPendiente } from '@/lib/torneoInscripcion'
+import { textoPendiente } from '@/lib/torneoInscripcion'
 import { fechaCorteEdad, pendientesInscripcionMenor } from '@/lib/torneoInfantil'
 import type { EstadoInscripcion } from '@/lib/torneo'
 
 // Todo lo que necesita "Inscribir a mi hijo/a": torneo vigente, categorías
 // infantiles con cupo, mis representados (fichas reutilizables entre
 // torneos) con sus inscripciones de este torneo, pagos y pendientes, y el
-// monto en Bs. de hoy. Solo devuelve fichas cuyo representante soy yo.
+// monto de la próxima inscripción de cada niño. Solo devuelve fichas cuyo representante soy yo.
 export async function GET() {
   try {
     const session = await getSession()
@@ -37,7 +37,7 @@ export async function GET() {
     const { data: inscripciones, error: errIns } = categoriaIds.length
       ? await db
           .from('torneo_inscripciones')
-          .select('id, categoria_id, menor_id, estado, categoria_certificada_at, invitado_autorizado_at, created_at')
+          .select('id, categoria_id, menor_id, estado, categoria_certificada_at, invitado_autorizado_at, created_at, monto_eur, monto_motivo, monto_ajuste_nota')
           .in('categoria_id', categoriaIds)
           .neq('estado', 'retirada')
       : { data: [], error: null }
@@ -59,8 +59,14 @@ export async function GET() {
     if (errPag) throw errPag
 
     const catPorId = new Map(categorias.map((c) => [c.id, c]))
-    const representados = (menores || []).map((m) => ({
+    // Lo que pagaría la próxima inscripción de cada niño (1ª de la cuenta,
+    // otro hijo o el mismo niño en otra categoría: SPEC §2.5).
+    const proximas = categoriaIds.length
+      ? await Promise.all((menores || []).map((m) => montoProximaInscripcion(db, categoriaIds[0], { menorId: m.id })))
+      : []
+    const representados = (menores || []).map((m, k) => ({
       ...m,
+      proximaInscripcion: proximas[k] ?? null,
       inscripciones: mias
         .filter((i) => i.menor_id === m.id)
         .map((i) => {
@@ -80,6 +86,7 @@ export async function GET() {
             estado: i.estado,
             categoria: { id: i.categoria_id, nombre: catPorId.get(i.categoria_id)?.nombre || '—' },
             certificada: !!i.categoria_certificada_at,
+            monto: { monto_eur: Number(i.monto_eur), motivo: i.monto_motivo, ajuste: i.monto_ajuste_nota },
             pendientes: pendientes.map((p) => ({ ...p, texto: textoPendiente(p, null) })),
             pagos: suyos,
           }
@@ -94,7 +101,7 @@ export async function GET() {
       fechaCorte: fechaCorteEdad(torneo),
       categorias: categorias.map((c) => ({ ...c, ocupados: ocupados[c.id] || 0 })),
       representados,
-      tasa: tasa ? { fecha_vigencia: tasa.fecha_vigencia, eur: tasaParaCalculo(tasa.eur), montoBs: montoInscripcionBs(torneo.monto_inscripcion_eur, tasa.eur) } : null,
+      tasa: tasa ? { fecha_vigencia: tasa.fecha_vigencia, eur: tasaParaCalculo(tasa.eur) } : null,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al cargar la sección infantil' }, { status: 500 })

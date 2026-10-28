@@ -19,7 +19,7 @@ Decisiones del 20-oct-2026: sorteo por bombos o serpentina (§3), WO (§6), hand
 | Participantes | **Solo socios**, adultos e infantiles. El admin puede autorizar invitados / wild card, también para completar una categoría (§2.1) |
 | No presentación | Se declara WO a favor del rival tras **15 min de tolerancia** (aprobado 20-oct-2026). Cuenta 2-0 en sets y 12-0 en games |
 | Mixto con handicap | 15-0 al inicio de **cada game** para la pareja que el admin marque en cada partido (§4.1) |
-| Inscripción | 15 € por jugador por categoría, pagadero en Bs. a tasa BCV del euro del día |
+| Inscripción | 1ª categoría 15 €, 2ª 10 € (adultos, por jugador); 1ª inscripción infantil 15 €, cada siguiente 10 € (por representante). En Bs. a tasa BCV del euro del día del pago (§2.5, 28-oct-2026) |
 | Un jugador puede jugar | Hasta 2 categorías |
 | Duración del turno | 90 min (dobles y single) |
 
@@ -74,13 +74,13 @@ torneo_partidos
 ```
 
 Pagos: reutilizar `pagos` agregando `torneo_inscripcion_id uuid null` (y `tipo_pago = 'torneo_navidad'`).
-Monto en Bs. = 15 × `tasas_bcv.eur` de la fecha de pago. Cada jugador paga su parte; la inscripción pasa a `confirmada` cuando todos sus jugadores tienen pago validado.
+Monto en Bs. = `torneo_inscripciones.monto_eur` (§2.5) × `tasas_bcv.eur` de la fecha de pago. Cada jugador paga su parte; la inscripción pasa a `confirmada` cuando todos sus jugadores tienen pago validado.
 
 RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas server con service role).
 
 ## 2. Inscripción
 
-- Cada jugador se inscribe **solo**, también en dobles (§2.2), y reporta su pago (15 € a la tasa BCV del euro).
+- Cada jugador se inscribe **solo**, también en dobles (§2.2), y reporta su pago (15 € la 1ª categoría, 10 € la 2ª, §2.5; a la tasa BCV del euro).
 - Validaciones server: `jugadores.categoria` coincide con `categoria_nivel` (o la certifica el admin); género compatible con la categoría (en el Mixto entra cualquiera; la dupla = 1 caballero + 1 dama); el jugador no supera 2 categorías; no excede el cupo (en dobles, parejas × 2); la categoría está abierta y el torneo en `inscripcion`.
 
 ### 2.1 Solo socios, invitados y wild card (aprobado 20-oct-2026)
@@ -115,6 +115,22 @@ RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas 
 - El pago pendiente **no bloquea el sorteo**, pero **un inscrito sin pago validado no puede jugar su primer partido**.
 - En la programación y en el panel de resultados, los partidos con algún pago pendiente se marcan **en rojo** con quién debe; el admin decide retiro o WO.
 - Single e infantiles no cambian.
+
+### 2.5 Precios de inscripción (regla del 28-oct-2026)
+
+En € a la tasa BCV del euro del día del pago (eso no cambia). Adultos e infantiles se cuentan **por separado**:
+
+- **Adultos (por jugador):** la 1ª categoría paga 15 € y cada una siguiente 10 €. «1ª» = la inscripción adulta activa (no retirada) más antigua del jugador en el torneo.
+- **Infantiles (por cuenta del representante, `torneo_menores.representante_jugador_id`):** la 1ª inscripción infantil de esa cuenta paga 15 € y cada una siguiente 10 €: segundo hijo, tercer hijo o el mismo niño en otra categoría.
+- Que el representante juegue en adultos **no** da descuento a los niños.
+- Un niño mayor de 14 con cuenta propia es su propio representante: su 1ª inscripción paga 15 €.
+- En dobles cada jugador paga lo suyo según sus propias categorías.
+
+**Dónde vive:** las tarifas son `torneos.monto_inscripcion_eur` (15) y `torneos.monto_inscripcion_adicional_eur` (10). La función `torneo_monto_inscripcion(categoría, jugador, menor)` calcula monto y motivo («Segunda categoría», «Segundo hijo», «Mismo niño en otra categoría»), y el trigger `torneo_inscripciones_fijar_monto` la aplica al crear cada inscripción, venga de donde venga (jugador, invitación aceptada, lista de espera, admin). El monto queda **fijado** en `torneo_inscripciones.monto_eur` (y `monto_calculado_eur`, `monto_motivo`). La pantalla de inscripción muestra el monto y el motivo antes de confirmar, con la misma función. El reporte de pago usa el monto fijado.
+
+- **Retiros, traslados y fusiones posteriores no recalculan nada.**
+- **El admin puede ajustar el monto a mano** en la pestaña Torneo («Ajustar monto»), con una nota obligatoria del motivo (`monto_ajuste_nota`, `monto_ajustado_por/_at`). Los pagos ya reportados no cambian; el nuevo monto rige para el próximo reporte.
+- Las inscripciones anteriores al 28-oct-2026 quedaron con 15 € («Tarifa única anterior al 28-oct-2026»). Si alguna se corrige a la regla nueva, lo decide el admin.
 
 ## 3. Sorteo y generación de grupos
 
@@ -333,7 +349,7 @@ Duraciones, cupos (como máximo) y la regla de sugerencia: aprobados 19-oct-2026
 
 ### 14.2 Inscripción y pago
 
-- **15 € por niño** y por categoría, en Bs. a tasa BCV del euro del día. Es el mismo flujo de pagos de §1: el pago queda en `pagos` con `torneo_inscripcion_id` de la inscripción del menor y **a nombre del representante** (`pagos.jugador_id` = representante).
+- **Precio:** 1ª inscripción infantil del representante 15 €, cada una siguiente 10 € (§2.5), en Bs. a tasa BCV del euro del día. Es el mismo flujo de pagos de §1: el pago queda en `pagos` con `torneo_inscripcion_id` de la inscripción del menor y **a nombre del representante** (`pagos.jugador_id` = representante).
 - **El representante tiene que tener cuenta en la app** (registro normal de usuario; no entra al escalafón). Así su pago cabe en `pagos.jugador_id` sin cambiar la tabla. El admin puede inscribir a un menor en nombre de un representante con cuenta. Sin cuenta no se puede inscribir (mejora futura en §14.6).
 - **Solo socios** (`torneos.solo_socios = true`, aprobado 20-oct-2026): un menor sin `numero_accion` se inscribe, pero necesita la autorización del admin como invitado / wild card (§2.1).
 - La inscripción se confirma cuando el pago del representante está validado **y** el admin certificó la categoría.

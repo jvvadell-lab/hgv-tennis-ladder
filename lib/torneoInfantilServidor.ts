@@ -8,6 +8,7 @@ import { ahora } from '@/lib/tiempo'
 import type { Torneo } from '@/lib/torneo'
 import { fechaCorteEdad, validarInscripcionMenor, type CategoriaInfantil } from '@/lib/torneoInfantil'
 import { mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
+import { textoMontoCorto, type MontoInscripcion } from '@/lib/torneoPrecios'
 import { escaparHtml, notificarRepresentante, type MenorConRepresentante } from '@/lib/torneoServidor'
 
 export const COLUMNAS_MENOR =
@@ -43,7 +44,7 @@ export async function inscribirMenor(
     autorizacionImagen: boolean
     inscritaPor: { jugadorId: string } | { adminId: string }
   }
-): Promise<{ ok: false; error: string } | { ok: true; inscripcionId: string; categoriaNombre: string }> {
+): Promise<{ ok: false; error: string } | { ok: true; inscripcionId: string; categoriaNombre: string; monto: MontoInscripcion }> {
   const categorias = await categoriasInfantiles(db, p.torneo.id)
   const categoria = categorias.find((c) => c.id === p.categoriaId)
   if (!categoria) return { ok: false, error: 'Esa categoría infantil no es de este torneo' }
@@ -90,7 +91,7 @@ export async function inscribirMenor(
       inscrita_por: 'jugadorId' in p.inscritaPor ? p.inscritaPor.jugadorId : null,
       inscrita_por_admin: 'adminId' in p.inscritaPor ? p.inscritaPor.adminId : null,
     })
-    .select('id')
+    .select('id, monto_eur, monto_motivo')
     .single()
   if (errIns) {
     const claro = mensajeErrorBaseInscripcion(errIns.message)
@@ -98,7 +99,8 @@ export async function inscribirMenor(
     throw errIns
   }
 
-  const pagoPendiente = `Falta reportar el pago (${p.torneo.monto_inscripcion_eur} € en Bs. a la tasa BCV del euro del día del pago) desde la app, en <strong>Torneo Navidad → Inscribir a mi hijo/a</strong>,`
+  const monto: MontoInscripcion = { monto_eur: Number(nueva.monto_eur), motivo: nueva.monto_motivo }
+  const pagoPendiente = `Falta reportar el pago (${textoMontoCorto(monto)} en Bs. a la tasa BCV del euro del día del pago) desde la app, en <strong>Torneo Navidad → Inscribir a mi hijo/a</strong>,`
   await notificarRepresentante(db, p.menor, {
     tipo: 'torneo_inscripcion',
     mensaje: `🎄 ${p.menor.nombre} quedó inscrito en ${categoria.nombre} (${p.torneo.nombre}). Falta el pago y que el admin certifique la categoría.`,
@@ -112,5 +114,5 @@ export async function inscribirMenor(
     `,
   })
 
-  return { ok: true, inscripcionId: nueva.id, categoriaNombre: categoria.nombre }
+  return { ok: true, inscripcionId: nueva.id, categoriaNombre: categoria.nombre, monto }
 }

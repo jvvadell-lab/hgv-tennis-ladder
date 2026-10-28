@@ -17,6 +17,8 @@ import {
 import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
 import { ETIQUETA_ESTADO_DOBLES, enlaceWhatsApp, mensajeInvitacionWhatsApp, telefonoLegible, type CandidatoPareja, type EstadoEnDobles } from '@/lib/torneoDobles'
 import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
+import { textoMonto, textoMontoCorto, textoTarifas, type MontoFijado, type MontoInscripcion, type TarifasTorneo } from '@/lib/torneoPrecios'
+import LineaMonto from '@/app/components/LineaMonto'
 
 // "Inscribirme en el Torneo Navidad": inscripción individual por categoría
 // (también en dobles: cada jugador se inscribe y paga solo), estado de cada
@@ -47,6 +49,7 @@ type MiInscripcion = {
   id: string
   categoria: { id: string; nombre: string; modalidad: string }
   estado: EstadoInscripcion
+  monto: MontoFijado
   dobles: {
     estado: EstadoEnDobles
     pareja: { equipoId: string; nombre: string } | null
@@ -58,12 +61,13 @@ type MiInscripcion = {
 }
 
 type Datos = {
-  torneo: { id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number } | null
+  torneo: { id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo } & TarifasTorneo | null
   yo: Candidato
   categorias: Categoria[]
   misInscripciones: MiInscripcion[]
   disponibilidad: { no_disponible: string[]; nota: string | null }
   misEsperas: { categoriaId: string; puesto: number }[]
+  proximaInscripcion: MontoInscripcion | null   // lo que pagaría mi próxima categoría
   invitacionesRecibidas: { id: string; categoria: { id: string; nombre: string }; de: string; vence_at: string; inscrito: boolean }[]
   cierreInscripcionesAt: string | null
 }
@@ -221,6 +225,7 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
               <strong style={{ color: 'var(--color-ink)' }}>{ins.categoria.nombre}</strong>
               <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '999px', background: color.fondo, color: color.texto }}>{color.etiqueta}</span>
             </div>
+            {ins.estado !== 'retirada' && <LineaMonto monto={ins.monto} />}
             {ins.dobles && ins.estado !== 'retirada' && <Dupla ins={ins} datos={datos} onCambio={onCambio} />}
 
             {ins.pendientes.length > 0 && (
@@ -244,7 +249,8 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
               pagandoId === ins.id ? (
                 <FormPagoTorneo
                   inscripcionId={ins.id}
-                  montoEur={datos.torneo!.monto_inscripcion_eur}
+                  montoEur={ins.monto.monto_eur}
+                  etiquetaMonto={`(${ins.monto.ajuste ? 'monto ajustado por el admin' : ins.monto.motivo.toLowerCase()})`}
                   parejaNombre={null}
                   onCancelar={() => setPagandoId(null)}
                   onListo={async () => {
@@ -397,6 +403,15 @@ function FormInscripcion({ datos, onCambio }: { datos: Datos; onCambio: () => Pr
           </p>
         )}
 
+        {categoria && datos.proximaInscripcion && (
+          <div style={{ background: '#fff8e1', borderLeft: '4px solid #f0b400', borderRadius: '4px', padding: '10px 14px', margin: '0 0 14px 0', fontSize: '14px', color: 'var(--color-ink)' }}>
+            <strong>{textoMonto(datos.proximaInscripcion)}</strong>
+            <span style={{ display: 'block', fontSize: '12px', color: '#666', marginTop: '2px' }}>
+              {textoTarifas(torneo!)}. En Bs. a la tasa BCV del euro del día del pago.
+            </span>
+          </div>
+        )}
+
         {error && <Aviso tipo="error">{error}</Aviso>}
         <button type="submit" disabled={deshabilitado} style={botonPrincipal(deshabilitado)}>
           {enviando ? 'Inscribiendo…' : 'Inscribirme'}
@@ -454,7 +469,7 @@ function InvitacionesRecibidas({ datos, onCambio }: { datos: Datos; onCambio: ()
             <strong>{v.de}</strong> te invita a ser su pareja en <strong>{v.categoria.nombre}</strong>.
           </p>
           <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: '#666' }}>
-            Vence el {formatearFechaHora(v.vence_at)}.{!v.inscrito && ` Al aceptar quedas inscrito en ${v.categoria.nombre} y te falta reportar tu pago (${datos.torneo!.monto_inscripcion_eur} €).`}
+            Vence el {formatearFechaHora(v.vence_at)}.{!v.inscrito && ` Al aceptar quedas inscrito en ${v.categoria.nombre} y te falta reportar tu pago${datos.proximaInscripcion ? ` (${textoMontoCorto(datos.proximaInscripcion)})` : ''}.`}
           </p>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button disabled={ocupado === v.id} onClick={() => responder(v.id, 'aceptar')} style={{ ...botonPrincipal(ocupado === v.id), width: 'auto', padding: '9px 18px' }}>Aceptar</button>

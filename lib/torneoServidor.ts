@@ -7,6 +7,7 @@ import { enviarCorreo } from '@/lib/email'
 import type { EstadoInscripcion, Nivel, Torneo } from '@/lib/torneo'
 import { estadoInscripcionCalculado, pendientesInscripcion, type Pendiente } from '@/lib/torneoInscripcion'
 import { estadoInscripcionMenorCalculado, pendientesInscripcionMenor } from '@/lib/torneoInfantil'
+import type { MontoInscripcion } from '@/lib/torneoPrecios'
 
 // El torneo que se está organizando o jugando: el más próximo que no esté
 // finalizado. null si no hay ninguno.
@@ -20,6 +21,23 @@ export async function torneoVigente(db: SupabaseClient): Promise<Torneo | null> 
     .maybeSingle()
   if (error) throw error
   return data as Torneo | null
+}
+
+// Monto y motivo que le tocaría a una inscripción nueva (vista previa antes
+// de confirmar). Es la misma función que usa el trigger que lo fija al crearla.
+export async function montoProximaInscripcion(
+  db: SupabaseClient,
+  categoriaId: string,
+  quien: { jugadorId: string } | { menorId: string },
+): Promise<MontoInscripcion> {
+  const { data, error } = await db.rpc('torneo_monto_inscripcion', {
+    p_categoria: categoriaId,
+    p_jugador: 'jugadorId' in quien ? quien.jugadorId : null,
+    p_menor: 'menorId' in quien ? quien.menorId : null,
+  })
+  if (error) throw error
+  const fila = (data as { monto_eur: number | string; motivo: string }[])[0]
+  return { monto_eur: Number(fila.monto_eur), motivo: fila.motivo }
 }
 
 export type ResultadoRecalculo = {
