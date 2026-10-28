@@ -11,6 +11,7 @@ import type { Torneo, TorneoCategoria } from '@/lib/torneo'
 import { errorDupla, normalizarTelefonoVe, telefonoLegible, venceInvitacion, type JugadorDobles } from '@/lib/torneoDobles'
 import { categoriaAbierta, mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
+import { textoMontoCorto } from '@/lib/torneoPrecios'
 
 type Resultado<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -325,13 +326,19 @@ export async function aceptarInvitacion(db: SupabaseClient, torneo: Torneo, invi
     const { data: canceladas } = await db.from('torneo_invitaciones').select(COLUMNAS_INVITACION).in('id', r.canceladas)
     await avisarFinInvitaciones(db, (canceladas || []) as Invitacion[], 'cancelada')
   }
+  let montoNueva = ''
+  if (r.inscripcion_nueva) {
+    const { data: nueva, error: errNueva } = await db.from('torneo_inscripciones').select('monto_eur, monto_motivo').eq('id', r.inscripcion_id).single()
+    if (errNueva) throw errNueva
+    montoNueva = textoMontoCorto({ monto_eur: Number(nueva.monto_eur), motivo: nueva.monto_motivo })
+  }
   await notificarJugadores(db, [de!.id, yo.id], {
     tipo: 'torneo_dupla',
     mensaje: `🤝 ${de!.nombre} / ${yo.nombre}: dupla formada en ${categoria!.nombre}.${r.inscripcion_nueva ? ` ${yo.nombre}, falta reportar tu pago.` : ''}`,
     asunto: `🤝 Dupla formada — ${categoria!.nombre}`,
     cuerpoHtml: (j) => `
       <p>${j.id === yo.id ? `Aceptaste la invitación de <strong>${escaparHtml(de!.nombre)}</strong>` : `<strong>${escaparHtml(yo.nombre)}</strong> aceptó tu invitación`}: la dupla <strong>${escaparHtml(de!.nombre)} / ${escaparHtml(yo.nombre)}</strong> quedó formada en <strong>${escaparHtml(categoria!.nombre)}</strong>.</p>
-      ${j.id === yo.id && r.inscripcion_nueva ? `<p>Quedaste inscrito en la categoría: falta reportar tu pago (${torneo.monto_inscripcion_eur} € en Bs. a la tasa BCV del euro).</p>` : ''}
+      ${j.id === yo.id && r.inscripcion_nueva ? `<p>Quedaste inscrito en la categoría: falta reportar tu pago (${montoNueva} en Bs. a la tasa BCV del euro).</p>` : ''}
     `,
   })
   return { ok: true, inscripcionNueva: !!r.inscripcion_nueva, inscripcionId: r.inscripcion_id }

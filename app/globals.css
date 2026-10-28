@@ -391,6 +391,7 @@ textarea:focus-visible {
   color: var(--color-chalk);
 }
 .banner-torneo-texto { margin: 0; font-size: 14px; line-height: 1.45; color: rgba(247, 243, 234, 0.88); }
+.banner-torneo-tarifas { margin: 2px 0 0; font-size: 12.5px; line-height: 1.4; color: rgba(247, 243, 234, 0.72); }
 .banner-torneo-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
 .banner-torneo-cuenta { display: flex; align-items: center; gap: 6px; }

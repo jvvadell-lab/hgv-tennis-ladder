@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { torneoVigente } from '@/lib/torneoServidor'
+import { montoProximaInscripcion, torneoVigente } from '@/lib/torneoServidor'
 import { obtenerTasaVigente, tasaParaCalculo } from '@/lib/tasaBcv'
-import { cupoInscripciones, montoInscripcionBs, pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
+import { cupoInscripciones, pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
 import { candidatosPareja, estadoEnDobles, invitacionVigente, type JugadorDobles } from '@/lib/torneoDobles'
 import { COLUMNAS_INVITACION, vencerInvitaciones, vincularInvitacionesPorTelefono, type Invitacion } from '@/lib/torneoDoblesServidor'
 import { ahora } from '@/lib/tiempo'
@@ -14,7 +14,7 @@ import type { Nivel } from '@/lib/torneo'
 // torneo vigente, categorías con cupo, mis inscripciones con sus pagos y
 // pendientes (en dobles: mi estado, mi pareja, la invitación que envié y la
 // lista para elegir pareja), las invitaciones que recibí, mis limitaciones
-// de horario y el monto en Bs. de hoy.
+// de horario y el monto de mi próxima inscripción.
 export async function GET() {
   try {
     const session = await getSession()
@@ -54,7 +54,7 @@ export async function GET() {
       categoriaIds.length
         ? db
             .from('torneo_inscripciones')
-            .select('id, categoria_id, jugador1_id, estado, invitado_autorizado_at, created_at')
+            .select('id, categoria_id, jugador1_id, estado, invitado_autorizado_at, created_at, monto_eur, monto_motivo, monto_ajuste_nota')
             .in('categoria_id', categoriaIds)
             .neq('estado', 'retirada')
         : Promise.resolve({ data: [] as any[], error: null }),
@@ -155,6 +155,7 @@ export async function GET() {
         id: i.id,
         categoria: { id: categoria.id, nombre: categoria.nombre, modalidad: categoria.modalidad },
         estado: i.estado,
+        monto: { monto_eur: Number(i.monto_eur), motivo: i.monto_motivo, ajuste: i.monto_ajuste_nota },
         dobles,
         pendientes: pendientes.map((p) => ({ ...p, texto: textoPendiente(p, null) })),
         pagos: suyos.map((p: any) => ({ ...p, jugador_nombre: yo.nombre })),
@@ -175,6 +176,11 @@ export async function GET() {
     const espera = await listasDeEspera(db, categoriaIds)
     const misEsperas = espera.filter((e) => e.jugador_id === session.id).map((e) => ({ categoriaId: e.categoria_id, puesto: e.puesto }))
 
+    // Lo que pagaría mi próxima inscripción adulta (es igual en cualquier categoría de adultos).
+    const proximaInscripcion = categoriaIds.length
+      ? await montoProximaInscripcion(db, categoriaIds[0], { jugadorId: session.id })
+      : null
+
     const tasa = await obtenerTasaVigente(db)
     const tasaEur = tasa ? tasaParaCalculo(tasa.eur) : null
 
@@ -187,9 +193,10 @@ export async function GET() {
       misInscripciones,
       invitacionesRecibidas,
       misEsperas,
+      proximaInscripcion,
       cierreInscripcionesAt: torneo.cierre_inscripciones_at,
       disponibilidad: disponibilidad || { no_disponible: [], nota: null },
-      tasa: tasa ? { fecha_vigencia: tasa.fecha_vigencia, eur: tasaEur, montoBs: montoInscripcionBs(torneo.monto_inscripcion_eur, tasa.eur) } : null,
+      tasa: tasa ? { fecha_vigencia: tasa.fecha_vigencia, eur: tasaEur } : null,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al cargar el torneo' }, { status: 500 })

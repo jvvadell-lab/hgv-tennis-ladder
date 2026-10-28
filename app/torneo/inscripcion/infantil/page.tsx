@@ -16,6 +16,8 @@ import {
 import { categoriaAbierta } from '@/lib/torneoInscripcion'
 import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
 import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
+import { textoMonto, textoTarifas, type MontoFijado, type MontoInscripcion } from '@/lib/torneoPrecios'
+import LineaMonto from '@/app/components/LineaMonto'
 
 // "Inscribir a mi hijo/a" (Torneo Navidad, sección Infantil — SPEC §14):
 // fichas de mis representados (reutilizables en torneos futuros),
@@ -32,6 +34,7 @@ type InscripcionMenor = {
   estado: EstadoInscripcion
   categoria: { id: string; nombre: string }
   certificada: boolean
+  monto: MontoFijado
   pendientes: { tipo: string; jugadorId: string; texto: string }[]
   pagos: Pago[]
 }
@@ -48,9 +51,10 @@ type Representado = {
   emergencia_telefono: string
   autorizacion_imagen: boolean
   inscripciones?: InscripcionMenor[]
+  proximaInscripcion?: MontoInscripcion | null   // lo que pagaría su próxima inscripción (SPEC §2.5)
 }
 
-type Torneo = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number; fecha_corte_edad: string | null; solo_socios: boolean }
+type Torneo = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number; monto_inscripcion_adicional_eur: number; fecha_corte_edad: string | null; solo_socios: boolean }
 
 type Datos = {
   torneo: Torneo | null
@@ -166,7 +170,7 @@ export default function InscripcionInfantil() {
 
         {torneo && datos?.fechaCorte && (
           <p style={{ fontSize: '13px', color: '#555', textAlign: 'center', margin: '8px 0 0 0' }}>
-            Categorías por edad cumplida al <strong>{fecha(datos.fechaCorte)}</strong> · {torneo.monto_inscripcion_eur} € por niño y categoría
+            Categorías por edad cumplida al <strong>{fecha(datos.fechaCorte)}</strong> · {textoTarifas(torneo)}
           </p>
         )}
 
@@ -249,6 +253,7 @@ function MisRepresentados({ datos, onCambio, onEditar }: { datos: Datos; onCambi
                   <span style={{ fontSize: '14px', fontWeight: 700 }}>{ins.categoria.nombre}{ins.certificada && <span style={{ color: '#1e6b34', fontWeight: 400 }}> · categoría certificada</span>}</span>
                   <span style={{ fontSize: '12px', fontWeight: 700, padding: '3px 10px', borderRadius: '999px', background: color.fondo, color: color.texto }}>{color.etiqueta}</span>
                 </div>
+                {ins.estado !== 'retirada' && <LineaMonto monto={ins.monto} />}
                 {ins.pendientes.length > 0 && (
                   <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px', fontSize: '13px', color: '#8a5a00' }}>
                     {ins.pendientes.map((p) => <li key={`${p.tipo}-${p.jugadorId}`}>{p.texto}</li>)}
@@ -264,8 +269,8 @@ function MisRepresentados({ datos, onCambio, onEditar }: { datos: Datos; onCambi
                   pagandoId === ins.id ? (
                     <FormPagoTorneo
                       inscripcionId={ins.id}
-                      montoEur={torneo.monto_inscripcion_eur}
-                      etiquetaMonto="por niño"
+                      montoEur={ins.monto.monto_eur}
+                      etiquetaMonto={`(${ins.monto.ajuste ? 'monto ajustado por el admin' : ins.monto.motivo.toLowerCase()})`}
                       onCancelar={() => setPagandoId(null)}
                       onListo={async () => {
                         setPagandoId(null)
@@ -474,6 +479,15 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
                 <span><strong>Autorización de uso de imagen (opcional).</strong> El club puede publicar fotos y videos donde aparezca durante el torneo.</span>
               </label>
             </div>
+
+            {categoriaId && menor?.proximaInscripcion && (
+              <div style={{ background: '#fff8e1', borderLeft: '4px solid #f0b400', borderRadius: '4px', padding: '10px 14px', margin: '0 0 14px 0', fontSize: '14px', color: 'var(--color-ink)' }}>
+                <strong>{textoMonto(menor.proximaInscripcion)}</strong>
+                <span style={{ display: 'block', fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                  {textoTarifas(torneo)} (se cuentan por representante, aparte de los adultos). En Bs. a la tasa BCV del euro del día del pago.
+                </span>
+              </div>
+            )}
 
             {error && <Aviso tipo="error">{error}</Aviso>}
             <button type="submit" disabled={deshabilitado} style={botonPrincipal(deshabilitado)}>

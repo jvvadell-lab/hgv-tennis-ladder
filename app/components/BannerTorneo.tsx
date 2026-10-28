@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { formatearFechaCorta, formatearHora, instanteEnCaracas } from '@/lib/tiempo'
 import type { PatrocinantePublico } from '@/lib/patrocinantes'
 import { enlaceDe } from '@/lib/patrocinantes'
+import { formatearEur, textoTarifas } from '@/lib/torneoPrecios'
 
 // Banner animado del torneo vigente en la portada (Torneo Navidad). Cambia
 // solo según torneos.estado:
@@ -32,6 +33,7 @@ export type TorneoPortada = {
   fecha_sorteo: string | null
   cierre_inscripciones_at: string | null
   monto_inscripcion_eur: number
+  monto_inscripcion_adicional_eur: number
   sorteado: boolean
   programacion_publicada: boolean
   categorias: CategoriaPortada[]
@@ -121,10 +123,13 @@ export default function BannerTorneo({ torneo, conectado, principales }: {
         {torneo.estado === 'inscripcion' && (
           <>
             <div className="banner-torneo-fila">
-              <p className="banner-torneo-texto">
-                {torneo.monto_inscripcion_eur} € por jugador
-                {torneo.fecha_sorteo ? ` · sorteo el ${fechaCorta(torneo.fecha_sorteo)}` : ''}
-              </p>
+              <div>
+                <p className="banner-torneo-texto">
+                  {formatearEur(torneo.monto_inscripcion_eur)} por jugador
+                  {torneo.fecha_sorteo ? ` · sorteo el ${fechaCorta(torneo.fecha_sorteo)}` : ''}
+                </p>
+                <p className="banner-torneo-tarifas">{textoTarifas(torneo)}</p>
+              </div>
               {hayAbiertas && torneo.cierre_inscripciones_at && <CuentaRegresiva hasta={torneo.cierre_inscripciones_at} />}
             </div>
             <ul className="banner-torneo-cupos">

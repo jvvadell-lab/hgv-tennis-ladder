@@ -27,6 +27,7 @@ import { avisoAntesDeCerrar } from '@/lib/torneoCierre'
 import TorneoProgramacion from './TorneoProgramacion'
 import TorneoResultados from './TorneoResultados'
 import HorarioAcademia from '@/app/components/HorarioAcademia'
+import { formatearEur, textoTarifas } from '@/lib/torneoPrecios'
 
 // Pestaña Torneo del admin (Torneo Navidad, fase 3): inscripciones por
 // categoría con su estado, pagos (validar / rechazar), categoría oficial de
@@ -86,6 +87,12 @@ type Inscripcion = {
   menor_nombre_publico: string | null
   invitado_autorizado_at: string | null
   devolucion_marcada_at: string | null
+  // Monto en € fijado al inscribirse (SPEC §2.5) y ajuste manual del admin.
+  monto_eur: number
+  monto_calculado_eur: number
+  monto_motivo: string
+  monto_ajuste_nota: string | null
+  monto_ajustado_at: string | null
   jugadores: Jugador[]
   menor: Menor | null
   pagos: Pago[]
@@ -104,7 +111,7 @@ type Categoria = {
 type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: string | null }
 
 type TorneoAdminDatos = {
-  id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number
+  id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number; monto_inscripcion_adicional_eur: number
   fecha_corte_edad: string | null; solo_socios: boolean; cierre_inscripciones_at: string | null
   sorteo_metodo: 'bombos' | 'serpentina' | null; sorteo_publicado_at: string | null
 }
@@ -220,7 +227,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           <div>
             <h3 style={{ color: 'var(--color-ink)', margin: 0 }}>🎄 {torneo.nombre}</h3>
             <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#555' }}>
-              {fecha(torneo.fecha_inicio)} al {fecha(torneo.fecha_fin)} · {torneo.monto_inscripcion_eur} € por jugador ·{' '}
+              {fecha(torneo.fecha_inicio)} al {fecha(torneo.fecha_fin)} · {textoTarifas(torneo)} ·{' '}
               <strong>{ETIQUETA_ESTADO_TORNEO[torneo.estado]}</strong>
             </p>
             <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#555' }}>
@@ -403,6 +410,34 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                   Inscrita el {formatearFechaHora(ins.created_at)}
                   {ins.devolucion_marcada_at && <strong style={{ color: '#842029' }}> · 💸 pago marcado para devolución el {formatearFechaHora(ins.devolucion_marcada_at)}</strong>}
                 </p>
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', fontSize: '12px', margin: '0 0 8px 0' }}>
+                  <span>
+                    💶 <strong>{formatearEur(ins.monto_eur)}</strong> ·{' '}
+                    {ins.monto_ajuste_nota
+                      ? <>ajustado a mano ({ins.monto_ajuste_nota}; la regla daba {formatearEur(ins.monto_calculado_eur)} por {ins.monto_motivo.toLowerCase()})</>
+                      : ins.monto_motivo}
+                  </span>
+                  {esAdminCompleto && ins.estado !== 'retirada' && (
+                    <button
+                      disabled={ocupado === `monto-${ins.id}`}
+                      onClick={() => {
+                        const nuevo = prompt(`Monto en € para ${nombreInscripcion(ins)} en ${c.nombre} (vacío = volver a ${formatearEur(ins.monto_calculado_eur)}, lo que da la regla):`, String(Number(ins.monto_eur)))
+                        if (nuevo === null) return
+                        if (nuevo.trim() === '') {
+                          accion(`monto-${ins.id}`, 'ajustar-monto', { inscripcionId: ins.id, montoEur: null }, 'Monto devuelto al de la regla')
+                          return
+                        }
+                        const nota = prompt('Motivo del ajuste (queda anotado):', ins.monto_ajuste_nota || '')
+                        if (nota === null) return
+                        accion(`monto-${ins.id}`, 'ajustar-monto', { inscripcionId: ins.id, montoEur: Number(nuevo.replace(',', '.')), nota }, 'Monto ajustado')
+                      }}
+                      style={boton('#1c4e72')}
+                    >
+                      Ajustar monto
+                    </button>
+                  )}
+                </div>
 
                 {ins.pendientes.length > 0 && (
                   <ul style={{ margin: '0 0 8px 0', paddingLeft: '18px', fontSize: '12px', color: '#8a5a00' }}>

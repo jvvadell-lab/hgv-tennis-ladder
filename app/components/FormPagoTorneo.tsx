@@ -3,6 +3,7 @@ import { useState } from 'react'
 import TasaBcv, { formatearBs, type TasaBcvVigente } from '@/app/components/TasaBcv'
 import { hoyEnCaracas } from '@/lib/tiempo'
 import { montoInscripcionBs } from '@/lib/torneoInscripcion'
+import { formatearEur } from '@/lib/torneoPrecios'
 
 // Reporte de pago de una inscripción del torneo, en Bs. a la tasa BCV del
 // euro del día del pago (/api/jugador/torneo/reportar-pago). Lo usan
@@ -74,7 +75,7 @@ export default function FormPagoTorneo({ inscripcionId, montoEur, etiquetaMonto 
       </div>
 
       <p style={{ fontSize: '14px', margin: '0 0 12px 0', color: 'var(--color-ink)' }}>
-        {montoEur} € {etiquetaMonto}, en Bs. a la tasa BCV del euro del día del pago:{' '}
+        {formatearEur(montoEur)} {etiquetaMonto}, en Bs. a la tasa BCV del euro del día del pago:{' '}
         <strong>{total === null ? '—' : formatearBs(total)}</strong>
         {incluyePareja && porJugador !== null && <span style={{ color: '#666' }}> ({formatearBs(porJugador)} × 2)</span>}
       </p>

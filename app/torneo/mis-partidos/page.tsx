@@ -6,6 +6,8 @@ import { ETIQUETA_FASE, PREFIJO_FASE, type EstadoPartido, type Fase, textoOrigen
 import type { SetJugado, TipoResultado } from '@/lib/resultados'
 import { textoMarcador } from '@/lib/torneoResultados'
 import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
+import type { MontoFijado } from '@/lib/torneoPrecios'
+import LineaMonto from '@/app/components/LineaMonto'
 
 // "Mis partidos" (SPEC §9, fase 6): mis partidos del torneo vigente (y los
 // de los menores que represento), con rival, horario y resultado, y el
@@ -38,6 +40,7 @@ type Datos = {
   torneo: { nombre: string; estado: string; programacion_publicada_at: string | null } | null
   mias: string[]
   partidos: Partido[]
+  inscripciones: { id: string; categoria_nombre: string; menor: string | null; monto: MontoFijado }[]
 }
 
 const tarjeta: React.CSSProperties = { background: 'white', border: '1px solid rgba(15,27,38,0.12)', borderRadius: '6px', padding: '14px 16px', marginBottom: '12px' }
@@ -155,6 +158,18 @@ export default function MisPartidos() {
 
         {error && <p style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '4px', fontSize: '14px' }}>{error}</p>}
         {ok && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '4px', fontSize: '14px' }}>{ok}</p>}
+
+        {!!datos?.inscripciones?.length && (
+          <>
+            <h2 style={tituloSeccion}>Mis inscripciones</h2>
+            {datos.inscripciones.map((i) => (
+              <div key={i.id} style={{ ...tarjeta, padding: '10px 16px' }}>
+                <strong style={{ color: 'var(--color-ink)', fontSize: '14px' }}>{i.categoria_nombre}{i.menor && ` · ${i.menor}`}</strong>
+                <LineaMonto monto={i.monto} />
+              </div>
+            ))}
+          </>
+        )}
 
         {!datos?.torneo ? (
           <p style={{ textAlign: 'center', color: '#555' }}>No hay un torneo en juego.</p>
