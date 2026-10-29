@@ -1,4 +1,4 @@
-// Prueba la migración 20261029200000_torneo_precio_invitados (sobre la de
+// Prueba la migración 20261029201034_torneo_precio_invitados (sobre la de
 // precios del 28-oct) en un Postgres local (PGlite), con copias reducidas de
 // las tablas del torneo.
 import { readFileSync } from 'node:fs'
@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 const leer = (f: string) => readFileSync(join(__dirname, '../migrations', f), 'utf8')
 const PRECIOS = leer('20261028164247_torneo_precios_inscripcion.sql')
-const INVITADOS = leer('20261029200000_torneo_precio_invitados.sql')
+const INVITADOS = leer('20261029201034_torneo_precio_invitados.sql')
 
 const T = '00000000-0000-0000-0000-000000000001'
 const SINGLE = '00000000-0000-0000-0000-0000000000c1'
