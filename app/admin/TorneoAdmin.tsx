@@ -111,7 +111,7 @@ type Categoria = {
 type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: string | null }
 
 type TorneoAdminDatos = {
-  id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number; monto_inscripcion_adicional_eur: number
+  id: string; nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; monto_inscripcion_eur: number; monto_inscripcion_adicional_eur: number; monto_inscripcion_invitado_eur?: number | null
   fecha_corte_edad: string | null; solo_socios: boolean; cierre_inscripciones_at: string | null
   sorteo_metodo: 'bombos' | 'serpentina' | null; sorteo_publicado_at: string | null
 }

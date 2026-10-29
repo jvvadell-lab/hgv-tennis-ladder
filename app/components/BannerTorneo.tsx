@@ -34,6 +34,7 @@ export type TorneoPortada = {
   cierre_inscripciones_at: string | null
   monto_inscripcion_eur: number
   monto_inscripcion_adicional_eur: number
+  monto_inscripcion_invitado_eur?: number | null
   sorteado: boolean
   programacion_publicada: boolean
   categorias: CategoriaPortada[]

@@ -68,6 +68,7 @@ export async function GET() {
         cierre_inscripciones_at: torneo.cierre_inscripciones_at,
         monto_inscripcion_eur: torneo.monto_inscripcion_eur,
         monto_inscripcion_adicional_eur: torneo.monto_inscripcion_adicional_eur,
+        monto_inscripcion_invitado_eur: torneo.monto_inscripcion_invitado_eur ?? null,
         sorteado: !!torneo.sorteo_publicado_at,
         programacion_publicada: !!torneo.programacion_publicada_at,
         categorias: vigentes.map((c) => ({
