@@ -93,6 +93,7 @@ export type Torneo = {
   estado: EstadoTorneo
   monto_inscripcion_eur: number            // 1ª inscripción (SPEC §2.5)
   monto_inscripcion_adicional_eur: number  // 2ª categoría / 2º hijo y siguientes
+  monto_inscripcion_invitado_eur?: number | null  // adulto invitado (no socio), cada categoría
   fecha_corte_edad: string | null  // edad de los menores; null = 31-dic del año de fecha_inicio
   solo_socios: boolean
   sorteo_metodo: 'bombos' | 'serpentina' | null

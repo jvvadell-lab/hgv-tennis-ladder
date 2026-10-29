@@ -19,7 +19,7 @@ Decisiones del 20-oct-2026: sorteo por bombos o serpentina (§3), WO (§6), hand
 | Participantes | **Solo socios**, adultos e infantiles. El admin puede autorizar invitados / wild card, también para completar una categoría (§2.1) |
 | No presentación | Se declara WO a favor del rival tras **15 min de tolerancia** (aprobado 20-oct-2026). Cuenta 2-0 en sets y 12-0 en games |
 | Mixto con handicap | 15-0 al inicio de **cada game** para la pareja que el admin marque en cada partido (§4.1) |
-| Inscripción | 1ª categoría 15 €, 2ª 10 € (adultos, por jugador); 1ª inscripción infantil 15 €, cada siguiente 10 € (por representante). En Bs. a tasa BCV del euro del día del pago (§2.5, 28-oct-2026) |
+| Inscripción | 1ª categoría 15 €, 2ª 10 € (adultos socios, por jugador); adultos invitados (no socios) 20 € por cada categoría (29-oct-2026); 1ª inscripción infantil 15 €, cada siguiente 10 € (por representante). En Bs. a tasa BCV del euro del día del pago (§2.5) |
 | Un jugador puede jugar | Hasta 2 categorías |
 | Duración del turno | 90 min (dobles y single) |
 
@@ -121,12 +121,14 @@ RLS: igual que el resto del proyecto (SELECT abierto, mutaciones solo por rutas 
 En € a la tasa BCV del euro del día del pago (eso no cambia). Adultos e infantiles se cuentan **por separado**:
 
 - **Adultos (por jugador):** la 1ª categoría paga 15 € y cada una siguiente 10 €. «1ª» = la inscripción adulta activa (no retirada) más antigua del jugador en el torneo.
+- **Adultos invitados / wild card (no socios, `jugadores.es_invitado`), regla del 29-oct-2026:** pagan **20 € en cada categoría**, sin descuento por la 2ª. Motivo «Invitado (no socio)». En dobles, si la pareja es socio + invitado, cada uno paga su tarifa. Las inscripciones de invitados hechas antes del 29-oct quedaron con el monto que tenían (15 €); el admin decide si las ajusta.
+- Los **infantiles no tienen tarifa de invitado**: un menor sin N.º de acción paga como cualquier niño (15 € / 10 € por representante).
 - **Infantiles (por cuenta del representante, `torneo_menores.representante_jugador_id`):** la 1ª inscripción infantil de esa cuenta paga 15 € y cada una siguiente 10 €: segundo hijo, tercer hijo o el mismo niño en otra categoría.
 - Que el representante juegue en adultos **no** da descuento a los niños.
 - Un niño mayor de 14 con cuenta propia es su propio representante: su 1ª inscripción paga 15 €.
 - En dobles cada jugador paga lo suyo según sus propias categorías.
 
-**Dónde vive:** las tarifas son `torneos.monto_inscripcion_eur` (15) y `torneos.monto_inscripcion_adicional_eur` (10). La función `torneo_monto_inscripcion(categoría, jugador, menor)` calcula monto y motivo («Segunda categoría», «Segundo hijo», «Mismo niño en otra categoría»), y el trigger `torneo_inscripciones_fijar_monto` la aplica al crear cada inscripción, venga de donde venga (jugador, invitación aceptada, lista de espera, admin). El monto queda **fijado** en `torneo_inscripciones.monto_eur` (y `monto_calculado_eur`, `monto_motivo`). La pantalla de inscripción muestra el monto y el motivo antes de confirmar, con la misma función. El reporte de pago usa el monto fijado.
+**Dónde vive:** las tarifas son `torneos.monto_inscripcion_eur` (15), `torneos.monto_inscripcion_adicional_eur` (10) y `torneos.monto_inscripcion_invitado_eur` (20, migración `20261029201034_torneo_precio_invitados`). La función `torneo_monto_inscripcion(categoría, jugador, menor)` calcula monto y motivo («Segunda categoría», «Segundo hijo», «Mismo niño en otra categoría»), y el trigger `torneo_inscripciones_fijar_monto` la aplica al crear cada inscripción, venga de donde venga (jugador, invitación aceptada, lista de espera, admin). El monto queda **fijado** en `torneo_inscripciones.monto_eur` (y `monto_calculado_eur`, `monto_motivo`). La pantalla de inscripción muestra el monto y el motivo antes de confirmar, con la misma función. El reporte de pago usa el monto fijado.
 
 - **Retiros, traslados y fusiones posteriores no recalculan nada.**
 - **El admin puede ajustar el monto a mano** en la pestaña Torneo («Ajustar monto»), con una nota obligatoria del motivo (`monto_ajuste_nota`, `monto_ajustado_por/_at`). Los pagos ya reportados no cambian; el nuevo monto rige para el próximo reporte.

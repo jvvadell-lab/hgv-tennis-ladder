@@ -170,7 +170,7 @@ export default function InscripcionInfantil() {
 
         {torneo && datos?.fechaCorte && (
           <p style={{ fontSize: '13px', color: '#555', textAlign: 'center', margin: '8px 0 0 0' }}>
-            Categorías por edad cumplida al <strong>{fecha(datos.fechaCorte)}</strong> · {textoTarifas(torneo)}
+            Categorías por edad cumplida al <strong>{fecha(datos.fechaCorte)}</strong> · {textoTarifas(torneo, { invitados: false })}
           </p>
         )}
 
@@ -484,7 +484,7 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
               <div style={{ background: '#fff8e1', borderLeft: '4px solid #f0b400', borderRadius: '4px', padding: '10px 14px', margin: '0 0 14px 0', fontSize: '14px', color: 'var(--color-ink)' }}>
                 <strong>{textoMonto(menor.proximaInscripcion)}</strong>
                 <span style={{ display: 'block', fontSize: '12px', color: '#666', marginTop: '2px' }}>
-                  {textoTarifas(torneo)} (se cuentan por representante, aparte de los adultos). En Bs. a la tasa BCV del euro del día del pago.
+                  {textoTarifas(torneo, { invitados: false })} (se cuentan por representante, aparte de los adultos). En Bs. a la tasa BCV del euro del día del pago.
                 </span>
               </div>
             )}
