@@ -83,7 +83,7 @@ export async function GET() {
         : Promise.resolve({ data: [] as any[], error: null }),
       db.from('torneo_disponibilidad').select('jugador_id, no_disponible, nota, updated_at').eq('torneo_id', torneo.id),
       // Para elegir al representante con cuenta al inscribir a un menor.
-      db.from('jugadores').select('id, nombre').eq('activo', true).order('nombre'),
+      db.from('jugadores').select('id, nombre').eq('activo', true).eq('es_prueba', false).order('nombre'),
     ])
     if (errAct) throw errAct
     if (errJug) throw errJug
