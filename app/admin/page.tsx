@@ -501,6 +501,7 @@ export default function AdminPage() {
       .from('jugadores')
       .select('id', { count: 'exact', head: true })
       .eq('activo', true)
+      .eq('es_prueba', false)
 
     const { count: activos } = await supabase
       .from('retos')
@@ -723,6 +724,7 @@ export default function AdminPage() {
       .from('jugadores')
       .select('id, nombre')
       .eq('activo', true)
+      .eq('es_prueba', false)
       .order('nombre', { ascending: true })
     setJugadoresParaPermiso(jugadoresActivos || [])
 
@@ -1185,7 +1187,7 @@ export default function AdminPage() {
   }
 
   const fetchJugadoresActivos = async () => {
-    const { data } = await supabase.from('jugadores').select('id, nombre').eq('activo', true).order('nombre', { ascending: true })
+    const { data } = await supabase.from('jugadores').select('id, nombre').eq('activo', true).eq('es_prueba', false).order('nombre', { ascending: true })
     setJugadoresParaPago(data || [])
   }
 
@@ -1867,6 +1869,7 @@ export default function AdminPage() {
         .from('jugadores')
         .select('id, nombre, categoria, genero')
         .eq('activo', true)
+        .eq('es_prueba', false)
         .order('nombre', { ascending: true })
 
       setJugadoresDisponibles((todosJugadores || []).filter((j: any) => !idsAnotados.has(j.id)))
@@ -2592,6 +2595,11 @@ export default function AdminPage() {
                                   </button>
                                 </div>
                               ) : (player.numero_accion || '—')}
+                              {player.es_prueba && (
+                                <span style={{ display: 'inline-block', marginLeft: '6px', fontSize: '11px', fontWeight: 'bold', color: '#7a5d00', background: '#fff3c4', padding: '2px 8px', borderRadius: '8px' }}>
+                                  Prueba
+                                </span>
+                              )}
                               {player.numero_accion_coincide === false && (
                                 <span
                                   title={`La IA leyó "${player.numero_accion_ocr}" en el carné, pero el jugador escribió "${player.numero_accion}" — revisa la foto antes de verificarlo.`}

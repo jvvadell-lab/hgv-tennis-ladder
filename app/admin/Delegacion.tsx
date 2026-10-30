@@ -535,6 +535,7 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
       .from('jugadores')
       .select('id, nombre')
       .eq('activo', true)
+      .eq('es_prueba', false)
       .order('nombre', { ascending: true })
       .then(({ data }) => setJugadores(data || []))
   }, [])

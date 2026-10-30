@@ -99,7 +99,7 @@ export async function GET() {
         db.from('torneo_disponibilidad').select('no_disponible, nota').eq('torneo_id', torneo.id).eq('jugador_id', session.id).maybeSingle(),
         db
           .from('jugadores')
-          .select('id, nombre, genero, categoria, categoria_torneo')
+          .select('id, nombre, genero, categoria, categoria_torneo, es_prueba')
           .eq('activo', true)
           .neq('estado_verificacion', 'no_permitido')
           .neq('id', session.id)
@@ -146,7 +146,7 @@ export async function GET() {
             vence_at: enviada.vence_at,
           } : null,
           candidatos: pareja ? [] : candidatosPareja({
-            yo: yo as JugadorDobles, categoria, jugadores: (candidatos || []) as JugadorDobles[], estadoEnCategoria, esperandoA, categoriasDe,
+            yo: yo as JugadorDobles, categoria, jugadores: (candidatos || []).filter((c: any) => !c.es_prueba) as JugadorDobles[], estadoEnCategoria, esperandoA, categoriasDe,
             meInvitaron: new Set(recibidas.filter((v) => v.categoria_id === categoria.id).map((v) => insPorId.get(v.invita_inscripcion_id)?.jugador1_id).filter(Boolean)),
           }),
         }
