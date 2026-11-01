@@ -7,6 +7,8 @@ import Delegacion from './Delegacion'
 import ConfirmacionReserva, { type InfoConfirmacion } from './ConfirmacionReserva'
 import BloqueosCancha from './BloqueosCancha'
 import TorneoAdmin from './TorneoAdmin'
+import PagosTorneo from './PagosTorneo'
+import { cargarJugadoresActivosAdmin, contarJugadoresActivosAdmin } from '@/lib/jugadoresActivosAdmin'
 import TasaBcv from '@/app/components/TasaBcv'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
@@ -87,8 +89,9 @@ export default function AdminPage() {
   const [loadingPagos, setLoadingPagos] = useState(true)
   const [temporadaActivaPagos, setTemporadaActivaPagos] = useState<any>(null)
   const [jugadoresParaPago, setJugadoresParaPago] = useState<any[]>([])
-  // Pagos → Escalera (tabla pagos, lo de siempre) | Delegación (torneos inter-clubes y uniformes)
-  const [subPagos, setSubPagos] = useState<'escalera' | 'delegacion'>('escalera')
+  // Pagos → Escalera (tabla pagos, lo de siempre) | Torneo (inscripciones del torneo interno) | Delegación (torneos inter-clubes y uniformes)
+  const [subPagos, setSubPagos] = useState<'escalera' | 'torneo' | 'delegacion'>('escalera')
+  const [pagosTorneoPorValidar, setPagosTorneoPorValidar] = useState(0)
   const [inscritos, setInscritos] = useState<any[]>([])
   const [pagoJugadorId, setPagoJugadorId] = useState('')
   const [pagoTipo, setPagoTipo] = useState('pago_movil')
@@ -494,14 +497,20 @@ export default function AdminPage() {
     }
   }, [activeSection])
 
+  // Contador de la pestaña Pagos → Torneo (pagos de inscripción por validar).
+  useEffect(() => {
+    if (activeSection !== 'payments') return
+    fetch('/api/admin/torneo/pagos?conteo=1', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setPagosTorneoPorValidar(d.porValidar || 0) })
+      .catch(() => {})
+  }, [activeSection])
+
   const fetchDashboardStats = async () => {
     setLoadingDash(true)
 
-    const { count: totalJugadores } = await supabase
-      .from('jugadores')
-      .select('id', { count: 'exact', head: true })
-      .eq('activo', true)
-      .eq('es_prueba', false)
+    // Desde el servidor: es_prueba no es legible con la clave anónima.
+    const totalJugadores = await contarJugadoresActivosAdmin()
 
     const { count: activos } = await supabase
       .from('retos')
@@ -720,13 +729,7 @@ export default function AdminPage() {
     setPermisosMedicosPendientes(res.ok ? permisos.pendientes || [] : [])
     setPermisosMedicosActivos(res.ok ? permisos.activos || [] : [])
 
-    const { data: jugadoresActivos } = await supabase
-      .from('jugadores')
-      .select('id, nombre')
-      .eq('activo', true)
-      .eq('es_prueba', false)
-      .order('nombre', { ascending: true })
-    setJugadoresParaPermiso(jugadoresActivos || [])
+    setJugadoresParaPermiso(await cargarJugadoresActivosAdmin())
 
     setLoadingPermisosMedicos(false)
   }
@@ -1187,8 +1190,7 @@ export default function AdminPage() {
   }
 
   const fetchJugadoresActivos = async () => {
-    const { data } = await supabase.from('jugadores').select('id, nombre').eq('activo', true).eq('es_prueba', false).order('nombre', { ascending: true })
-    setJugadoresParaPago(data || [])
+    setJugadoresParaPago(await cargarJugadoresActivosAdmin())
   }
 
   const fetchPagos = async () => {
@@ -1865,14 +1867,9 @@ export default function AdminPage() {
       })
       setStandbyMap(mapaStandby)
 
-      const { data: todosJugadores } = await supabase
-        .from('jugadores')
-        .select('id, nombre, categoria, genero')
-        .eq('activo', true)
-        .eq('es_prueba', false)
-        .order('nombre', { ascending: true })
+      const todosJugadores = await cargarJugadoresActivosAdmin()
 
-      setJugadoresDisponibles((todosJugadores || []).filter((j: any) => !idsAnotados.has(j.id)))
+      setJugadoresDisponibles(todosJugadores.filter((j) => !idsAnotados.has(j.id)))
     }
     setLoading(false)
   }
@@ -4871,8 +4868,8 @@ export default function AdminPage() {
               <div style={{ marginBottom: '16px' }}>
                 <TasaBcv controlesAdmin={!esAdminLimitado} />
               </div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                {([['escalera', '🎾 Escalera'], ['delegacion', '🏟️ Delegación']] as const).map(([id, label]) => (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                {([['escalera', '🎾 Escalera'], ['torneo', `🎄 Torneo${pagosTorneoPorValidar ? ` (${pagosTorneoPorValidar})` : ''}`], ['delegacion', '🏟️ Delegación']] as const).map(([id, label]) => (
                   <button
                     key={id}
                     onClick={() => setSubPagos(id)}
@@ -4887,7 +4884,9 @@ export default function AdminPage() {
                   </button>
                 ))}
               </div>
-              {subPagos === 'delegacion' ? (
+              {subPagos === 'torneo' ? (
+                <PagosTorneo onCambio={setPagosTorneoPorValidar} />
+              ) : subPagos === 'delegacion' ? (
                 <Delegacion esAdminCompleto={!esAdminLimitado} adminNombre={session?.nombre || 'Administrador'} />
               ) : (
               <>
