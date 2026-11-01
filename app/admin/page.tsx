@@ -7,6 +7,7 @@ import Delegacion from './Delegacion'
 import ConfirmacionReserva, { type InfoConfirmacion } from './ConfirmacionReserva'
 import BloqueosCancha from './BloqueosCancha'
 import TorneoAdmin from './TorneoAdmin'
+import { cargarJugadoresActivosAdmin, contarJugadoresActivosAdmin } from '@/lib/jugadoresActivosAdmin'
 import TasaBcv from '@/app/components/TasaBcv'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
@@ -497,11 +498,8 @@ export default function AdminPage() {
   const fetchDashboardStats = async () => {
     setLoadingDash(true)
 
-    const { count: totalJugadores } = await supabase
-      .from('jugadores')
-      .select('id', { count: 'exact', head: true })
-      .eq('activo', true)
-      .eq('es_prueba', false)
+    // Desde el servidor: es_prueba no es legible con la clave anónima.
+    const totalJugadores = await contarJugadoresActivosAdmin()
 
     const { count: activos } = await supabase
       .from('retos')
@@ -720,13 +718,7 @@ export default function AdminPage() {
     setPermisosMedicosPendientes(res.ok ? permisos.pendientes || [] : [])
     setPermisosMedicosActivos(res.ok ? permisos.activos || [] : [])
 
-    const { data: jugadoresActivos } = await supabase
-      .from('jugadores')
-      .select('id, nombre')
-      .eq('activo', true)
-      .eq('es_prueba', false)
-      .order('nombre', { ascending: true })
-    setJugadoresParaPermiso(jugadoresActivos || [])
+    setJugadoresParaPermiso(await cargarJugadoresActivosAdmin())
 
     setLoadingPermisosMedicos(false)
   }
@@ -1187,8 +1179,7 @@ export default function AdminPage() {
   }
 
   const fetchJugadoresActivos = async () => {
-    const { data } = await supabase.from('jugadores').select('id, nombre').eq('activo', true).eq('es_prueba', false).order('nombre', { ascending: true })
-    setJugadoresParaPago(data || [])
+    setJugadoresParaPago(await cargarJugadoresActivosAdmin())
   }
 
   const fetchPagos = async () => {
@@ -1865,14 +1856,9 @@ export default function AdminPage() {
       })
       setStandbyMap(mapaStandby)
 
-      const { data: todosJugadores } = await supabase
-        .from('jugadores')
-        .select('id, nombre, categoria, genero')
-        .eq('activo', true)
-        .eq('es_prueba', false)
-        .order('nombre', { ascending: true })
+      const todosJugadores = await cargarJugadoresActivosAdmin()
 
-      setJugadoresDisponibles((todosJugadores || []).filter((j: any) => !idsAnotados.has(j.id)))
+      setJugadoresDisponibles(todosJugadores.filter((j) => !idsAnotados.has(j.id)))
     }
     setLoading(false)
   }

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { supabase } from '@/lib/supabaseClient'
+import { cargarJugadoresActivosAdmin } from '@/lib/jugadoresActivosAdmin'
 import TasaBcv, { formatearBs, type TasaBcvVigente } from '@/app/components/TasaBcv'
 import { hoyEnCaracas, instanteEnCaracas, formatearFechaConAnio, formatearFechaHora } from '@/lib/tiempo'
 import {
@@ -531,13 +531,8 @@ export default function Delegacion({ esAdminCompleto, adminNombre }: { esAdminCo
 
   useEffect(() => {
     cargar()
-    supabase
-      .from('jugadores')
-      .select('id, nombre')
-      .eq('activo', true)
-      .eq('es_prueba', false)
-      .order('nombre', { ascending: true })
-      .then(({ data }) => setJugadores(data || []))
+    // Desde el servidor: es_prueba no es legible con la clave anónima.
+    cargarJugadoresActivosAdmin().then(setJugadores)
   }, [])
 
   const torneosActivos = torneos.filter((t) => t.activo)
