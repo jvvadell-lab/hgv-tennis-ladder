@@ -19,8 +19,35 @@ export async function GET() {
       .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide, es_invitado, invitado_habilitado_at, es_prueba')
       .order('created_at', { ascending: false })
     if (error) throw error
+    const jugadores = (data || []) as any[]
 
-    return NextResponse.json({ ok: true, jugadores: data || [] })
+    // "Invitado por": para los invitados (no socios), quién los invitó en el
+    // torneo, sacado de torneo_invitaciones. Si hay varias, gana la aceptada
+    // y, si no, la más reciente.
+    const idsInvitados = jugadores.filter((j) => j.es_invitado).map((j) => j.id)
+    const invitadoPor = new Map<string, { nombre: string; categoria: string; estado: string }>()
+    if (idsInvitados.length) {
+      const { data: invs, error: errInv } = await db
+        .from('torneo_invitaciones')
+        .select('invitado_jugador_id, estado, created_at, torneo_categorias:categoria_id(nombre), inscripcion:invita_inscripcion_id(jugadores:jugador1_id(nombre))')
+        .in('invitado_jugador_id', idsInvitados)
+        .order('created_at', { ascending: false })
+      if (errInv) throw errInv
+      for (const inv of (invs || []) as any[]) {
+        const actual = invitadoPor.get(inv.invitado_jugador_id)
+        if (actual && (actual.estado === 'aceptada' || inv.estado !== 'aceptada')) continue
+        invitadoPor.set(inv.invitado_jugador_id, {
+          nombre: inv.inscripcion?.jugadores?.nombre || '—',
+          categoria: inv.torneo_categorias?.nombre || '',
+          estado: inv.estado,
+        })
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      jugadores: jugadores.map((j) => (j.es_invitado ? { ...j, invitado_por: invitadoPor.get(j.id) ?? null } : j)),
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al cargar jugadores' }, { status: 500 })
   }
