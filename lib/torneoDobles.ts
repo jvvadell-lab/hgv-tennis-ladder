@@ -242,3 +242,51 @@ export function resumenCategoria(d: {
   }
   return { ...r, alerta: alertaCategoria(r) }
 }
+
+// ---------------------------------------------------------------------------
+// Admin: armar una dupla con cualquier jugador del club (2-nov-2026)
+// ---------------------------------------------------------------------------
+
+export type CandidatoAdmin = {
+  id: string
+  nombre: string
+  // disponible = inscrito sin dupla; invitacion_enviada = inscrito y esperando
+  // respuesta (el admin puede igual: se anulan sus invitaciones);
+  // no_inscrito = el sistema lo inscribe al armar la dupla.
+  estado: 'disponible' | 'invitacion_enviada' | 'no_inscrito'
+  esInvitado: boolean
+  seleccionable: boolean
+  motivo: string | null       // por qué no se puede elegir
+}
+
+// Jugadores que el admin puede poner en una dupla de la categoría: género y
+// nivel compatibles con la categoría, que no estén ya en una dupla en ella y,
+// si no están inscritos, que tengan menos de 2 categorías. La compatibilidad
+// entre los dos (p. ej. el Mixto) la revisa errorDupla al armar.
+export function candidatosArmarAdmin(d: {
+  categoria: CategoriaDobles
+  jugadores: (JugadorDobles & { esInvitado?: boolean })[]
+  estadoEnCategoria: Map<string, EstadoEnDobles>
+  categoriasDe: Map<string, number>   // categorías vivas del torneo por jugador
+}): CandidatoAdmin[] {
+  const genero = d.categoria.genero as GeneroCategoria
+  const lista: CandidatoAdmin[] = []
+  for (const j of d.jugadores) {
+    if ((genero === 'caballeros' || genero === 'damas') && j.genero !== genero) continue
+    if (!nivelAdmitido(d.categoria.categoria_nivel as Nivel | null, nivelParaTorneo(j))) continue
+    const estado = d.estadoEnCategoria.get(j.id)
+    if (estado === 'en_dupla') continue
+    const inscrito = estado === 'disponible' || estado === 'invitacion_enviada'
+    const sinCupoPropio = !inscrito && (d.categoriasDe.get(j.id) ?? 0) >= MAX_CATEGORIAS_POR_JUGADOR
+    lista.push({
+      id: j.id,
+      nombre: j.nombre,
+      estado: inscrito ? estado! : 'no_inscrito',
+      esInvitado: !!j.esInvitado,
+      seleccionable: !sinCupoPropio,
+      motivo: sinCupoPropio ? `ya está en ${MAX_CATEGORIAS_POR_JUGADOR} categorías` : null,
+    })
+  }
+  const orden = { disponible: 0, invitacion_enviada: 1, no_inscrito: 2 }
+  return lista.sort((a, b) => Number(!a.seleccionable) - Number(!b.seleccionable) || orden[a.estado] - orden[b.estado] || a.nombre.localeCompare(b.nombre, 'es'))
+}
