@@ -34,6 +34,15 @@ const GENEROS = [
   { value: 'damas', label: 'Damas' },
 ]
 
+// Estado de la invitación que trajo a un invitado (pestaña Jugadores).
+const ETIQUETA_ESTADO_INVITACION: Record<string, string> = {
+  pendiente: 'invitación pendiente',
+  aceptada: 'aceptada',
+  rechazada: 'rechazó',
+  vencida: 'invitación vencida',
+  cancelada: 'invitación anulada',
+}
+
 export default function AdminPage() {
   const [session, setSession] = useState<any>(null)
   const [checkingSession, setCheckingSession] = useState(true)
@@ -2582,6 +2591,11 @@ export default function AdminPage() {
                                   <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#5b2a86', background: '#efe3ff', padding: '2px 8px', borderRadius: '8px' }}>
                                     Invitado{player.invitado_habilitado_at ? ' · habilitado' : ''}
                                   </span>
+                                  <div style={{ fontSize: '12px', color: '#5b2a86', marginTop: '4px' }}>
+                                    {player.invitado_por
+                                      ? <>Invitado por <strong>{player.invitado_por.nombre}</strong>{player.invitado_por.categoria ? ` · ${player.invitado_por.categoria}` : ''}{player.invitado_por.estado !== 'aceptada' ? ` (${ETIQUETA_ESTADO_INVITACION[player.invitado_por.estado] || player.invitado_por.estado})` : ''}</>
+                                      : <span style={{ color: '#999' }}>Sin invitación en el torneo</span>}
+                                  </div>
                                   <button
                                     onClick={() => habilitarInvitado(player.id, !player.invitado_habilitado_at)}
                                     disabled={verificando === player.id}
