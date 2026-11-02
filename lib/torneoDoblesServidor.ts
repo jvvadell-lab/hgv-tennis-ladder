@@ -8,9 +8,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ahora } from '@/lib/tiempo'
 import type { Torneo, TorneoCategoria } from '@/lib/torneo'
-import { errorDupla, normalizarTelefonoVe, telefonoLegible, venceInvitacion, type JugadorDobles } from '@/lib/torneoDobles'
+import { candidatosArmarAdmin, errorDupla, normalizarTelefonoVe, telefonoLegible, venceInvitacion, type CandidatoAdmin, type EstadoEnDobles, type JugadorDobles } from '@/lib/torneoDobles'
 import { categoriaAbierta, mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
-import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
+import { avisarInscripcionConfirmada, escaparHtml, notificarJugadores, recalcularInscripcion } from '@/lib/torneoServidor'
 import { textoMontoCorto } from '@/lib/torneoPrecios'
 
 type Resultado<T = object> = ({ ok: true } & T) | { ok: false; error: string }
@@ -441,6 +441,181 @@ export async function armarDuplaAdmin(db: SupabaseClient, torneo: Torneo, inscri
     cuerpoHtml: (j) => `<p>El admin armó tu dupla en <strong>${escaparHtml(categoria.nombre)}</strong>: juegas con <strong>${escaparHtml(j.id === a.id ? b.nombre : a.nombre)}</strong>.</p>`,
   })
   return { ok: true, equipoId: equipo.id }
+}
+
+// ---------------------------------------------------------------------------
+// Admin: armar una dupla con cualquier jugador del club (2-nov-2026)
+// ---------------------------------------------------------------------------
+// El admin elige dos jugadores activos (inscritos o no en la categoría). Los
+// que no estaban inscritos quedan inscritos "por el admin" (monto fijado por
+// el trigger como siempre), se arma la dupla, se anulan sus invitaciones
+// pendientes y, si alguno es invitado (no socio), armarla cuenta como la
+// autorización del admin. A los jugadores solo les queda pagar. Antes del
+// sorteo de la categoría; funciona aunque la categoría esté cerrada.
+
+async function estadoDeCategoria(db: SupabaseClient, categoriaId: string) {
+  const { data: ins, error } = await db.from('torneo_inscripciones').select('id, jugador1_id').eq('categoria_id', categoriaId).neq('estado', 'retirada').not('jugador1_id', 'is', null)
+  if (error) throw error
+  const { data: eq, error: errE } = await db.from('torneo_equipos').select('inscripcion1_id, inscripcion2_id').eq('categoria_id', categoriaId).eq('estado', 'activo')
+  if (errE) throw errE
+  const { data: inv, error: errI } = await db.from('torneo_invitaciones').select('invita_inscripcion_id').eq('categoria_id', categoriaId).eq('estado', 'pendiente')
+  if (errI) throw errI
+  const enDuplaIds = new Set((eq || []).flatMap((e: any) => [e.inscripcion1_id, e.inscripcion2_id]).filter(Boolean))
+  const conInvitacion = new Set((inv || []).map((i: any) => i.invita_inscripcion_id))
+  const estado = new Map<string, EstadoEnDobles>()
+  const inscripcionDeJugador = new Map<string, string>()
+  for (const i of ins || []) {
+    inscripcionDeJugador.set(i.jugador1_id, i.id)
+    estado.set(i.jugador1_id, enDuplaIds.has(i.id) ? 'en_dupla' : conInvitacion.has(i.id) ? 'invitacion_enviada' : 'disponible')
+  }
+  return { estado, inscripcionDeJugador }
+}
+
+async function categoriasPorJugador(db: SupabaseClient, torneoId: string): Promise<Map<string, number>> {
+  const { data, error } = await db
+    .from('torneo_inscripciones')
+    .select('jugador1_id, categoria_id, torneo_categorias!inner(torneo_id)')
+    .eq('torneo_categorias.torneo_id', torneoId)
+    .neq('estado', 'retirada')
+    .not('jugador1_id', 'is', null)
+  if (error) throw error
+  const cats = new Map<string, Set<string>>()
+  for (const i of (data || []) as any[]) {
+    if (!cats.has(i.jugador1_id)) cats.set(i.jugador1_id, new Set())
+    cats.get(i.jugador1_id)!.add(i.categoria_id)
+  }
+  return new Map([...cats].map(([id, set]) => [id, set.size]))
+}
+
+export async function candidatosArmarDuplaAdmin(db: SupabaseClient, torneo: Torneo, categoriaId: string): Promise<Resultado<{ candidatos: CandidatoAdmin[] }>> {
+  const categoria = await leerCategoria(db, categoriaId)
+  if (!categoria || categoria.torneo_id !== torneo.id || categoria.modalidad !== 'doble') return { ok: false, error: 'Esa categoría no es de dobles de este torneo' }
+  await vencerInvitaciones(db, [categoriaId])
+  const { data: jugadores, error } = await db
+    .from('jugadores')
+    .select('id, nombre, genero, categoria, categoria_torneo, es_invitado, activo, estado_verificacion')
+    .eq('activo', true)
+    .eq('es_prueba', false)
+    .neq('estado_verificacion', 'no_permitido')
+    .order('nombre')
+  if (error) throw error
+  const { estado } = await estadoDeCategoria(db, categoriaId)
+  const candidatos = candidatosArmarAdmin({
+    categoria,
+    jugadores: (jugadores || []).map((j: any) => ({ ...j, esInvitado: !!j.es_invitado })),
+    estadoEnCategoria: estado,
+    categoriasDe: await categoriasPorJugador(db, torneo.id),
+  })
+  return { ok: true, candidatos }
+}
+
+export async function armarDuplaAdminConJugadores(
+  db: SupabaseClient,
+  torneo: Torneo,
+  categoriaId: string,
+  jugadorIds: [string, string],
+  adminId: string,
+): Promise<Resultado<{ equipoId: string; inscritos: string[] }>> {
+  if (!['borrador', 'inscripcion'].includes(torneo.estado)) return { ok: false, error: 'El sorteo ya se hizo' }
+  if (jugadorIds[0] === jugadorIds[1]) return { ok: false, error: 'Elige dos jugadores distintos' }
+  const categoria = await leerCategoria(db, categoriaId)
+  if (!categoria || categoria.torneo_id !== torneo.id || categoria.modalidad !== 'doble') return { ok: false, error: 'Esa categoría no es de dobles de este torneo' }
+  if (categoria.sorteo_publicado_at || categoria.cancelada_at) return { ok: false, error: `${categoria.nombre} ya se sorteó o se canceló` }
+
+  await vencerInvitaciones(db, [categoriaId])
+  const jugadores = await leerJugadores(db, jugadorIds)
+  const [a, b] = jugadorIds.map((id) => jugadores.get(id))
+  if (!a || !b) return { ok: false, error: 'No encontramos a uno de los jugadores' }
+  for (const x of [a, b]) if (!puedeJugar(x)) return { ok: false, error: `${x.nombre} no está activo en el club` }
+  const err = errorDupla(categoria, a, b)
+  if (err) return { ok: false, error: err }
+
+  const { estado, inscripcionDeJugador } = await estadoDeCategoria(db, categoriaId)
+  for (const x of [a, b]) if (estado.get(x.id) === 'en_dupla') return { ok: false, error: `${x.nombre} ya tiene dupla en ${categoria.nombre}` }
+
+  const { data: invs, error: errInv } = await db.from('jugadores').select('id, es_invitado').in('id', jugadorIds)
+  if (errInv) throw errInv
+  const esInvitado = new Set((invs || []).filter((j: any) => j.es_invitado).map((j: any) => j.id))
+  const momento = ahora().toISOString()
+
+  // Inscribe a los que faltan (si el segundo falla, se deshace el primero).
+  const creadas: string[] = []
+  const inscripcionIds: string[] = []
+  for (const x of [a, b]) {
+    const existente = inscripcionDeJugador.get(x.id)
+    if (existente) {
+      inscripcionIds.push(existente)
+      continue
+    }
+    const { data: nueva, error: errIns } = await db
+      .from('torneo_inscripciones')
+      .insert({
+        categoria_id: categoriaId,
+        jugador1_id: x.id,
+        inscrita_por_admin: adminId,
+        ...(esInvitado.has(x.id) ? { invitado_autorizado_por: adminId, invitado_autorizado_at: momento } : {}),
+      })
+      .select('id')
+      .single()
+    if (errIns) {
+      if (creadas.length) await db.from('torneo_inscripciones').delete().in('id', creadas)
+      return { ok: false, error: `${x.nombre}: ${mensajeErrorBaseInscripcion(errIns.message) ?? errIns.message}` }
+    }
+    creadas.push(nueva.id)
+    inscripcionIds.push(nueva.id)
+  }
+
+  const { data: equipo, error: errE } = await db
+    .from('torneo_equipos')
+    .insert({ categoria_id: categoriaId, inscripcion1_id: inscripcionIds[0], inscripcion2_id: inscripcionIds[1], origen: 'admin', formado_por_admin: adminId })
+    .select('id')
+    .single()
+  if (errE) {
+    if (creadas.length) await db.from('torneo_inscripciones').delete().in('id', creadas)
+    return { ok: false, error: mensajeErrorBaseInscripcion(errE.message) ?? errE.message }
+  }
+
+  // Invitados ya inscritos: armar la dupla cuenta como la autorización.
+  const yaInscritosInvitados = [a, b].filter((x) => esInvitado.has(x.id) && !creadas.includes(inscripcionIds[[a, b].indexOf(x)])).map((x) => inscripcionIds[[a, b].indexOf(x)])
+  if (yaInscritosInvitados.length) {
+    await db.from('torneo_inscripciones')
+      .update({ invitado_autorizado_por: adminId, invitado_autorizado_at: momento })
+      .in('id', yaInscritosInvitados)
+      .is('invitado_autorizado_at', null)
+  }
+
+  await cancelarInvitacionesDe(db, inscripcionIds, 'El admin armó la dupla')
+
+  // Estado de cada inscripción y el monto que le toca pagar.
+  const { data: montos } = await db.from('torneo_inscripciones').select('id, jugador1_id, monto_eur, monto_motivo').in('id', inscripcionIds)
+  const montoDe = new Map((montos || []).map((m: any) => [m.jugador1_id, m]))
+  for (const id of inscripcionIds) {
+    try {
+      const r = await recalcularInscripcion(db, id)
+      if (r.antes !== 'confirmada' && r.despues === 'confirmada') await avisarInscripcionConfirmada(db, r)
+    } catch (e: any) {
+      console.error('[torneo] No se pudo recalcular la inscripción', id, e.message)
+    }
+  }
+
+  const pagoDe = (jid: string) => {
+    const m = montoDe.get(jid)
+    return m ? textoMontoCorto({ monto_eur: Number(m.monto_eur), motivo: m.monto_motivo }) : ''
+  }
+  for (const [yo, otro] of [[a, b], [b, a]] as const) {
+    const nuevo = creadas.includes(inscripcionIds[[a, b].indexOf(yo)])
+    await notificarJugadores(db, [yo.id], {
+      tipo: 'torneo_dupla',
+      mensaje: nuevo
+        ? `🤝 El admin te inscribió en ${categoria.nombre} con ${otro.nombre}. Solo falta reportar tu pago (${pagoDe(yo.id)} en Bs. a la tasa BCV del euro).`
+        : `🤝 El admin armó tu dupla en ${categoria.nombre}: juegas con ${otro.nombre}.`,
+      asunto: `🤝 Tu dupla en ${categoria.nombre}`,
+      cuerpoHtml: () => nuevo
+        ? `<p>El admin te inscribió en <strong>${escaparHtml(categoria.nombre)}</strong> del <strong>${escaparHtml(torneo.nombre)}</strong>, en dupla con <strong>${escaparHtml(otro.nombre)}</strong>.</p><p>Solo falta <strong>reportar tu pago</strong>: ${escaparHtml(pagoDe(yo.id))} en Bs. a la tasa BCV del euro. Entra a la app → <strong>Copa → Inscribirme</strong>.</p>`
+        : `<p>El admin armó tu dupla en <strong>${escaparHtml(categoria.nombre)}</strong>: juegas con <strong>${escaparHtml(otro.nombre)}</strong>.</p>`,
+    })
+  }
+  return { ok: true, equipoId: equipo.id, inscritos: creadas }
 }
 
 // Deshace una dupla antes del sorteo (para cambiar la pareja): los dos

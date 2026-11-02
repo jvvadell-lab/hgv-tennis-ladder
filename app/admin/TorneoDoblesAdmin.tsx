@@ -134,6 +134,126 @@ export type InvitacionAdmin = { id: string; categoria_id: string; invita_inscrip
 type CategoriaGestion = { id: string; nombre: string; modalidad: string; es_infantil: boolean; sorteo_publicado_at: string | null; cancelada_at: string | null }
 type InscripcionGestion = { id: string; categoria_id: string; estado: string; nombre: string; esMenor: boolean }
 
+// Armar una dupla con cualquier jugador del club (inscrito o no): el sistema
+// inscribe a los que falten y solo les queda pagar.
+type CandidatoArmar = { id: string; nombre: string; estado: 'disponible' | 'invitacion_enviada' | 'no_inscrito'; esInvitado: boolean; seleccionable: boolean; motivo: string | null }
+const ETIQUETA_CANDIDATO: Record<CandidatoArmar['estado'], string> = {
+  disponible: 'inscrito, sin pareja',
+  invitacion_enviada: 'inscrito, esperando respuesta',
+  no_inscrito: 'no inscrito: se inscribe al armar',
+}
+
+function ArmarDuplaJugadores({ categoria, ocupado, accion }: {
+  categoria: CategoriaGestion
+  ocupado: string | null
+  accion: (clave: string, ruta: string, body: object, exito: string) => Promise<boolean>
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [candidatos, setCandidatos] = useState<CandidatoArmar[] | null>(null)
+  const [error, setError] = useState('')
+  const [a, setA] = useState('')
+  const [b, setB] = useState('')
+  const [buscar, setBuscar] = useState(['', ''])
+
+  const cargar = async () => {
+    setError('')
+    try {
+      const res = await fetch(`/api/admin/torneo/duplas?categoriaId=${categoria.id}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudieron cargar los jugadores')
+      setCandidatos(data.candidatos || [])
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  const nombreDe = (id: string) => candidatos?.find((c) => c.id === id)?.nombre ?? ''
+  const elegido = (id: string) => candidatos?.find((c) => c.id === id)
+
+  if (!abierto) {
+    return (
+      <button onClick={() => { setAbierto(true); cargar() }} style={{ ...boton('var(--color-court)'), marginTop: '10px' }}>
+        ➕ Armar dupla con jugadores del club
+      </button>
+    )
+  }
+
+  const selector = (lado: 0 | 1, valor: string, setValor: (v: string) => void, otro: string) => {
+    const texto = buscar[lado].trim().toLowerCase()
+    const lista = (candidatos || []).filter((c) => c.id !== otro && (!texto || c.nombre.toLowerCase().includes(texto)))
+    return (
+      <div style={{ flex: '1 1 220px' }}>
+        <input
+          type="search"
+          placeholder={`Buscar jugador ${lado + 1}…`}
+          value={buscar[lado]}
+          onChange={(e) => setBuscar((x) => (lado === 0 ? [e.target.value, x[1]] : [x[0], e.target.value]))}
+          style={{ width: '100%', boxSizing: 'border-box', padding: '6px', fontSize: '13px', marginBottom: '4px' }}
+        />
+        <select value={valor} onChange={(e) => setValor(e.target.value)} size={6} style={{ width: '100%', fontSize: '13px' }}>
+          {lista.map((c) => (
+            <option key={c.id} value={c.id} disabled={!c.seleccionable}>
+              {c.nombre}{c.esInvitado ? ' (invitado)' : ''} — {c.seleccionable ? ETIQUETA_CANDIDATO[c.estado] : c.motivo}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+
+  const listo = a && b && a !== b
+  const resumen = listo ? [elegido(a), elegido(b)].filter(Boolean) as CandidatoArmar[] : []
+  const nuevos = resumen.filter((c) => c.estado === 'no_inscrito')
+  const invitados = resumen.filter((c) => c.esInvitado)
+
+  return (
+    <div style={{ marginTop: '10px', borderTop: '1px solid #e5e5e5', paddingTop: '8px' }}>
+      <strong style={{ color: 'var(--color-ink)' }}>➕ Armar dupla con jugadores del club</strong>
+      <p style={{ margin: '4px 0 8px 0', color: '#666' }}>
+        Elige dos jugadores (inscritos o no). Los que no estén inscritos quedan inscritos por el admin; a los dos solo les queda reportar su pago.
+        Si alguno es invitado, esto cuenta como tu autorización.
+      </p>
+      {error && <p style={{ color: '#c0392b', margin: '0 0 8px 0' }}>{error}</p>}
+      {!candidatos ? (
+        <p style={{ color: '#888' }}>Cargando jugadores…</p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {selector(0, a, setA, b)}
+            {selector(1, b, setB, a)}
+          </div>
+          {listo && (
+            <p style={{ margin: '8px 0 0 0', color: '#555' }}>
+              Dupla: <strong>{nombreDe(a)} / {nombreDe(b)}</strong>
+              {nuevos.length > 0 && <> · se inscribe a {nuevos.map((c) => c.nombre).join(' y ')}</>}
+              {invitados.length > 0 && <> · autoriza como invitado a {invitados.map((c) => c.nombre).join(' y ')}</>}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button
+              disabled={!listo || ocupado === 'armar-jugadores'}
+              onClick={async () => {
+                const texto = `¿Armar la dupla ${nombreDe(a)} / ${nombreDe(b)} en ${categoria.nombre}?` +
+                  (nuevos.length ? `\n\nSe inscribe a ${nuevos.map((c) => c.nombre).join(' y ')}.` : '') +
+                  (invitados.length ? `\nCuenta como autorización de invitado de ${invitados.map((c) => c.nombre).join(' y ')}.` : '') +
+                  '\n\nSe les avisa por la app y por correo para que reporten su pago.'
+                if (!confirm(texto)) return
+                if (await accion('armar-jugadores', 'duplas', { accion: 'armar_jugadores', categoriaId: categoria.id, jugadorIds: [a, b] }, `Dupla armada: ${nombreDe(a)} / ${nombreDe(b)}`)) {
+                  setA(''); setB(''); setBuscar(['', '']); await cargar()
+                }
+              }}
+              style={boton('var(--color-court)', true)}
+            >
+              🤝 Armar dupla{listo ? `: ${nombreDe(a)} / ${nombreDe(b)}` : ' (elige 2)'}
+            </button>
+            <button onClick={() => setAbierto(false)} style={boton('#777')}>Cerrar</button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function GestionCategoria({
   categoria, categorias, inscripciones, equipos, invitaciones, listaEspera, editable, cerrada, ocupado, accion,
 }: {
@@ -251,6 +371,8 @@ export function GestionCategoria({
               )}
             </div>
           )}
+
+          {editable && <ArmarDuplaJugadores categoria={categoria} ocupado={ocupado} accion={accion} />}
 
           {pendientes.length > 0 && (
             <div style={{ marginTop: '10px', borderTop: '1px solid #e5e5e5', paddingTop: '8px' }}>
