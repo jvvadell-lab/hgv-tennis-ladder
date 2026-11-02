@@ -8,6 +8,7 @@ import ConfirmacionReserva, { type InfoConfirmacion } from './ConfirmacionReserv
 import BloqueosCancha from './BloqueosCancha'
 import TorneoAdmin from './TorneoAdmin'
 import PagosTorneo from './PagosTorneo'
+import TodosLosRecibos from './TodosLosRecibos'
 import { cargarJugadoresActivosAdmin, contarJugadoresActivosAdmin } from '@/lib/jugadoresActivosAdmin'
 import TasaBcv from '@/app/components/TasaBcv'
 import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
@@ -99,7 +100,7 @@ export default function AdminPage() {
   const [temporadaActivaPagos, setTemporadaActivaPagos] = useState<any>(null)
   const [jugadoresParaPago, setJugadoresParaPago] = useState<any[]>([])
   // Pagos → Escalera (tabla pagos, lo de siempre) | Torneo (inscripciones del torneo interno) | Delegación (torneos inter-clubes y uniformes)
-  const [subPagos, setSubPagos] = useState<'escalera' | 'torneo' | 'delegacion'>('escalera')
+  const [subPagos, setSubPagos] = useState<'escalera' | 'torneo' | 'delegacion' | 'recibos'>('escalera')
   const [pagosTorneoPorValidar, setPagosTorneoPorValidar] = useState(0)
   const [inscritos, setInscritos] = useState<any[]>([])
   const [pagoJugadorId, setPagoJugadorId] = useState('')
@@ -4883,7 +4884,7 @@ export default function AdminPage() {
                 <TasaBcv controlesAdmin={!esAdminLimitado} />
               </div>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                {([['escalera', '🎾 Escalera'], ['torneo', `🎄 Torneo${pagosTorneoPorValidar ? ` (${pagosTorneoPorValidar})` : ''}`], ['delegacion', '🏟️ Delegación']] as const).map(([id, label]) => (
+                {([['escalera', '🎾 Escalera'], ['torneo', `🎄 Torneo${pagosTorneoPorValidar ? ` (${pagosTorneoPorValidar})` : ''}`], ['delegacion', '🏟️ Delegación'], ['recibos', '🧾 Todos los recibos']] as const).map(([id, label]) => (
                   <button
                     key={id}
                     onClick={() => setSubPagos(id)}
@@ -4900,6 +4901,8 @@ export default function AdminPage() {
               </div>
               {subPagos === 'torneo' ? (
                 <PagosTorneo onCambio={setPagosTorneoPorValidar} />
+              ) : subPagos === 'recibos' ? (
+                <TodosLosRecibos />
               ) : subPagos === 'delegacion' ? (
                 <Delegacion esAdminCompleto={!esAdminLimitado} adminNombre={session?.nombre || 'Administrador'} />
               ) : (

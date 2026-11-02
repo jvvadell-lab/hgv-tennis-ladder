@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatearFechaConAnio, instanteEnCaracas } from '@/lib/tiempo'
 import { ETIQUETA_TIPO_PAGO, type TipoPago } from '@/lib/delegacion'
 import { formatearEur } from '@/lib/torneoPrecios'
@@ -46,6 +46,7 @@ export default function PagosTorneo({ onCambio }: { onCambio?: (porValidar: numb
   const [filtro, setFiltro] = useState<Filtro>('por_validar')
   const [categoria, setCategoria] = useState('todas')
   const [busqueda, setBusqueda] = useState('')
+  const cargadoUnaVez = useRef(false)
 
   const cargar = async () => {
     try {
@@ -54,6 +55,11 @@ export default function PagosTorneo({ onCambio }: { onCambio?: (porValidar: numb
       if (!res.ok) throw new Error(data.error || 'Error al cargar los pagos del torneo')
       const lista: PagoTorneo[] = data.pagos || []
       setPagos(lista)
+      // Al abrir: si no hay nada por validar, mostrar todos (si no, la lista sale vacía).
+      if (!cargadoUnaVez.current) {
+        cargadoUnaVez.current = true
+        if (!lista.some((p) => !p.validado)) setFiltro('todos')
+      }
       onCambio?.(lista.filter((p) => !p.validado).length)
       setError('')
     } catch (err: any) {
