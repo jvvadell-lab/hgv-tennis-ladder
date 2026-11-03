@@ -13,6 +13,7 @@ import {
   celdaDisponibilidad,
   nivelAdmitido,
   nivelParaTorneo,
+  LIMITACIONES_HORARIO_ACTIVAS,
 } from '@/lib/torneoInscripcion'
 import { ETIQUETA_TIPO_PAGO } from '@/lib/delegacion'
 import { ETIQUETA_ESTADO_DOBLES, enlaceWhatsApp, mensajeInvitacionWhatsApp, telefonoLegible, type CandidatoPareja, type EstadoEnDobles } from '@/lib/torneoDobles'
@@ -176,7 +177,7 @@ export default function InscripcionTorneo() {
               <InvitacionesRecibidas datos={datos} onCambio={cargar} />
               <MisInscripciones datos={datos} onCambio={cargar} />
               {torneo.estado === 'inscripcion' && <FormInscripcion datos={datos} onCambio={cargar} />}
-              <Limitaciones datos={datos} />
+              {LIMITACIONES_HORARIO_ACTIVAS && <Limitaciones datos={datos} />}
             </>
           )
         )}

@@ -253,6 +253,12 @@ export function montoInscripcionBs(montoEur: number, tasaEur: number): number {
 // Limitaciones de horario: cuadrícula día × franja
 // ---------------------------------------------------------------------------
 
+// Desactivado el 2-nov-2026 por decisión de la Comisión con los profesores:
+// los jugadores ya no ven ni pueden guardar limitaciones. Las que ya estaban
+// guardadas se conservan (el admin las sigue viendo y la programación las
+// usa solo como aviso). Para reactivarlo en otro torneo, poner true.
+export const LIMITACIONES_HORARIO_ACTIVAS = false
+
 // Días de juego del torneo (lun–vie) y dos franjas que agrupan los turnos de
 // la plantilla del SPEC §4: 1ª = 18:30/19:00, 2ª = 20:00/20:30.
 export const DIAS_TORNEO = [
