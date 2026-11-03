@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { torneoVigente } from '@/lib/torneoServidor'
-import { normalizarDisponibilidad } from '@/lib/torneoInscripcion'
+import { LIMITACIONES_HORARIO_ACTIVAS, normalizarDisponibilidad } from '@/lib/torneoInscripcion'
 
 // Guarda las limitaciones de horario del jugador con sesión para el torneo
 // vigente: celdas día × franja en las que NO puede jugar + nota libre.
@@ -11,6 +11,10 @@ export async function POST(request: Request) {
     const session = await getSession()
     if (!session || session.role !== 'jugador') {
       return NextResponse.json({ error: 'Debes iniciar sesión como jugador' }, { status: 403 })
+    }
+
+    if (!LIMITACIONES_HORARIO_ACTIVAS) {
+      return NextResponse.json({ error: 'Las limitaciones de horario ya no se reciben para este torneo' }, { status: 400 })
     }
 
     const { noDisponible, nota } = await request.json()
