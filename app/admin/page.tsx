@@ -18,6 +18,7 @@ import {
 } from '@/lib/tiempo'
 import { ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import PatrocinantesAdmin from './PatrocinantesAdmin'
+import InvitacionInauguracionAdmin from './InvitacionInauguracionAdmin'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -2446,6 +2447,7 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
+              {!esAdminLimitado && <InvitacionInauguracionAdmin />}
               {!esAdminLimitado && <PatrocinantesAdmin />}
               <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
                 <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>👋 Bienvenido al Panel de Administración</h3>
