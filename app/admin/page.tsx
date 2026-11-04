@@ -2667,6 +2667,12 @@ export default function AdminPage() {
                               }}>
                                 {categoriaLabel(player.categoria)}
                               </span>}
+                              {/* La Copa usa la categoría oficial de torneo, que puede ser otra: si lo es, se avisa aquí. */}
+                              {!player.es_representante && player.categoria_torneo && player.categoria_torneo !== player.categoria && (
+                                <div title="Categoría oficial de torneo (la que usa la Copa para decidir en qué categorías puede jugar). Se cambia en 🎄 Torneo → su inscripción → Categoría oficial." style={{ marginTop: '6px', fontSize: '11px', fontWeight: 'bold', color: '#8a5a00', background: '#fff4d6', padding: '2px 8px', borderRadius: '8px', display: 'inline-block', whiteSpace: 'nowrap' }}>
+                                  🎄 Torneo: {categoriaLabel(player.categoria_torneo)}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                               {!nombreTempActivaParaBadge ? (
