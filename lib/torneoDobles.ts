@@ -290,3 +290,20 @@ export function candidatosArmarAdmin(d: {
   const orden = { disponible: 0, invitacion_enviada: 1, no_inscrito: 2 }
   return lista.sort((a, b) => Number(!a.seleccionable) - Number(!b.seleccionable) || orden[a.estado] - orden[b.estado] || a.nombre.localeCompare(b.nombre, 'es'))
 }
+
+// ---------------------------------------------------------------------------
+// Aprobación previa del admin para invitar a no socios (4-nov-2026)
+// ---------------------------------------------------------------------------
+
+// ¿La invitación necesita el OK del admin? En las categorías que lo exigen,
+// sí cuando el invitado es no socio, o un teléfono sin cuenta (invitado =
+// null), del que todavía no sabemos si es socio.
+export const requiereAprobacionInvitacion = (
+  categoria: { invitar_no_socios_con_aprobacion?: boolean | null },
+  invitado: { es_invitado?: boolean | null } | null,
+): boolean => !!categoria.invitar_no_socios_con_aprobacion && (invitado ? !!invitado.es_invitado : true)
+
+// Invitación que el admin todavía no aprobó: el invitado no la ve ni puede
+// responderla, y no se manda el WhatsApp.
+export const porAprobar = (i: { requiere_aprobacion?: boolean | null; aprobada_at?: string | null }): boolean =>
+  !!i.requiere_aprobacion && !i.aprobada_at

@@ -54,7 +54,7 @@ type MiInscripcion = {
   dobles: {
     estado: EstadoEnDobles
     pareja: { equipoId: string; nombre: string } | null
-    enviada: { id: string; nombre: string; telefono: string | null; vence_at: string } | null
+    enviada: { id: string; nombre: string; telefono: string | null; vence_at: string; porAprobar?: boolean } | null
     candidatos: CandidatoPareja[]
   } | null
   pendientes: { tipo: string; jugadorId: string; texto: string }[]
@@ -513,7 +513,12 @@ function Dupla({ ins, datos, onCambio }: { ins: MiInscripcion; datos: Datos; onC
     try {
       const r = await postJson('/api/jugador/torneo/invitaciones', body)
       if (r.whatsapp) window.open(r.whatsapp, '_blank', 'noopener')
-      setMsg({ tipo: 'ok', texto: r.aCuenta === true && 'nombre' in body ? 'Ese teléfono ya tiene cuenta en la app: le llegó la invitación a su campana.' : ok })
+      setMsg({
+        tipo: 'ok',
+        texto: r.porAprobar
+          ? 'Tu pareja no es socio del club: la invitación queda pendiente de aprobación del admin. Te avisamos cuando la apruebe.'
+          : r.aCuenta === true && 'nombre' in body ? 'Ese teléfono ya tiene cuenta en la app: le llegó la invitación a su campana.' : ok,
+      })
       await onCambio()
     } catch (err: any) {
       setMsg({ tipo: 'error', texto: err.message })
@@ -533,7 +538,9 @@ function Dupla({ ins, datos, onCambio }: { ins: MiInscripcion; datos: Datos; onC
 
       {d.enviada && (
         <div style={{ marginTop: '6px', color: '#555' }}>
-          Esperando a <strong>{d.enviada.nombre}</strong>{d.enviada.telefono ? ` (${telefonoLegible(d.enviada.telefono)})` : ''} · vence el {formatearFechaHora(d.enviada.vence_at)}
+          {d.enviada.porAprobar
+            ? <>⏳ Invitación a <strong>{d.enviada.nombre}</strong> pendiente de <strong>aprobación del admin</strong> (no es socio del club). Te avisamos cuando la apruebe.</>
+            : <>Esperando a <strong>{d.enviada.nombre}</strong>{d.enviada.telefono ? ` (${telefonoLegible(d.enviada.telefono)})` : ''} · vence el {formatearFechaHora(d.enviada.vence_at)}</>}
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
             {whatsapp && (
               <a href={whatsapp} target="_blank" rel="noopener noreferrer" style={{ padding: '6px 12px', borderRadius: '4px', background: '#25d366', color: 'white', fontWeight: 700, fontSize: '13px', textDecoration: 'none' }}>

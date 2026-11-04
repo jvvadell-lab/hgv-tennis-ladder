@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas, invitar_no_socios_con_aprobacion')
       .eq('torneo_id', torneo.id)
       .eq('es_infantil', false) // a un menor lo inscribe su representante (/api/jugador/torneo/infantil)
     if (errCat) throw errCat
@@ -40,11 +40,17 @@ export async function POST(request: Request) {
 
     const { data: yo, error: errJug } = await db
       .from('jugadores')
-      .select('id, nombre, genero, categoria, categoria_torneo, activo, estado_verificacion, es_representante')
+      .select('id, nombre, genero, categoria, categoria_torneo, activo, estado_verificacion, es_representante, es_invitado')
       .eq('id', session.id)
       .single()
     if (errJug) throw errJug
     if (yo.es_representante) return NextResponse.json({ error: 'Tu cuenta es de representante: inscribes a tus hijos, pero no juegas. Si quieres jugar, pídele a un administrador que te pase a jugador.' }, { status: 403 })
+    // Categorías con aprobación previa: un no socio no entra solo (ocuparía
+    // cupo sin el OK del admin). Entra si un socio lo invita y el admin lo
+    // aprueba, o si el admin lo inscribe.
+    if (yo.es_invitado && (categoria as any).invitar_no_socios_con_aprobacion) {
+      return NextResponse.json({ error: `En ${categoria.nombre} los no socios entran solo con aprobación del admin: pídele a tu pareja socia que te invite, o al admin que te inscriba.` }, { status: 403 })
+    }
 
     // Inscripciones vivas del torneo: cupo de la categoría y mis categorías.
     const { data: vivas, error: errVivas } = await db

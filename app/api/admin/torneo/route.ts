@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { torneoVigente } from '@/lib/torneoServidor'
-import { COLUMNAS_INVITACION, vencerInvitaciones } from '@/lib/torneoDoblesServidor'
+import { COLUMNAS_INVITACION, porAprobar, vencerInvitaciones } from '@/lib/torneoDoblesServidor'
 import { listasDeEspera } from '@/lib/torneoCierreServidor'
 import { pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
 import { COLUMNAS_MENOR } from '@/lib/torneoInfantilServidor'
@@ -28,7 +28,7 @@ export async function GET() {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden, es_infantil, inscripciones_abiertas, inscripciones_cambiadas_at, admin_cambio:inscripciones_cambiadas_por(nombre), edad_min, edad_max, duracion_min, formato_partido, plantilla_turnos, sorteo_publicado_at, sorteo_metodo, cancelada_at, fusionada_en, num_grupos, llave_desde, partidos_minimos, cierre_inscripciones_at, fecha_inicio, fecha_fin')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden, es_infantil, inscripciones_abiertas, inscripciones_cambiadas_at, admin_cambio:inscripciones_cambiadas_por(nombre), edad_min, edad_max, duracion_min, formato_partido, plantilla_turnos, sorteo_publicado_at, sorteo_metodo, cancelada_at, fusionada_en, num_grupos, llave_desde, partidos_minimos, cierre_inscripciones_at, fecha_inicio, fecha_fin, invitar_no_socios_con_aprobacion')
       .eq('torneo_id', torneo.id)
       .order('orden')
     if (errCat) throw errCat
@@ -159,6 +159,8 @@ export async function GET() {
         id: v.id, categoria_id: v.categoria_id, invita_inscripcion_id: v.invita_inscripcion_id, vence_at: v.vence_at,
         para: (v.invitado_jugador_id && jugadorPorId.get(v.invitado_jugador_id)?.nombre) || v.invitado_nombre || '—',
         telefono: v.invitado_jugador_id ? null : v.invitado_telefono,
+        porAprobar: porAprobar(v),
+        paraEsNoSocio: v.invitado_jugador_id ? !!jugadorPorId.get(v.invitado_jugador_id)?.es_invitado : null,
       })),
       disponibilidad: disponibilidad || [],
       jugadoresActivos: activos || [],

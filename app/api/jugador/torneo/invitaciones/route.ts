@@ -43,7 +43,7 @@ export async function POST(request: Request) {
           torneoNombre: torneo.nombre, urlRegistro: `${base}/register`, urlTorneo: `${base}/torneo/inscripcion`,
         }))
       }
-      return NextResponse.json({ ok: true, invitacionId: r.invitacion.id, aCuenta: !!r.invitacion.invitado_jugador_id, whatsapp })
+      return NextResponse.json({ ok: true, invitacionId: r.invitacion.id, aCuenta: !!r.invitacion.invitado_jugador_id, whatsapp, porAprobar: r.porAprobar })
     }
 
     if (typeof body.invitacionId !== 'string') return NextResponse.json({ error: 'Falta la invitación' }, { status: 400 })
