@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EstadoInscripcion, Nivel, Torneo } from '@/lib/torneo'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
-import { pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
+import { categoriaAntesDelSorteo, pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
 import { pendientesInscripcionMenor } from '@/lib/torneoInfantil'
 import { competidoresDeCategorias, competidoresPorId, personasDe } from '@/lib/torneoEquiposServidor'
 import { pendientesQueBloqueanSorteo, planCategoria, validarGruposSorteo, type CategoriaParaSorteo, type InscripcionParaSorteo, type MetodoSorteo, type PlanCategoria } from '@/lib/torneoSorteo'
@@ -33,7 +33,7 @@ export type CategoriaConInscritas = CategoriaParaSorteo & {
 export async function datosParaSorteo(db: SupabaseClient, torneo: Torneo, categoriaId?: string): Promise<CategoriaConInscritas[]> {
   let consulta = db
     .from('torneo_categorias')
-    .select('id, nombre, modalidad, es_infantil, num_grupos, llave_desde, partidos_minimos, orden, categoria_nivel, sorteo_publicado_at, sorteo_metodo, cancelada_at')
+    .select('id, nombre, modalidad, es_infantil, num_grupos, llave_desde, partidos_minimos, orden, categoria_nivel, sorteo_publicado_at, sorteo_metodo, cancelada_at, fecha_inicio')
     .eq('torneo_id', torneo.id)
   if (categoriaId) consulta = consulta.eq('id', categoriaId)
   const { data: categorias, error: errCat } = await consulta.order('orden')
@@ -145,13 +145,14 @@ export async function publicarSorteo(
   grupos: unknown,
   adminId: string,
 ): Promise<{ ok: true; torneoSorteado: boolean } | { ok: false; error: string }> {
-  if (!['borrador', 'inscripcion'].includes(torneo.estado)) return { ok: false, error: 'El sorteo ya se hizo' }
   if (!Array.isArray(grupos)) return { ok: false, error: 'Falta el sorteo a publicar' }
 
   const [c] = await datosParaSorteo(db, torneo, categoriaId)
   if (!c) return { ok: false, error: 'Categoría no encontrada' }
   if (c.cancelada_at) return { ok: false, error: `${c.nombre}: la categoría está cancelada` }
   if (c.sorteo_publicado_at) return { ok: false, error: `${c.nombre}: el sorteo ya se publicó` }
+  // Con calendario propio (infantiles) se sortea aunque el torneo ya esté sorteado.
+  if (!categoriaAntesDelSorteo(torneo.estado, c)) return { ok: false, error: 'El sorteo ya se hizo' }
   if (c.bloqueos.length) return { ok: false, error: `Antes del sorteo falta resolver: ${c.bloqueos.join(' · ')}` }
   const r = validarGruposSorteo(c, c.inscripciones, metodo, grupos)
   if (!r.ok) return { ok: false, error: r.error }

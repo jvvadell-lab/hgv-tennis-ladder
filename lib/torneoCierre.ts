@@ -8,30 +8,34 @@
 // categoría abierta, el panel lo alerta y se avisa a los admins. Las
 // invitaciones pendientes sí vencen a esa hora (lib/torneoDobles.ts).
 
-import { categoriaAbierta, cupoInscripciones } from './torneoInscripcion'
+import { categoriaAbierta, categoriaAntesDelSorteo, cierreDeCategoria, cupoInscripciones, type CalendarioCategoria } from './torneoInscripcion'
 import type { EstadoTorneo, TorneoCategoria } from './torneo'
 
-type CategoriaCierre = Pick<TorneoCategoria, 'id' | 'nombre' | 'inscripciones_abiertas' | 'sorteo_publicado_at' | 'cancelada_at'>
+type CategoriaCierre = Pick<TorneoCategoria, 'id' | 'nombre' | 'inscripciones_abiertas' | 'sorteo_publicado_at' | 'cancelada_at'> & CalendarioCategoria & { cierre_inscripciones_at?: string | null }
 
-// Categorías que siguen abiertas después del cierre programado ("cierre
-// programado vencido"). Vacío si la hora no pasó o el torneo no está en
-// inscripción.
+// Categorías que siguen abiertas después de SU cierre programado ("cierre
+// programado vencido"): la hora de la categoría si tiene calendario propio
+// (las infantiles, 20-nov), si no la del torneo.
 export function cierreVencido(
   torneo: { estado: EstadoTorneo; cierre_inscripciones_at: string | null },
   categorias: CategoriaCierre[],
   ahora: Date,
 ): CategoriaCierre[] {
-  if (!torneo.cierre_inscripciones_at || ahora < new Date(torneo.cierre_inscripciones_at)) return []
-  return categorias.filter((c) => !c.sorteo_publicado_at && !c.cancelada_at && categoriaAbierta(torneo.estado, c))
+  return categorias.filter((c) => {
+    const cierre = cierreDeCategoria(torneo, c)
+    if (!cierre || ahora < new Date(cierre)) return false
+    return !c.sorteo_publicado_at && !c.cancelada_at && categoriaAbierta(torneo.estado, c)
+  })
 }
 
 // Abrir o cerrar una categoría: null si se puede; si no, el motivo.
 export function errorCambioApertura(
   estadoTorneo: EstadoTorneo,
-  c: Pick<TorneoCategoria, 'nombre' | 'sorteo_publicado_at' | 'cancelada_at'>,
+  c: Pick<TorneoCategoria, 'nombre' | 'sorteo_publicado_at' | 'cancelada_at'> & CalendarioCategoria,
   abrir: boolean,
 ): string | null {
-  if (!['borrador', 'inscripcion'].includes(estadoTorneo)) return 'El sorteo del torneo ya terminó: las inscripciones no se pueden abrir ni cerrar'
+  // Con calendario propio la categoría se abre y cierra aunque el torneo ya esté sorteado.
+  if (!categoriaAntesDelSorteo(estadoTorneo, { ...c, sorteo_publicado_at: null, cancelada_at: null })) return 'El sorteo del torneo ya terminó: las inscripciones no se pueden abrir ni cerrar'
   if (c.cancelada_at) return `${c.nombre} está cancelada`
   if (c.sorteo_publicado_at) return abrir ? `${c.nombre} ya se sorteó: no se puede reabrir` : `${c.nombre} ya se sorteó (quedó cerrada)`
   return null

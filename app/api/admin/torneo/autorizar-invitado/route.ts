@@ -3,7 +3,7 @@ import { esAdminCompleto, getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { ahora } from '@/lib/tiempo'
 import { avisarInscripcionConfirmada, recalcularInscripcion } from '@/lib/torneoServidor'
-import { mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
+import { categoriaAntesDelSorteo, mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
 
 // Torneo solo para socios (SPEC §2.1): el admin autoriza (o quita la
 // autorización) a una inscripción con un invitado, o con un menor sin N.º
@@ -22,13 +22,13 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const { data: ins, error: errIns } = await db
       .from('torneo_inscripciones')
-      .select('id, estado, torneo_categorias:categoria_id(torneos:torneo_id(estado))')
+      .select('id, estado, torneo_categorias:categoria_id(fecha_inicio, sorteo_publicado_at, torneos:torneo_id(estado))')
       .eq('id', inscripcionId)
       .maybeSingle()
     if (errIns) throw errIns
     if (!ins) return NextResponse.json({ error: 'Inscripción no encontrada' }, { status: 404 })
     if (ins.estado === 'retirada') return NextResponse.json({ error: 'La inscripción está retirada' }, { status: 400 })
-    if (!['borrador', 'inscripcion'].includes((ins.torneo_categorias as any)?.torneos?.estado)) {
+    if (!categoriaAntesDelSorteo((ins.torneo_categorias as any)?.torneos?.estado, { ...(ins.torneo_categorias as any), sorteo_publicado_at: null })) {
       return NextResponse.json({ error: 'El torneo ya fue sorteado: la autorización no se cambia desde aquí' }, { status: 400 })
     }
 

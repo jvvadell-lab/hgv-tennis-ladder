@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { formatearFechaHora } from '@/lib/tiempo'
 import { ETIQUETA_FASE, textoOrigen, type EstadoTorneo } from '@/lib/torneo'
+import { categoriaAntesDelSorteo } from '@/lib/torneoInscripcion'
 import { ETIQUETA_METODO_SORTEO, METODOS_SORTEO, type FormatoSorteo, type MetodoSorteo } from '@/lib/torneoSorteo'
 
 // Sorteo del torneo (SPEC §3) POR CATEGORÍA, dentro de la pestaña Torneo del
@@ -12,7 +13,7 @@ import { ETIQUETA_METODO_SORTEO, METODOS_SORTEO, type FormatoSorteo, type Metodo
 // /api/admin/torneo/siembra y /api/admin/torneo/sorteo/...
 
 type EquipoSorteo = { id: string; categoria_id: string; siembra: number | null; bombo: number | null; nombre: string; pendiente: boolean }
-type CategoriaSorteo = { id: string; nombre: string; es_infantil: boolean; modalidad: string; sorteo_publicado_at: string | null; sorteo_metodo: MetodoSorteo | null; cancelada_at: string | null }
+type CategoriaSorteo = { id: string; nombre: string; es_infantil: boolean; modalidad: string; sorteo_publicado_at: string | null; sorteo_metodo: MetodoSorteo | null; cancelada_at: string | null; fecha_inicio?: string | null }
 
 type CategoriaPrevia =
   | { categoriaId: string; nombre: string; inscritas: number; error: string }
@@ -65,7 +66,6 @@ export default function TorneoSorteo({
   }
   const sinPrevia = (categoriaId: string) => setPrevias((p) => { const { [categoriaId]: _, ...resto } = p; return resto })
 
-  const editable = torneo.estado === 'borrador' || torneo.estado === 'inscripcion'
   const guardar = (e: EquipoSorteo, campo: 'siembra' | 'bombo', valor: string) => {
     const n = valor.trim() === '' ? null : Number(valor)
     if (n === e[campo]) return
@@ -100,7 +100,7 @@ export default function TorneoSorteo({
         <h4 style={{ margin: '0 0 6px 0', color: 'var(--color-ink)' }}>🎲 Sorteo de grupos (por categoría)</h4>
         {torneo.sorteo_publicado_at && (
           <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#1e6b34' }}>
-            ✅ Todas las categorías están sorteadas ({formatearFechaHora(torneo.sorteo_publicado_at)} · {publicadoPor || 'admin'}). <a href="/torneo" style={{ color: 'var(--color-court)', fontWeight: 'bold' }}>Ver grupos y llaves en /torneo →</a>
+            ✅ {categorias.some((c) => categoriaAntesDelSorteo(torneo.estado, c)) ? 'Las categorías de adultos están sorteadas; las que tienen calendario propio (infantiles) se sortean después' : 'Todas las categorías están sorteadas'} ({formatearFechaHora(torneo.sorteo_publicado_at)} · {publicadoPor || 'admin'}). <a href="/torneo" style={{ color: 'var(--color-court)', fontWeight: 'bold' }}>Ver grupos y llaves en /torneo →</a>
           </p>
         )}
         <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555' }}>
@@ -126,7 +126,8 @@ export default function TorneoSorteo({
         const ordenados = [...delaCat].sort((a, b) => (a.siembra ?? 999) - (b.siembra ?? 999) || a.nombre.localeCompare(b.nombre))
         const doble = c.modalidad === 'doble'
         const previa = previas[c.id]
-        const puedeSortear = editable && !c.sorteo_publicado_at && !c.cancelada_at
+        // Con calendario propio (infantiles) se sortea aunque los adultos ya estén sorteados.
+        const puedeSortear = categoriaAntesDelSorteo(torneo.estado, c)
         return (
           <div key={c.id} style={{ ...tarjeta, opacity: c.cancelada_at ? 0.6 : 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-start' }}>

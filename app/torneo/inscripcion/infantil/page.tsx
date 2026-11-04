@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { formatearBs } from '@/app/components/TasaBcv'
 import FormPagoTorneo from '@/app/components/FormPagoTorneo'
-import { formatearFechaConAnio, hoyEnCaracas, instanteEnCaracas } from '@/lib/tiempo'
+import { formatearFechaConAnio, formatearFechaCorta, hoyEnCaracas, instanteEnCaracas } from '@/lib/tiempo'
 import { ETIQUETA_ESTADO_TORNEO, MAX_CATEGORIAS_POR_JUGADOR, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria } from '@/lib/torneo'
 import {
   ETIQUETA_GENERO_CATEGORIA_INFANTIL,
@@ -25,7 +25,12 @@ import LineaMonto from '@/app/components/LineaMonto'
 // autorizaciones por separado, estado y reporte de pago. Todo lo valida el
 // servidor (/api/jugador/torneo/infantil/...); el admin certifica la categoría.
 
-type Categoria = { id: string; nombre: string; genero: GeneroCategoria; edad_min: number | null; edad_max: number | null; cupo: number; inscripciones_abiertas: boolean; ocupados: number; duracion_min: number }
+type Categoria = {
+  id: string; nombre: string; genero: GeneroCategoria; edad_min: number | null; edad_max: number | null; cupo: number
+  inscripciones_abiertas: boolean; ocupados: number; duracion_min: number
+  // Calendario propio: inscripción y juegos en fechas distintas a los adultos.
+  cierre_inscripciones_at: string | null; fecha_inicio: string | null; fecha_fin: string | null; sorteo_publicado_at: string | null
+}
 
 type Pago = { id: string; numero_recibo: number; jugador_id: string; tipo_pago: string; monto: number; fecha: string; validado: boolean }
 
@@ -146,6 +151,9 @@ export default function InscripcionInfantil() {
   }
 
   const torneo = datos?.torneo
+  // Con calendario propio, las infantiles siguen abiertas aunque los adultos ya estén sorteados.
+  const hayAbiertas = !!torneo && (datos?.categorias || []).some((c) => categoriaAbierta(torneo.estado, c))
+  const calendario = (datos?.categorias || []).find((c) => c.fecha_inicio && c.fecha_fin) ?? null
 
   return (
     <main className="court-bg" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px' }}>
@@ -161,7 +169,13 @@ export default function InscripcionInfantil() {
           </h1>
           {torneo && (
             <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-court)', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '8px' }}>
-              {torneo.nombre} · {ETIQUETA_ESTADO_TORNEO[torneo.estado]}
+              {torneo.nombre} · {hayAbiertas ? 'Inscripciones abiertas' : ETIQUETA_ESTADO_TORNEO[torneo.estado]}
+            </p>
+          )}
+          {calendario && (
+            <p style={{ fontSize: '14px', color: 'var(--color-ink)', margin: '10px 0 0 0' }}>
+              {calendario.cierre_inscripciones_at && <>Inscripciones hasta el <strong>{formatearFechaCorta(new Date(calendario.cierre_inscripciones_at))}</strong> · </>}
+              Juegos del <strong>{fecha(calendario.fecha_inicio!)}</strong> al <strong>{fecha(calendario.fecha_fin!)}</strong>
             </p>
           )}
         </div>
@@ -193,12 +207,14 @@ export default function InscripcionInfantil() {
               </div>
             )}
 
-            {torneo?.estado === 'inscripcion' && datos.representados.length > 0 && <FormInscribir datos={datos} onCambio={cargar} />}
-            {torneo && torneo.estado === 'borrador' && (
+            {hayAbiertas && datos.representados.length > 0 && <FormInscribir datos={datos} onCambio={cargar} />}
+            {torneo && !hayAbiertas && (
               <Aviso tipo="info">
                 {datos.representados.some((m: any) => m.inscripciones?.some((i: any) => i.estado !== 'retirada'))
                   ? 'Las inscripciones están cerradas. Si te falta, todavía puedes reportar el pago.'
-                  : 'Las inscripciones abrirán pronto. Ya puedes dejar lista la ficha de tu hijo/a.'}
+                  : torneo.estado === 'borrador'
+                    ? 'Las inscripciones abrirán pronto. Ya puedes dejar lista la ficha de tu hijo/a.'
+                    : 'Las inscripciones infantiles están cerradas.'}
               </Aviso>
             )}
             {!torneo && <Aviso tipo="info">No hay un torneo en organización por ahora.</Aviso>}

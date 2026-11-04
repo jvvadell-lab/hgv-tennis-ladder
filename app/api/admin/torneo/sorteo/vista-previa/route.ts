@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { torneoVigente } from '@/lib/torneoServidor'
 import { METODOS_SORTEO, armarSorteoCategoria, planCategoria, type MetodoSorteo } from '@/lib/torneoSorteo'
 import { azarSorteo, datosParaSorteo } from '@/lib/torneoSorteoServidor'
+import { categoriaAntesDelSorteo } from '@/lib/torneoInscripcion'
 
 // Vista previa del sorteo de UNA categoría (SPEC §3): arma los grupos al azar
 // con sus equipos activos (duplas en dobles; hayan pagado o no) y los
@@ -27,14 +28,16 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const torneo = await torneoVigente(db)
     if (!torneo) return NextResponse.json({ error: 'No hay un torneo en organización' }, { status: 404 })
-    if (!['borrador', 'inscripcion'].includes(torneo.estado)) {
-      return NextResponse.json({ error: 'El sorteo ya se hizo' }, { status: 400 })
+    if (torneo.estado === 'finalizado') {
+      return NextResponse.json({ error: 'El torneo ya terminó' }, { status: 400 })
     }
 
     const categorias = await datosParaSorteo(db, torneo, categoriaId)
     if (!categorias.length) return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 404 })
     if (categorias[0].sorteo_publicado_at) return NextResponse.json({ error: `${categorias[0].nombre}: el sorteo ya se publicó` }, { status: 400 })
     if (categorias[0].cancelada_at) return NextResponse.json({ error: `${categorias[0].nombre}: la categoría está cancelada` }, { status: 400 })
+    // Con calendario propio (infantiles) se sortea aunque el torneo ya esté sorteado.
+    if (!categoriaAntesDelSorteo(torneo.estado, categorias[0])) return NextResponse.json({ error: 'El sorteo ya se hizo' }, { status: 400 })
     // Categoría oficial, certificación o invitado sin autorizar: se resuelven antes.
     const errores: string[] = categorias.flatMap((c) => c.bloqueos)
     const resultado = categorias.map((c) => {

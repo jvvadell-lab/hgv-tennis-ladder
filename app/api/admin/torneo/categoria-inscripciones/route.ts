@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const { data: categoria, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, inscripciones_abiertas, sorteo_publicado_at, cancelada_at, torneos:torneo_id(estado)')
+      .select('id, nombre, inscripciones_abiertas, sorteo_publicado_at, cancelada_at, fecha_inicio, torneos:torneo_id(estado)')
       .eq('id', categoriaId)
       .maybeSingle()
     if (errCat) throw errCat

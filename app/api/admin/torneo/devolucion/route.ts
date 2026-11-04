@@ -3,6 +3,7 @@ import { esAdminCompleto, getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
 import { cancelarInvitacionesDe } from '@/lib/torneoDoblesServidor'
+import { categoriaAntesDelSorteo } from '@/lib/torneoInscripcion'
 
 // Retira una inscripción y marca su pago para devolución (p. ej. el jugador
 // impar que quedó sin pareja al cierre). Solo antes del sorteo de la
@@ -19,14 +20,14 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const { data: ins, error } = await db
       .from('torneo_inscripciones')
-      .select('id, estado, jugador1_id, devolucion_marcada_at, torneo_categorias:categoria_id(nombre, sorteo_publicado_at, torneos:torneo_id(nombre, estado))')
+      .select('id, estado, jugador1_id, devolucion_marcada_at, torneo_categorias:categoria_id(nombre, sorteo_publicado_at, fecha_inicio, torneos:torneo_id(nombre, estado))')
       .eq('id', inscripcionId)
       .maybeSingle()
     if (error) throw error
     if (!ins) return NextResponse.json({ error: 'Inscripción no encontrada' }, { status: 404 })
     if (ins.devolucion_marcada_at) return NextResponse.json({ error: 'La devolución ya estaba marcada' }, { status: 400 })
     const cat = ins.torneo_categorias as any
-    if (cat?.sorteo_publicado_at || !['borrador', 'inscripcion'].includes(cat?.torneos?.estado)) {
+    if (!categoriaAntesDelSorteo(cat?.torneos?.estado, cat || {})) {
       return NextResponse.json({ error: 'La categoría ya se sorteó' }, { status: 400 })
     }
 

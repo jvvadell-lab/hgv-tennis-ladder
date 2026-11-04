@@ -60,10 +60,38 @@ export function errorGeneros(generoCategoria: TorneoCategoria['genero'], generos
 // Apertura por categoría
 // ---------------------------------------------------------------------------
 
-// Una categoría acepta inscripciones solo con el torneo en 'inscripcion' y
-// la categoría abierta por el admin (el trigger lo repite).
-export function categoriaAbierta(estadoTorneo: EstadoTorneo, categoria: Pick<TorneoCategoria, 'inscripciones_abiertas'>): boolean {
-  return estadoTorneo === 'inscripcion' && categoria.inscripciones_abiertas
+// Calendario propio de una categoría (TorneoCategoria.fecha_inicio). Los
+// campos son opcionales para que los llamadores que no los leen sigan con
+// la regla del torneo.
+export type CalendarioCategoria = { fecha_inicio?: string | null; sorteo_publicado_at?: string | null; cancelada_at?: string | null }
+
+export const tieneCalendarioPropio = (c: CalendarioCategoria): boolean => !!c.fecha_inicio
+
+// La categoría todavía no se sorteó y su sorteo se puede preparar: el torneo
+// en borrador o inscripción, o —si tiene calendario propio— también con el
+// torneo sorteado o en curso (torneo_categoria_antes_del_sorteo en la base).
+export function categoriaAntesDelSorteo(estadoTorneo: EstadoTorneo, c: CalendarioCategoria): boolean {
+  if (c.sorteo_publicado_at || c.cancelada_at) return false
+  if (estadoTorneo === 'borrador' || estadoTorneo === 'inscripcion') return true
+  return tieneCalendarioPropio(c) && (estadoTorneo === 'sorteado' || estadoTorneo === 'en_curso')
+}
+
+// Una categoría acepta inscripciones con el torneo en 'inscripcion' (o, con
+// calendario propio, también sorteado o en curso mientras ella no se sortee)
+// y la categoría abierta por el admin. El trigger lo repite
+// (torneo_categoria_recibe).
+export function categoriaAbierta(
+  estadoTorneo: EstadoTorneo,
+  categoria: Pick<TorneoCategoria, 'inscripciones_abiertas'> & CalendarioCategoria,
+): boolean {
+  if (!categoria.inscripciones_abiertas || categoria.sorteo_publicado_at) return false
+  if (estadoTorneo === 'inscripcion') return true
+  return tieneCalendarioPropio(categoria) && (estadoTorneo === 'sorteado' || estadoTorneo === 'en_curso')
+}
+
+// Hora de cierre programada que se le muestra a la categoría: la suya o la del torneo.
+export function cierreDeCategoria(torneo: { cierre_inscripciones_at: string | null }, c: { cierre_inscripciones_at?: string | null }): string | null {
+  return c.cierre_inscripciones_at ?? torneo.cierre_inscripciones_at
 }
 
 export const ERROR_CATEGORIA_CERRADA = 'Las inscripciones de esta categoría no están abiertas'

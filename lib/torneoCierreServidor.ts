@@ -13,7 +13,7 @@ import { textoMontoCorto } from '@/lib/torneoPrecios'
 
 type Resultado<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
-const COLUMNAS_CATEGORIA = 'id, nombre, modalidad, genero, categoria_nivel, cupo, es_infantil, inscripciones_abiertas, sorteo_publicado_at, cancelada_at'
+const COLUMNAS_CATEGORIA = 'id, nombre, modalidad, genero, categoria_nivel, cupo, es_infantil, inscripciones_abiertas, sorteo_publicado_at, cancelada_at, fecha_inicio, cierre_inscripciones_at'
 
 // Pasó el cierre programado con categorías abiertas: avisa por correo a los
 // admins UNA vez (torneos.cierre_vencido_avisado_at). Se llama al leer el
