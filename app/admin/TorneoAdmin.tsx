@@ -324,6 +324,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           }
         />
       )}
+      {esAdminCompleto && <CategoriasTorneoJugadores onCambio={cargar} />}
 
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
         {[{ id: 'todas', nombre: 'Todas', cupo: 0 }, ...categorias].map((c) => {
@@ -1037,5 +1038,136 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
         <button type="button" onClick={() => setAbierto(false)} style={boton('#777')}>Cancelar</button>
       </div>
     </form>
+  )
+}
+
+// Lista de todos los jugadores activos con su categoría de la escalera y su
+// categoría oficial de torneo, editable uno por uno
+// (/api/admin/torneo/categoria-jugador, que recalcula sus inscripciones).
+type JugadorCategoria = { id: string; nombre: string; genero: string | null; categoria: string | null; categoria_torneo: string | null; activo: boolean; es_prueba: boolean; es_representante: boolean; es_invitado: boolean }
+
+function CategoriasTorneoJugadores({ onCambio }: { onCambio: () => Promise<void> }) {
+  const [abierto, setAbierto] = useState(false)
+  const [jugadores, setJugadores] = useState<JugadorCategoria[] | null>(null)
+  const [buscar, setBuscar] = useState('')
+  const [filtro, setFiltro] = useState<'todos' | 'distinta' | 'sin'>('todos')
+  const [guardando, setGuardando] = useState<string | null>(null)
+  const [aviso, setAviso] = useState('')
+  const [error, setError] = useState('')
+
+  const cargarLista = async () => {
+    setError('')
+    try {
+      const res = await fetch('/api/admin/jugadores', { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudieron cargar los jugadores')
+      setJugadores((data.jugadores || []).filter((j: JugadorCategoria) => j.activo !== false && !j.es_prueba && !j.es_representante))
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  const cambiar = async (j: JugadorCategoria, categoria: string) => {
+    setGuardando(j.id)
+    setAviso('')
+    setError('')
+    try {
+      const res = await fetch('/api/admin/torneo/categoria-jugador', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jugadorId: j.id, categoria: categoria || null }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
+      setJugadores((xs) => (xs || []).map((x) => (x.id === j.id ? { ...x, categoria_torneo: categoria || null } : x)))
+      setAviso(`${j.nombre}: categoría de torneo ${categoria ? ETIQUETA_NIVEL[categoria as Nivel] : 'sin certificar'}`)
+      await onCambio()
+    } catch (e: any) {
+      setError(`${j.nombre}: ${e.message}`)
+    } finally {
+      setGuardando(null)
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '16px 20px', marginBottom: '16px', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <strong>Categoría de torneo de cada jugador</strong>
+          <div style={{ color: '#555', marginTop: '2px' }}>Mira la categoría de la escalera y la del torneo de todos los jugadores, y cámbiala uno por uno.</div>
+        </div>
+        <button onClick={() => { setAbierto(true); cargarLista() }} style={boton('var(--color-court)')}>Ver jugadores</button>
+      </div>
+    )
+  }
+
+  const texto = buscar.trim().toLowerCase()
+  const visibles = (jugadores || [])
+    .filter((j) => !texto || j.nombre.toLowerCase().includes(texto))
+    .filter((j) => filtro === 'todos' || (filtro === 'sin' ? !j.categoria_torneo : !!j.categoria_torneo && j.categoria_torneo !== j.categoria))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+
+  return (
+    <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '16px 20px', marginBottom: '16px', fontSize: '13px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <strong>Categoría de torneo de cada jugador</strong>
+        <button onClick={() => setAbierto(false)} style={boton('#777')}>Cerrar</button>
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <input type="search" aria-label="Buscar jugador" placeholder="Buscar jugador…" value={buscar} onChange={(e) => setBuscar(e.target.value)} style={{ ...campoAdmin, flex: '1 1 200px', width: 'auto' }} />
+        <select aria-label="Filtro" value={filtro} onChange={(e) => setFiltro(e.target.value as 'todos' | 'distinta' | 'sin')} style={{ ...campoAdmin, width: 'auto' }}>
+          <option value="todos">Todos</option>
+          <option value="distinta">Torneo distinto a la escalera</option>
+          <option value="sin">Sin categoría de torneo</option>
+        </select>
+      </div>
+      {aviso && <p style={{ color: '#1e6b34', margin: '0 0 8px 0' }}>✓ {aviso}</p>}
+      {error && <p style={{ color: '#842029', margin: '0 0 8px 0' }}>{error}</p>}
+      {!jugadores ? (
+        <p style={{ color: '#888' }}>Cargando jugadores…</p>
+      ) : (
+        <div style={{ overflowX: 'auto', maxHeight: '420px', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f3f5f7', textAlign: 'left', position: 'sticky', top: 0 }}>
+                <th style={th}>Jugador</th>
+                <th style={th}>Escalera</th>
+                <th style={th}>Torneo (Copa)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibles.map((j) => {
+                const distinta = !!j.categoria_torneo && j.categoria_torneo !== j.categoria
+                return (
+                  <tr key={j.id} style={{ borderTop: '1px solid #eee' }}>
+                    <td style={td}>
+                      <strong>{j.nombre}</strong>
+                      <span style={{ color: '#777' }}> · {ETIQUETA_GENERO_JUGADOR[j.genero || ''] || j.genero}{j.es_invitado ? ' · invitado' : ''}</span>
+                    </td>
+                    <td style={td}>{j.categoria ? ETIQUETA_NIVEL[j.categoria as Nivel] || j.categoria : '—'}</td>
+                    <td style={td}>
+                      <select
+                        aria-label={`Categoría de torneo de ${j.nombre}`}
+                        value={j.categoria_torneo || ''}
+                        disabled={guardando === j.id}
+                        onChange={(e) => cambiar(j, e.target.value)}
+                        style={{ ...campoAdmin, width: 'auto', background: distinta ? '#fff4d6' : !j.categoria_torneo ? '#f3f3f3' : 'white' }}
+                      >
+                        <option value="">Sin certificar</option>
+                        {NIVELES.map((n) => <option key={n} value={n}>{ETIQUETA_NIVEL[n]}</option>)}
+                      </select>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {visibles.length === 0 && <p style={{ color: '#888' }}>Nadie con ese filtro.</p>}
+        </div>
+      )}
+      <p style={{ color: '#777', margin: '8px 0 0 0' }}>
+        En amarillo: la del torneo es distinta a la de la escalera. Al cambiarla se recalculan sus inscripciones de la Copa (pueden confirmarse o quedar pendientes).
+      </p>
+    </div>
   )
 }
