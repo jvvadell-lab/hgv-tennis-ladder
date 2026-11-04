@@ -1,8 +1,9 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatearFechaConAnio, instanteEnCaracas } from '@/lib/tiempo'
+import { formatearFechaConAnio, hoyEnCaracas, instanteEnCaracas } from '@/lib/tiempo'
 import { ETIQUETA_TIPO_PAGO, type TipoPago } from '@/lib/delegacion'
 import { formatearEur } from '@/lib/torneoPrecios'
+import { montoInscripcionBs } from '@/lib/torneoInscripcion'
 
 // Pestaña Pagos → Torneo del admin: todos los pagos de inscripción del
 // torneo en un solo lugar, con Validar / Rechazar (mismos endpoints que el
@@ -47,6 +48,7 @@ export default function PagosTorneo({ onCambio }: { onCambio?: (porValidar: numb
   const [categoria, setCategoria] = useState('todas')
   const [busqueda, setBusqueda] = useState('')
   const cargadoUnaVez = useRef(false)
+  const [registrando, setRegistrando] = useState(false)
 
   const cargar = async () => {
     try {
@@ -117,7 +119,23 @@ export default function PagosTorneo({ onCambio }: { onCambio?: (porValidar: numb
 
   return (
     <div style={{ background: 'var(--color-chalk)', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-      <h3 style={{ color: 'var(--color-ink)', marginTop: 0 }}>🎄 Pagos de inscripción del torneo</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <h3 style={{ color: 'var(--color-ink)', margin: '0 0 12px 0' }}>🎄 Pagos de inscripción del torneo</h3>
+        {!registrando && (
+          <button onClick={() => setRegistrando(true)} style={boton('var(--color-court)', true)}>➕ Registrar pago</button>
+        )}
+      </div>
+      {registrando && (
+        <RegistrarPago
+          onCancelar={() => setRegistrando(false)}
+          onListo={async (texto) => {
+            setRegistrando(false)
+            setMensaje(texto)
+            setFiltro('validados')
+            await cargar()
+          }}
+        />
+      )}
       <p style={{ margin: '0 0 16px 0', color: '#555', fontSize: '14px' }}>
         {porValidar === 0 ? 'No hay pagos por validar.' : <><strong>{porValidar}</strong> {porValidar === 1 ? 'pago por validar' : 'pagos por validar'}.</>}
         {' '}La inscripción se confirma cuando están validados los pagos y la categoría.
@@ -208,6 +226,122 @@ export default function PagosTorneo({ onCambio }: { onCambio?: (porValidar: numb
           </p>
         </>
       )}
+    </div>
+  )
+}
+
+// Formulario del admin para registrar un pago hecho por fuera de la app
+// (/api/admin/torneo/registrar-pago): queda validado de una vez.
+type PendientePago = { inscripcionId: string; pagadorNombre: string; nombre: string; categoria: string; montoEur: number }
+
+const campo: React.CSSProperties = { padding: '8px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px', width: '100%', boxSizing: 'border-box' }
+const etiqueta: React.CSSProperties = { display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '4px' }
+
+function RegistrarPago({ onCancelar, onListo }: { onCancelar: () => void; onListo: (mensaje: string) => Promise<void> }) {
+  const [pendientes, setPendientes] = useState<PendientePago[] | null>(null)
+  const [tasa, setTasa] = useState<{ fecha_vigencia: string; eur: number } | null>(null)
+  const [buscar, setBuscar] = useState('')
+  const [inscripcionId, setInscripcionId] = useState('')
+  const [tipoPago, setTipoPago] = useState('pago_movil')
+  const [fecha, setFecha] = useState(hoyEnCaracas())
+  const [referencia, setReferencia] = useState('')
+  const [montoBs, setMontoBs] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/admin/torneo/registrar-pago', { cache: 'no-store' })
+      .then(async (r) => {
+        const d = await r.json()
+        if (!r.ok) throw new Error(d.error || 'No se pudieron cargar las inscripciones')
+        setPendientes(d.pendientes || [])
+        setTasa(d.tasa)
+      })
+      .catch((e) => setError(e.message))
+  }, [])
+
+  const texto = buscar.trim().toLowerCase()
+  const visibles = (pendientes || []).filter((p) => !texto || `${p.nombre} ${p.pagadorNombre} ${p.categoria}`.toLowerCase().includes(texto))
+  const elegida = (pendientes || []).find((p) => p.inscripcionId === inscripcionId)
+  // Referencia con la tasa de hoy; el servidor usa la del día del pago.
+  const sugerido = elegida && tasa ? montoInscripcionBs(elegida.montoEur, tasa.eur) : null
+
+  const enviar = async () => {
+    if (!elegida) return setError('Elige la inscripción')
+    setEnviando(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/torneo/registrar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inscripcionId, tipoPago, fecha, referencia, montoBs: montoBs.trim() === '' ? null : Number(montoBs.replace(',', '.')) }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'No se pudo registrar el pago')
+      await onListo(`Pago de ${elegida.nombre} registrado y validado: recibo #${d.numeroRecibo} · ${bs(d.monto)}`)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div style={{ background: 'white', border: '1px solid #d6e6f5', borderRadius: '10px', padding: '16px', margin: '0 0 16px 0' }}>
+      <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555' }}>
+        Para un pago hecho por fuera de la app. Queda <strong>validado</strong> con su número de recibo, a nombre del jugador (o del representante, si es un niño), y se le avisa.
+      </p>
+      {pendientes === null && !error && <p style={{ color: '#777', fontSize: '14px' }}>Cargando inscripciones…</p>}
+      {pendientes && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={etiqueta} htmlFor="rp-buscar">Inscripción sin pago</label>
+            <input id="rp-buscar" type="search" placeholder="Buscar por nombre o categoría…" value={buscar} onChange={(e) => setBuscar(e.target.value)} style={{ ...campo, marginBottom: '6px' }} />
+            <select aria-label="Inscripción" value={inscripcionId} onChange={(e) => setInscripcionId(e.target.value)} style={campo}>
+              <option value="">— Elige ({visibles.length}) —</option>
+              {visibles.map((p) => (
+                <option key={p.inscripcionId} value={p.inscripcionId}>
+                  {p.nombre} · {p.categoria}{p.pagadorNombre !== p.nombre ? ` · paga ${p.pagadorNombre}` : ''} · {formatearEur(p.montoEur)}
+                </option>
+              ))}
+            </select>
+            {pendientes.length === 0 && <p style={{ fontSize: '13px', color: '#777', margin: '6px 0 0 0' }}>Todas las inscripciones ya tienen su pago.</p>}
+          </div>
+          <div>
+            <label style={etiqueta} htmlFor="rp-tipo">Tipo de pago</label>
+            <select id="rp-tipo" value={tipoPago} onChange={(e) => setTipoPago(e.target.value)} style={campo}>
+              <option value="pago_movil">Pago móvil</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="efectivo">Efectivo</option>
+            </select>
+          </div>
+          <div>
+            <label style={etiqueta} htmlFor="rp-fecha">Fecha del pago</label>
+            <input id="rp-fecha" type="date" value={fecha} max={hoyEnCaracas()} onChange={(e) => setFecha(e.target.value)} style={campo} />
+          </div>
+          <div>
+            <label style={etiqueta} htmlFor="rp-ref">Referencia{tipoPago === 'efectivo' ? ' (opcional)' : ''}</label>
+            <input id="rp-ref" value={referencia} onChange={(e) => setReferencia(e.target.value)} style={campo} />
+          </div>
+          <div>
+            <label style={etiqueta} htmlFor="rp-monto">Monto en Bs. (vacío = calculado)</label>
+            <input id="rp-monto" inputMode="decimal" placeholder={sugerido ? sugerido.toLocaleString('es-VE', { minimumFractionDigits: 2 }) : 'Calculado con la tasa BCV'} value={montoBs} onChange={(e) => setMontoBs(e.target.value)} style={campo} />
+          </div>
+        </div>
+      )}
+      {elegida && (
+        <p style={{ fontSize: '13px', color: '#555', margin: '10px 0 0 0' }}>
+          {formatearEur(elegida.montoEur)} a la tasa BCV del euro del {fecha.split('-').reverse().join('/')}
+          {sugerido && fecha === hoyEnCaracas() ? <> ≈ <strong>{bs(sugerido)}</strong></> : ''}. Escribe el monto solo si recibiste otro.
+        </p>
+      )}
+      {error && <p style={{ background: '#fdecea', color: '#c0392b', padding: '8px 12px', borderRadius: '6px', margin: '10px 0 0 0', fontSize: '14px' }}>{error}</p>}
+      <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+        <button disabled={enviando || !elegida} onClick={enviar} style={{ ...boton('#1e6b34', true), opacity: enviando || !elegida ? 0.6 : 1 }}>
+          {enviando ? 'Registrando…' : 'Registrar pago validado'}
+        </button>
+        <button onClick={onCancelar} style={boton('#555')}>Cancelar</button>
+      </div>
     </div>
   )
 }
