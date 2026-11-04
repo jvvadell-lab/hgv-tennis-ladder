@@ -5,7 +5,7 @@ import { montoProximaInscripcion, torneoVigente } from '@/lib/torneoServidor'
 import { obtenerTasaVigente, tasaParaCalculo } from '@/lib/tasaBcv'
 import { cupoInscripciones, pendientesInscripcion, textoPendiente } from '@/lib/torneoInscripcion'
 import { candidatosPareja, estadoEnDobles, invitacionVigente, type JugadorDobles } from '@/lib/torneoDobles'
-import { COLUMNAS_INVITACION, vencerInvitaciones, vincularInvitacionesPorTelefono, type Invitacion } from '@/lib/torneoDoblesServidor'
+import { COLUMNAS_INVITACION, porAprobar, vencerInvitaciones, vincularInvitacionesPorTelefono, type Invitacion } from '@/lib/torneoDoblesServidor'
 import { ahora } from '@/lib/tiempo'
 import { listasDeEspera, revisarCierreVencido } from '@/lib/torneoCierreServidor'
 import type { Nivel } from '@/lib/torneo'
@@ -84,7 +84,8 @@ export async function GET() {
       const otra = insPorId.get(e.inscripcion1_id === insId ? e.inscripcion2_id : e.inscripcion1_id)
       return otra ? { equipoId: e.id as string, jugadorId: otra.jugador1_id as string } : null
     }
-    const recibidas = pendientesVigentes.filter((i) => i.invitado_jugador_id === session.id)
+    // Las que el admin todavía no aprueba (no socios) no le llegan al invitado.
+    const recibidas = pendientesVigentes.filter((i) => i.invitado_jugador_id === session.id && !porAprobar(i))
 
     // Nombres de todos los que aparecen (parejas, invitadores, invitados) y candidatos.
     const [{ data: pagos, error: errPag }, { data: disponibilidad, error: errDisp }, { data: candidatos, error: errCand }] =
@@ -143,8 +144,10 @@ export async function GET() {
           enviada: enviada ? {
             id: enviada.id,
             nombre: (enviada.invitado_jugador_id && nombreDe.get(enviada.invitado_jugador_id)) || enviada.invitado_nombre || '—',
-            telefono: enviada.invitado_jugador_id ? null : enviada.invitado_telefono,
+            // Sin el teléfono no hay botón de WhatsApp: sale cuando el admin aprueba.
+            telefono: enviada.invitado_jugador_id || porAprobar(enviada) ? null : enviada.invitado_telefono,
             vence_at: enviada.vence_at,
+            porAprobar: porAprobar(enviada),
           } : null,
           candidatos: pareja ? [] : candidatosPareja({
             yo: yo as JugadorDobles, categoria, jugadores: (candidatos || []).filter((c: any) => !c.es_prueba) as JugadorDobles[], estadoEnCategoria, esperandoA, categoriasDe,

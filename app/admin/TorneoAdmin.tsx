@@ -108,6 +108,7 @@ type Categoria = {
   plantilla_turnos: unknown | null
   inscripciones_abiertas: boolean; inscripciones_cambiadas_at: string | null; admin_cambio: { nombre: string } | null
   sorteo_publicado_at: string | null; sorteo_metodo: 'bombos' | 'serpentina' | null; cancelada_at: string | null
+  invitar_no_socios_con_aprobacion?: boolean
   // Calendario propio (infantiles): inscripción y juegos en sus propias fechas.
   cierre_inscripciones_at: string | null; fecha_inicio: string | null; fecha_fin: string | null
   num_grupos: number; llave_desde: string; partidos_minimos: number | null
@@ -256,6 +257,24 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
           )}
         </div>
       </div>
+
+      {(() => {
+        const porAprobar = datos.invitaciones.filter((v) => v.porAprobar)
+        if (!porAprobar.length) return null
+        const cats = [...new Set(porAprobar.map((v) => v.categoria_id))]
+        return (
+          <div style={{ background: '#fff8e1', border: '1px solid #f0c36d', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '14px' }}>
+            ⏳ <strong>{porAprobar.length} {porAprobar.length === 1 ? 'invitación' : 'invitaciones'} a no socios por aprobar</strong>
+            {' '}en {cats.map((id) => categorias.find((c) => c.id === id)?.nombre ?? '—').join(', ')}.{' '}
+            {cats.length === 1 && (
+              <button onClick={() => { setCategoriaSel(cats[0]); setVista('inscripciones') }}
+                style={{ background: 'none', border: 'none', color: '#1c4e72', fontWeight: 700, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                Revisarlas
+              </button>
+            )}
+          </div>
+        )
+      })()}
 
       <ResumenTorneo version={version} categoriaSel={categoriaSel} onElegir={(id) => { setCategoriaSel(id); setVista('inscripciones') }} />
 

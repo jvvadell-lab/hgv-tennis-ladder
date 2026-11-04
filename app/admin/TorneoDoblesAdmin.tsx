@@ -130,8 +130,8 @@ export function ResumenTorneo({ version, categoriaSel, onElegir }: { version: nu
 
 export type EquipoAdmin = { id: string; categoria_id: string; inscripcion1_id: string; inscripcion2_id: string | null; origen: string; siembra: number | null; bombo: number | null }
 export type EsperaAdmin = { id: string; categoria_id: string; nombre: string; created_at: string; puesto: number }
-export type InvitacionAdmin = { id: string; categoria_id: string; invita_inscripcion_id: string; vence_at: string; para: string; telefono: string | null }
-type CategoriaGestion = { id: string; nombre: string; modalidad: string; es_infantil: boolean; sorteo_publicado_at: string | null; cancelada_at: string | null }
+export type InvitacionAdmin = { id: string; categoria_id: string; invita_inscripcion_id: string; vence_at: string; para: string; telefono: string | null; porAprobar?: boolean; paraEsNoSocio?: boolean | null }
+type CategoriaGestion = { id: string; nombre: string; modalidad: string; es_infantil: boolean; sorteo_publicado_at: string | null; cancelada_at: string | null; invitar_no_socios_con_aprobacion?: boolean }
 type InscripcionGestion = { id: string; categoria_id: string; estado: string; nombre: string; esMenor: boolean }
 
 // Armar una dupla con cualquier jugador del club (inscrito o no): el sistema
@@ -276,7 +276,8 @@ export function GestionCategoria({
   const duplas = equipos.filter((e) => e.categoria_id === categoria.id && e.inscripcion2_id)
   const enDupla = new Set(duplas.flatMap((e) => [e.inscripcion1_id, e.inscripcion2_id!]))
   const sueltas = doble ? inscripciones.filter((i) => !enDupla.has(i.id)) : []
-  const pendientes = invitaciones.filter((v) => v.categoria_id === categoria.id)
+  const pendientes = invitaciones.filter((v) => v.categoria_id === categoria.id && !v.porAprobar)
+  const porAprobar = invitaciones.filter((v) => v.categoria_id === categoria.id && v.porAprobar)
   const competidores = doble ? duplas.length : inscripciones.length
   // Destinos de traslado (adultos) y de fusión (misma modalidad), sin sortear ni cancelar.
   const abiertas = categorias.filter((c) => c.id !== categoria.id && !c.sorteo_publicado_at && !c.cancelada_at)
@@ -291,6 +292,50 @@ export function GestionCategoria({
 
   return (
     <div style={{ margin: '0 0 14px 0', fontSize: '13px' }}>
+      {doble && (porAprobar.length > 0 || editable) && (
+        <div style={{ background: porAprobar.length ? '#fff8e1' : 'white', border: porAprobar.length ? '1px solid #f0c36d' : 'none', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px' }}>
+          {editable && (
+            <label style={{ display: 'flex', gap: '6px', alignItems: 'center', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={!!categoria.invitar_no_socios_con_aprobacion}
+                disabled={ocupado === `aprob-cat-${categoria.id}`}
+                onChange={(e) => accion(`aprob-cat-${categoria.id}`, 'aprobacion-no-socios', { categoriaId: categoria.id, activa: e.target.checked },
+                  e.target.checked ? `${categoria.nombre}: las invitaciones a no socios necesitan tu aprobación` : `${categoria.nombre}: invitaciones a no socios sin aprobación previa`)}
+              />
+              <span>Invitar a no socios requiere aprobación del admin</span>
+            </label>
+          )}
+          {porAprobar.length > 0 && (
+            <div style={{ marginTop: editable ? '8px' : 0 }}>
+              <strong style={{ color: '#8a5a00' }}>⏳ Invitaciones a no socios por aprobar ({porAprobar.length})</strong>
+              {porAprobar.map((v) => (
+                <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid #f3e2b3' }}>
+                  <span>
+                    {nombre.get(v.invita_inscripcion_id) ?? '—'} → <strong>{v.para}</strong>
+                    <span style={{ color: '#888', fontSize: '11px' }}>
+                      {v.telefono ? ` · ${telefonoLegible(v.telefono)}, sin cuenta` : v.paraEsNoSocio ? ' · no socio' : ''}
+                    </span>
+                  </span>
+                  {editable && (
+                    <span style={{ display: 'flex', gap: '6px' }}>
+                      <button disabled={!!ocupado} onClick={() => accion(`aprob-${v.id}`, 'aprobar-invitacion', { invitacionId: v.id, aprobar: true }, `Invitación a ${v.para} aprobada: ya le llegó`)}
+                        style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 700, background: '#1e6b34', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                        Aprobar
+                      </button>
+                      <button disabled={!!ocupado} onClick={() => { if (window.confirm(`¿No aprobar la invitación a ${v.para}? Se le avisa solo a quien invitó.`)) accion(`aprob-${v.id}`, 'aprobar-invitacion', { invitacionId: v.id, aprobar: false }, `Invitación a ${v.para} no aprobada`) }}
+                        style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 700, background: 'white', color: '#c0392b', border: '1px solid #c0392b', borderRadius: '4px', cursor: 'pointer' }}>
+                        No aprobar
+                      </button>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {doble && (
         <div style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px' }}>
           <strong style={{ color: 'var(--color-ink)' }}>Duplas ({duplas.length})</strong>
@@ -322,13 +367,13 @@ export function GestionCategoria({
                 Sin pareja ({sueltas.length}{sueltas.length % 2 ? ', impar' : ''})
               </strong>
               {sueltas.map((i) => {
-                const esperando = pendientes.find((v) => v.invita_inscripcion_id === i.id)
+                const esperando = pendientes.find((v) => v.invita_inscripcion_id === i.id) ?? porAprobar.find((v) => v.invita_inscripcion_id === i.id)
                 return (
                   <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap', padding: '5px 0', borderTop: '1px solid #f5f5f5' }}>
                     <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       {editable && <input type="checkbox" checked={elegidas.includes(i.id)} onChange={() => alternar(i.id)} />}
                       {i.nombre}
-                      {esperando && <span style={{ color: '#8a5a00', fontSize: '11px' }}>· esperando a {esperando.para}</span>}
+                      {esperando && <span style={{ color: '#8a5a00', fontSize: '11px' }}>· {esperando.porAprobar ? `invitó a ${esperando.para} (por aprobar)` : `esperando a ${esperando.para}`}</span>}
                     </label>
                     {editable && (
                       <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>

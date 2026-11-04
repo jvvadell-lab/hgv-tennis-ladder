@@ -8,14 +8,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ahora } from '@/lib/tiempo'
 import type { Torneo, TorneoCategoria } from '@/lib/torneo'
-import { candidatosArmarAdmin, errorDupla, normalizarTelefonoVe, telefonoLegible, venceInvitacion, type CandidatoAdmin, type EstadoEnDobles, type JugadorDobles } from '@/lib/torneoDobles'
+import { candidatosArmarAdmin, errorDupla, normalizarTelefonoVe, porAprobar, requiereAprobacionInvitacion, telefonoLegible, venceInvitacion, type CandidatoAdmin, type EstadoEnDobles, type JugadorDobles } from '@/lib/torneoDobles'
 import { categoriaAbierta, mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
 import { avisarInscripcionConfirmada, escaparHtml, notificarJugadores, recalcularInscripcion } from '@/lib/torneoServidor'
 import { textoMontoCorto } from '@/lib/torneoPrecios'
 
 type Resultado<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
-export const COLUMNAS_INVITACION = 'id, categoria_id, invita_inscripcion_id, invitado_jugador_id, invitado_nombre, invitado_telefono, estado, vence_at, respondida_at, motivo, equipo_id, created_at'
+export const COLUMNAS_INVITACION = 'id, categoria_id, invita_inscripcion_id, invitado_jugador_id, invitado_nombre, invitado_telefono, estado, vence_at, respondida_at, motivo, equipo_id, created_at, requiere_aprobacion, aprobada_at'
 
 export type Invitacion = {
   id: string
@@ -30,13 +30,17 @@ export type Invitacion = {
   motivo: string | null
   equipo_id: string | null
   created_at: string
+  requiere_aprobacion: boolean   // a un no socio en una categoría con aprobación previa del admin
+  aprobada_at: string | null
 }
 
-type CategoriaInv = Pick<TorneoCategoria, 'id' | 'nombre' | 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo' | 'inscripciones_abiertas'> & { torneo_id: string; sorteo_publicado_at: string | null; cancelada_at: string | null }
-const COLUMNAS_CATEGORIA = 'id, torneo_id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas, sorteo_publicado_at, cancelada_at'
-const COLUMNAS_JUGADOR = 'id, nombre, genero, categoria, categoria_torneo, telefono, activo, estado_verificacion, email_verificado'
+export { porAprobar }
 
-type JugadorInv = JugadorDobles & { telefono: string | null; activo: boolean; estado_verificacion: string; email_verificado: boolean }
+type CategoriaInv = Pick<TorneoCategoria, 'id' | 'nombre' | 'modalidad' | 'genero' | 'categoria_nivel' | 'cupo' | 'inscripciones_abiertas'> & { torneo_id: string; sorteo_publicado_at: string | null; cancelada_at: string | null; invitar_no_socios_con_aprobacion: boolean }
+const COLUMNAS_CATEGORIA = 'id, torneo_id, nombre, modalidad, genero, categoria_nivel, cupo, inscripciones_abiertas, sorteo_publicado_at, cancelada_at, invitar_no_socios_con_aprobacion'
+const COLUMNAS_JUGADOR = 'id, nombre, genero, categoria, categoria_torneo, telefono, activo, estado_verificacion, email_verificado, es_invitado'
+
+type JugadorInv = JugadorDobles & { telefono: string | null; activo: boolean; estado_verificacion: string; email_verificado: boolean; es_invitado: boolean | null }
 
 const cierreDe = (t: Pick<Torneo, 'cierre_inscripciones_at'>) => (t.cierre_inscripciones_at ? new Date(t.cierre_inscripciones_at) : null)
 
@@ -132,7 +136,8 @@ async function avisarFinInvitaciones(db: SupabaseClient, invitaciones: Invitacio
           cuerpoHtml: () => `<p>Tu invitación a <strong>${escaparHtml(para)}</strong> para formar dupla en <strong>${escaparHtml(cat)}</strong> ${verbo}${escaparHtml(motivo)}.</p><p>Sigues inscrito y <strong>disponible</strong>: puedes invitar a otra pareja o esperar a que el admin arme las duplas al cierre.</p>`,
         })
       }
-      if (inv.invitado_jugador_id && como !== 'rechazada') {
+      // Al invitado solo si llegó a verla (las por aprobar nunca le llegaron).
+      if (inv.invitado_jugador_id && como !== 'rechazada' && !porAprobar(inv)) {
         await notificarJugadores(db, [inv.invitado_jugador_id], {
           tipo: `torneo_invitacion_${como}`,
           mensaje: `🎾 La invitación de ${de} para ${cat} ${verbo}${motivo}.`,
@@ -161,7 +166,7 @@ export async function enviarInvitacion(
   categoriaId: string,
   invitaId: string,
   destino: DestinoInvitacion,
-): Promise<Resultado<{ invitacion: Invitacion; whatsapp: { telefono: string; nombre: string } | null }>> {
+): Promise<Resultado<{ invitacion: Invitacion; whatsapp: { telefono: string; nombre: string } | null; porAprobar: boolean }>> {
   const categoria = await leerCategoria(db, categoriaId)
   if (!categoria || categoria.torneo_id !== torneo.id || categoria.modalidad !== 'doble') return { ok: false, error: 'Esa categoría no es de dobles de este torneo' }
   if (!categoriaAbierta(torneo.estado, categoria) || categoria.sorteo_publicado_at || categoria.cancelada_at) {
@@ -205,7 +210,16 @@ export async function enviarInvitacion(
     nombre = nombre ?? pareja.nombre
   }
 
+  // Aprobación previa: a un no socio (o a un teléfono sin cuenta, que todavía
+  // no sabemos si es socio) en una categoría que la exige.
+  const requiereAprobacion = requiereAprobacionInvitacion(categoria, invitadoId ? jugadores.get(invitadoId) ?? null : null)
+
   const momento = ahora()
+  // Por aprobar no corre el plazo de 48 h: vence al cierre (o se aprueba antes).
+  const cierre = cierreDe(torneo)
+  const vence = requiereAprobacion
+    ? (cierre && cierre > momento ? cierre : new Date(momento.getTime() + 14 * 24 * 3600 * 1000))
+    : venceInvitacion(momento, cierre)
   const { data, error } = await db
     .from('torneo_invitaciones')
     .insert({
@@ -214,7 +228,8 @@ export async function enviarInvitacion(
       invitado_jugador_id: invitadoId,
       invitado_nombre: nombre,
       invitado_telefono: telefono,
-      vence_at: venceInvitacion(momento, cierreDe(torneo)).toISOString(),
+      vence_at: vence.toISOString(),
+      requiere_aprobacion: requiereAprobacion,
     })
     .select(COLUMNAS_INVITACION)
     .single()
@@ -223,8 +238,9 @@ export async function enviarInvitacion(
     throw error
   }
   const inv = data as Invitacion
+  if (requiereAprobacion) return { ok: true, invitacion: inv, whatsapp: null, porAprobar: true }
   if (invitadoId) await avisarInvitacionNueva(db, inv, yo.nombre, categoria.nombre, torneo.nombre)
-  return { ok: true, invitacion: inv, whatsapp: telefono ? { telefono, nombre: nombre! } : null }
+  return { ok: true, invitacion: inv, whatsapp: telefono ? { telefono, nombre: nombre! } : null, porAprobar: false }
 }
 
 async function avisarInvitacionNueva(db: SupabaseClient, inv: Invitacion, deNombre: string, categoriaNombre: string, torneoNombre: string) {
@@ -267,7 +283,7 @@ export async function vincularInvitacionesPorTelefono(db: SupabaseClient, jugado
     .gt('vence_at', ahora().toISOString())
     .select(COLUMNAS_INVITACION)
   if (error) throw error
-  const lista = (data || []) as Invitacion[]
+  const lista = ((data || []) as Invitacion[]).filter((i) => !porAprobar(i))
   if (lista.length) {
     const invitador = await invitadorDe(db, lista.map((i) => i.invita_inscripcion_id))
     const jugadores = await leerJugadores(db, [...invitador.values()])
@@ -290,6 +306,7 @@ export async function aceptarInvitacion(db: SupabaseClient, torneo: Torneo, invi
   const inv = inv0 as Invitacion | null
   if (!inv || inv.invitado_jugador_id !== jugadorId) return { ok: false, error: 'Esta invitación no es para ti' }
   if (inv.estado !== 'pendiente') return { ok: false, error: 'Esta invitación ya no está pendiente' }
+  if (porAprobar(inv)) return { ok: false, error: 'Esta invitación todavía no la aprobó el admin' }
 
   const categoria = await leerCategoria(db, inv.categoria_id)
   const invitador = (await invitadorDe(db, [inv.invita_inscripcion_id])).get(inv.invita_inscripcion_id)
@@ -350,7 +367,88 @@ export async function rechazarInvitacion(db: SupabaseClient, invitacionId: strin
   const inv = data as Invitacion | null
   if (!inv || inv.invitado_jugador_id !== jugadorId) return { ok: false, error: 'Esta invitación no es para ti' }
   if (inv.estado !== 'pendiente') return { ok: false, error: 'Esta invitación ya no está pendiente' }
+  if (porAprobar(inv)) return { ok: false, error: 'Esta invitación todavía no la aprobó el admin' }
   await terminar(db, [inv], 'rechazada', null)
+  return { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// Aprobación previa del admin (invitaciones a no socios)
+// ---------------------------------------------------------------------------
+
+// El admin aprueba (o no) una invitación a un no socio. Al aprobarla empieza
+// a correr su plazo normal (48 h o el cierre) y el invitado recibe el aviso;
+// a quien invitó se le avisa para que mande el WhatsApp si no tiene cuenta.
+// Si no la aprueba, queda rechazada y solo se le avisa a quien invitó.
+export async function resolverAprobacionInvitacion(
+  db: SupabaseClient,
+  torneo: Torneo,
+  invitacionId: string,
+  aprobar: boolean,
+  adminId: string,
+): Promise<Resultado> {
+  const { data, error } = await db.from('torneo_invitaciones').select(COLUMNAS_INVITACION).eq('id', invitacionId).maybeSingle()
+  if (error) throw error
+  const inv = data as Invitacion | null
+  if (!inv) return { ok: false, error: 'Invitación no encontrada' }
+  if (inv.estado !== 'pendiente' || !porAprobar(inv)) return { ok: false, error: 'Esta invitación ya no está por aprobar' }
+  const categoria = await leerCategoria(db, inv.categoria_id)
+  if (!categoria || categoria.torneo_id !== torneo.id) return { ok: false, error: 'Esa invitación no es de este torneo' }
+
+  const deId = (await invitadorDe(db, [inv.invita_inscripcion_id])).get(inv.invita_inscripcion_id)
+  const jugadores = await leerJugadores(db, [deId, inv.invitado_jugador_id].filter(Boolean) as string[])
+  const de = deId ? jugadores.get(deId) : undefined
+  const para = (inv.invitado_jugador_id && jugadores.get(inv.invitado_jugador_id)?.nombre) || inv.invitado_nombre || '—'
+  const momento = ahora()
+
+  if (!aprobar) {
+    const { data: hecho, error: errU } = await db
+      .from('torneo_invitaciones')
+      .update({ estado: 'rechazada', respondida_at: momento.toISOString(), motivo: 'El admin no aprobó la invitación' })
+      .eq('id', inv.id)
+      .eq('estado', 'pendiente')
+      .select('id')
+    if (errU) throw errU
+    if (!(hecho || []).length) return { ok: false, error: 'Esta invitación ya no está por aprobar' }
+    if (de) {
+      await notificarJugadores(db, [de.id], {
+        tipo: 'torneo_invitacion_no_aprobada',
+        mensaje: `🎾 El admin no aprobó tu invitación a ${para} para ${categoria.nombre}. Sigues inscrito y disponible: puedes invitar a otra pareja.`,
+        asunto: `Invitación no aprobada — ${categoria.nombre}`,
+        cuerpoHtml: () => `<p>El admin no aprobó tu invitación a <strong>${escaparHtml(para)}</strong> para formar dupla en <strong>${escaparHtml(categoria.nombre)}</strong>.</p><p>Sigues inscrito y <strong>disponible</strong>: puedes invitar a otra pareja.</p>`,
+      })
+    }
+    return { ok: true }
+  }
+
+  if (!categoriaAbierta(torneo.estado, categoria) || categoria.sorteo_publicado_at || categoria.cancelada_at) {
+    return { ok: false, error: 'Las inscripciones de esta categoría ya no están abiertas' }
+  }
+  const { data: hecho, error: errU } = await db
+    .from('torneo_invitaciones')
+    .update({ aprobada_por: adminId, aprobada_at: momento.toISOString(), vence_at: venceInvitacion(momento, cierreDe(torneo)).toISOString() })
+    .eq('id', inv.id)
+    .eq('estado', 'pendiente')
+    .is('aprobada_at', null)
+    .select(COLUMNAS_INVITACION)
+  if (errU) throw errU
+  const aprobada = ((hecho || []) as Invitacion[])[0]
+  if (!aprobada) return { ok: false, error: 'Esta invitación ya no está por aprobar' }
+
+  if (aprobada.invitado_jugador_id) await avisarInvitacionNueva(db, aprobada, de?.nombre ?? '—', categoria.nombre, torneo.nombre)
+  if (de) {
+    const sinCuenta = !aprobada.invitado_jugador_id
+    await notificarJugadores(db, [de.id], {
+      tipo: 'torneo_invitacion_aprobada',
+      mensaje: sinCuenta
+        ? `✅ El admin aprobó tu invitación a ${para} para ${categoria.nombre}. Envíale el WhatsApp desde Torneo → Inscribirme.`
+        : `✅ El admin aprobó tu invitación a ${para} para ${categoria.nombre}. Ya le llegó: falta que la acepte.`,
+      asunto: `Invitación aprobada — ${categoria.nombre}`,
+      cuerpoHtml: () => sinCuenta
+        ? `<p>El admin aprobó tu invitación a <strong>${escaparHtml(para)}</strong> para <strong>${escaparHtml(categoria.nombre)}</strong>.</p><p>Entra a <strong>Torneo → Inscribirme</strong> y toca <strong>Abrir WhatsApp</strong> para enviarle la invitación.</p>`
+        : `<p>El admin aprobó tu invitación a <strong>${escaparHtml(para)}</strong> para <strong>${escaparHtml(categoria.nombre)}</strong>. Ya le llegó el aviso: falta que la acepte.</p>`,
+    })
+  }
   return { ok: true }
 }
 
