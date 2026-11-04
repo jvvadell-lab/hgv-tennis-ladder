@@ -310,8 +310,10 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       )}
 
       {vista === 'inscripciones' && <>
-      {mensaje && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{mensaje}</p>}
-      {error && <p style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</p>}
+      {/* Fijos arriba al hacer scroll: el resultado de una acción hecha más
+          abajo (p. ej. armar una dupla) se ve sin volver al inicio. */}
+      {mensaje && <p role="status" style={{ position: 'sticky', top: '10px', zIndex: 20, background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)' }}>{mensaje}</p>}
+      {error && <p role="alert" style={{ position: 'sticky', top: '10px', zIndex: 20, background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)' }}>❌ {error} <button onClick={() => setError('')} aria-label="Cerrar aviso" style={{ marginLeft: '8px', background: 'none', border: 'none', color: '#842029', cursor: 'pointer', fontWeight: 'bold' }}>✕</button></p>}
 
       {esAdminCompleto && (
         <CertificarEscalera
