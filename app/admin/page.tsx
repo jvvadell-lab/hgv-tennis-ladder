@@ -2166,6 +2166,9 @@ export default function AdminPage() {
       numeroAccion: jugador.numero_accion || '',
       activo: jugador.activo !== false,
       esRepresentante: !!jugador.es_representante,
+      // Categoría oficial de torneo (la que usa la Copa); '' = sin certificar.
+      categoriaTorneo: jugador.categoria_torneo || '',
+      categoriaTorneoAntes: jugador.categoria_torneo || '',
     })
     setEditJugadorMsg('')
   }
@@ -2180,13 +2183,26 @@ export default function AdminPage() {
     setGuardandoJugador(true)
     setEditJugadorMsg('')
     try {
+      const { categoriaTorneo, categoriaTorneoAntes, ...datosJugador } = editJugadorForm
       const res = await fetch('/api/admin/editar-jugador', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jugadorId: editandoJugadorId, ...editJugadorForm }),
+        body: JSON.stringify({ jugadorId: editandoJugadorId, ...datosJugador }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al guardar')
+
+      // La categoría de torneo va por su propio endpoint: recalcula sus
+      // inscripciones de la Copa (pueden confirmarse o volver a pendiente).
+      if (!editJugadorForm.esRepresentante && categoriaTorneo !== categoriaTorneoAntes) {
+        const rc = await fetch('/api/admin/torneo/categoria-jugador', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jugadorId: editandoJugadorId, categoria: categoriaTorneo || null }),
+        })
+        const dc = await rc.json()
+        if (!rc.ok) throw new Error('Se guardaron los datos, pero no la categoría de torneo: ' + (dc.error || 'error'))
+      }
 
       setEditandoJugadorId(null)
       fetchPlayers()
@@ -2669,7 +2685,7 @@ export default function AdminPage() {
                               </span>}
                               {/* La Copa usa la categoría oficial de torneo, que puede ser otra: si lo es, se avisa aquí. */}
                               {!player.es_representante && player.categoria_torneo && player.categoria_torneo !== player.categoria && (
-                                <div title="Categoría oficial de torneo (la que usa la Copa para decidir en qué categorías puede jugar). Se cambia en 🎄 Torneo → su inscripción → Categoría oficial." style={{ marginTop: '6px', fontSize: '11px', fontWeight: 'bold', color: '#8a5a00', background: '#fff4d6', padding: '2px 8px', borderRadius: '8px', display: 'inline-block', whiteSpace: 'nowrap' }}>
+                                <div title="Categoría oficial de torneo (la que usa la Copa para decidir en qué categorías puede jugar). Se cambia con Editar → 🎄 Categoría de torneo." style={{ marginTop: '6px', fontSize: '11px', fontWeight: 'bold', color: '#8a5a00', background: '#fff4d6', padding: '2px 8px', borderRadius: '8px', display: 'inline-block', whiteSpace: 'nowrap' }}>
                                   🎄 Torneo: {categoriaLabel(player.categoria_torneo)}
                                 </div>
                               )}
@@ -2838,6 +2854,17 @@ export default function AdminPage() {
                                       style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box' }}
                                     >
                                       <option value="">-- Elige --</option>
+                                      {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }} title="La que usa la Copa para decidir en qué categorías puede jugar. Normalmente igual a la de la escalera.">🎄 Categoría de torneo</label>
+                                    <select
+                                      value={editJugadorForm.categoriaTorneo}
+                                      onChange={(e) => setEditJugadorForm({ ...editJugadorForm, categoriaTorneo: e.target.value })}
+                                      style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                                    >
+                                      <option value="">Sin certificar</option>
                                       {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                     </select>
                                   </div>
