@@ -7,7 +7,11 @@
 -- admin la aprueba (aprobada_por/_at). Si el admin no la aprueba, pasa a
 -- 'rechazada'. Mientras está por aprobar sigue en estado 'pendiente', así
 -- cuenta como "una pendiente por jugador y categoría" y vence al cerrar la
--- categoría como las demás. Se activa solo en Doble Masculino Sexta.
+-- categoría como las demás. Al aceptarla, la aprobación cuenta también como
+-- la autorización de invitado de su inscripción (un solo paso). Y en estas
+-- categorías un no socio no puede inscribirse solo (lo valida el servidor):
+-- entra solo con invitación aprobada o inscrito por el admin.
+-- Se activa solo en Doble Masculino Sexta.
 
 alter table public.torneo_categorias
   add column if not exists invitar_no_socios_con_aprobacion boolean not null default false;

@@ -15,7 +15,7 @@ import { textoMontoCorto } from '@/lib/torneoPrecios'
 
 type Resultado<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
-export const COLUMNAS_INVITACION = 'id, categoria_id, invita_inscripcion_id, invitado_jugador_id, invitado_nombre, invitado_telefono, estado, vence_at, respondida_at, motivo, equipo_id, created_at, requiere_aprobacion, aprobada_at'
+export const COLUMNAS_INVITACION = 'id, categoria_id, invita_inscripcion_id, invitado_jugador_id, invitado_nombre, invitado_telefono, estado, vence_at, respondida_at, motivo, equipo_id, created_at, requiere_aprobacion, aprobada_por, aprobada_at'
 
 export type Invitacion = {
   id: string
@@ -31,6 +31,7 @@ export type Invitacion = {
   equipo_id: string | null
   created_at: string
   requiere_aprobacion: boolean   // a un no socio en una categoría con aprobación previa del admin
+  aprobada_por: string | null
   aprobada_at: string | null
 }
 
@@ -336,6 +337,19 @@ export async function aceptarInvitacion(db: SupabaseClient, torneo: Torneo, invi
     const claro = mensajeErrorBaseInscripcion(r.error) ?? r.error
     if (r.vencida) await avisarFinInvitaciones(db, [{ ...inv, motivo: claro }], 'vencida')
     return { ok: false, error: claro }
+  }
+
+  // Invitación aprobada por el admin (a un no socio): esa aprobación es
+  // también la autorización como invitado, en un solo paso.
+  if (inv.requiere_aprobacion && inv.aprobada_at && inv.aprobada_por) {
+    const { error: errAut } = await db
+      .from('torneo_inscripciones')
+      .update({ invitado_autorizado_por: inv.aprobada_por, invitado_autorizado_at: ahora().toISOString() })
+      .eq('id', r.inscripcion_id)
+      .is('invitado_autorizado_at', null)
+    if (errAut) throw errAut
+    const rec = await recalcularInscripcion(db, r.inscripcion_id)
+    if (rec.antes !== 'confirmada' && rec.despues === 'confirmada') await avisarInscripcionConfirmada(db, rec)
   }
 
   // Las demás invitaciones de los dos en la categoría quedaron canceladas.

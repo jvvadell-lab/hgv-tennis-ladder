@@ -303,7 +303,7 @@ export function GestionCategoria({
                 onChange={(e) => accion(`aprob-cat-${categoria.id}`, 'aprobacion-no-socios', { categoriaId: categoria.id, activa: e.target.checked },
                   e.target.checked ? `${categoria.nombre}: las invitaciones a no socios necesitan tu aprobación` : `${categoria.nombre}: invitaciones a no socios sin aprobación previa`)}
               />
-              <span>Invitar a no socios requiere aprobación del admin</span>
+              <span>No socios solo con aprobación del admin (invitaciones por aprobar y sin inscripción propia)</span>
             </label>
           )}
           {porAprobar.length > 0 && (
@@ -319,7 +319,7 @@ export function GestionCategoria({
                   </span>
                   {editable && (
                     <span style={{ display: 'flex', gap: '6px' }}>
-                      <button disabled={!!ocupado} onClick={() => accion(`aprob-${v.id}`, 'aprobar-invitacion', { invitacionId: v.id, aprobar: true }, `Invitación a ${v.para} aprobada: ya le llegó`)}
+                      <button disabled={!!ocupado} onClick={() => accion(`aprob-${v.id}`, 'aprobar-invitacion', { invitacionId: v.id, aprobar: true }, `Invitación a ${v.para} aprobada: ya le llegó, y al aceptar queda autorizado como invitado`)}
                         style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 700, background: '#1e6b34', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                         Aprobar
                       </button>
