@@ -8,6 +8,8 @@
 // verificación, estado de verificación) lo pone el servidor o el default de
 // la tabla — nunca el cliente.
 
+import { normalizarFichaMenor, type FichaMenor } from './torneoInfantil'
+
 export const CATEGORIAS_REGISTRO = ['sexta_novatos', 'sexta', 'quinta', 'cuarta'] as const
 export const GENEROS_REGISTRO = ['caballeros', 'damas'] as const
 
@@ -15,8 +17,9 @@ export type DatosRegistro = {
   nombre: string
   email: string
   telefono: string
-  categoria: (typeof CATEGORIAS_REGISTRO)[number]
-  genero: (typeof GENEROS_REGISTRO)[number]
+  // null solo en una cuenta de representante (no juega).
+  categoria: (typeof CATEGORIAS_REGISTRO)[number] | null
+  genero: (typeof GENEROS_REGISTRO)[number] | null
   pin: string
   numero_accion: string | null
   foto_carnet_url: string | null
@@ -24,9 +27,17 @@ export type DatosRegistro = {
   // la ruta lo permite (opciones.permitirInvitado): la columna es_invitado
   // llega con la rama del torneo (sorteo/programación).
   es_invitado: boolean
+  // Representante de uno o más menores que no juega: sin categoría ni género,
+  // fuera de las listas de jugadores (migración 20261104014443).
+  es_representante: boolean
 }
 
-export type ResultadoRegistro = { ok: true; datos: DatosRegistro } | { ok: false; error: string }
+// Máximo de fichas de hijos que se cargan en el registro (después puede agregar más).
+export const MAX_MENORES_REGISTRO = 4
+
+export type ResultadoRegistro =
+  | { ok: true; datos: DatosRegistro; menores: FichaMenor[] }
+  | { ok: false; error: string }
 
 export type OpcionesRegistro = {
   // URL pública del proyecto de Supabase: la foto del carné tiene que estar
@@ -67,7 +78,8 @@ export function prefijoFotoCarnet(supabaseUrl: string) {
   return `${supabaseUrl.replace(/\/+$/, '')}/storage/v1/object/public/fotos-partidos/carnets/`
 }
 
-export function validarRegistro(entrada: unknown, opciones: OpcionesRegistro): ResultadoRegistro {
+// `hoy` (YYYY-MM-DD en Caracas) valida la fecha de nacimiento de los hijos.
+export function validarRegistro(entrada: unknown, opciones: OpcionesRegistro, hoy: string): ResultadoRegistro {
   const e = (entrada && typeof entrada === 'object' ? entrada : {}) as Record<string, unknown>
 
   const nombre = toTitleCase(texto(e.nombre))
@@ -80,11 +92,34 @@ export function validarRegistro(entrada: unknown, opciones: OpcionesRegistro): R
   const digitosTelefono = texto(e.telefono).replace(/\D/g, '')
   if (digitosTelefono.length !== 10) return { ok: false, error: 'El teléfono debe tener 10 dígitos, ej. (424)-123-4567.' }
 
-  const categoria = texto(e.categoria)
-  if (!(CATEGORIAS_REGISTRO as readonly string[]).includes(categoria)) return { ok: false, error: 'Selecciona tu categoría.' }
+  const esRepresentante = e.esRepresentante === true
 
-  const genero = texto(e.genero)
-  if (!(GENEROS_REGISTRO as readonly string[]).includes(genero)) return { ok: false, error: 'Selecciona tu género.' }
+  let categoria: DatosRegistro['categoria'] = null
+  let genero: DatosRegistro['genero'] = null
+  if (!esRepresentante) {
+    const c = texto(e.categoria)
+    if (!(CATEGORIAS_REGISTRO as readonly string[]).includes(c)) return { ok: false, error: 'Selecciona tu categoría.' }
+    categoria = c as DatosRegistro['categoria']
+    const g = texto(e.genero)
+    if (!(GENEROS_REGISTRO as readonly string[]).includes(g)) return { ok: false, error: 'Selecciona tu género.' }
+    genero = g as DatosRegistro['genero']
+  }
+
+  // Fichas de los hijos: obligatorias (al menos una) para un representante;
+  // opcionales para un jugador que también inscribe a sus hijos.
+  const crudos = Array.isArray(e.menores) ? e.menores : []
+  if (crudos.length > MAX_MENORES_REGISTRO) return { ok: false, error: `Puedes cargar hasta ${MAX_MENORES_REGISTRO} hijos en el registro; los demás, después desde la app.` }
+  if (esRepresentante && crudos.length === 0) return { ok: false, error: 'Agrega los datos de tu hijo o hija.' }
+  const menores: FichaMenor[] = []
+  for (const [i, m] of crudos.entries()) {
+    const r = normalizarFichaMenor(m, hoy)
+    const quien = crudos.length > 1 ? ` (hijo/a ${i + 1})` : ''
+    if ('error' in r) return { ok: false, error: r.error + quien + '.' }
+    if ((m as any)?.autorizacionParticipacion !== true) {
+      return { ok: false, error: `Marca la autorización de participación${quien}.` }
+    }
+    menores.push(r.ficha)
+  }
 
   const pin = typeof e.pin === 'string' ? e.pin : ''
   if (!/^\d{4}$/.test(pin)) return { ok: false, error: 'El PIN debe tener exactamente 4 dígitos.' }
@@ -113,12 +148,14 @@ export function validarRegistro(entrada: unknown, opciones: OpcionesRegistro): R
       nombre,
       email,
       telefono: `+58 ${formatTelefonoLocal(digitosTelefono)}`,
-      categoria: categoria as DatosRegistro['categoria'],
-      genero: genero as DatosRegistro['genero'],
+      categoria,
+      genero,
       pin,
       numero_accion: numeroAccion,
       foto_carnet_url: fotoCarnetUrl,
       es_invitado: esInvitado,
+      es_representante: esRepresentante,
     },
+    menores,
   }
 }

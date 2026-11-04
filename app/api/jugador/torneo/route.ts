@@ -28,7 +28,7 @@ export async function GET() {
 
     const { data: yo, error: errYo } = await db
       .from('jugadores')
-      .select('id, nombre, genero, categoria, categoria_torneo, es_invitado, telefono')
+      .select('id, nombre, genero, categoria, categoria_torneo, es_invitado, telefono, es_representante')
       .eq('id', session.id)
       .single()
     if (errYo) throw errYo
@@ -101,6 +101,7 @@ export async function GET() {
           .from('jugadores')
           .select('id, nombre, genero, categoria, categoria_torneo, es_prueba')
           .eq('activo', true)
+          .eq('es_representante', false)
           .neq('estado_verificacion', 'no_permitido')
           .neq('id', session.id)
           .order('nombre'),

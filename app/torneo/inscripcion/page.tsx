@@ -104,6 +104,11 @@ export default function InscripcionTorneo() {
     const res = await fetch('/api/jugador/torneo', { cache: 'no-store' })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Error al cargar el torneo')
+    // Cuenta de representante (no juega): su inscripción es la de sus hijos.
+    if (data.yo?.es_representante) {
+      window.location.replace('/torneo/inscripcion/infantil')
+      return
+    }
     setDatos(data)
   }
 

@@ -3,7 +3,25 @@ import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import CropperCarnet from './CropperCarnet'
-import { formatTelefonoLocal } from '@/lib/registro'
+import { formatTelefonoLocal, MAX_MENORES_REGISTRO } from '@/lib/registro'
+import { ETIQUETA_PARENTESCO, PARENTESCOS } from '@/lib/torneoInfantil'
+
+// Ficha de un hijo/a en el registro de un representante (misma validación
+// que la ficha de la app: normalizarFichaMenor en lib/torneoInfantil.ts).
+type HijoForm = {
+  nombre: string
+  apellido: string
+  fecha_nacimiento: string
+  genero: string
+  parentesco: string
+  emergencia_nombre: string
+  emergencia_telefono: string
+  autorizacionParticipacion: boolean
+}
+const hijoVacio = (): HijoForm => ({
+  nombre: '', apellido: '', fecha_nacimiento: '', genero: '', parentesco: '',
+  emergencia_nombre: '', emergencia_telefono: '', autorizacionParticipacion: false,
+})
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,6 +65,12 @@ function RegisterForm() {
   // Invitado (no socio): cuenta sin N.º de acción, solo para los torneos a
   // los que lo invite el club, salvo que un admin lo habilite (lib/invitados.ts).
   const [esInvitado, setEsInvitado] = useState(false)
+  // Representante (padre, madre...) que no juega: sin categoría ni género, y
+  // con la ficha de sus hijos. ?tipo=representante lo deja elegido.
+  const [esRepresentante, setEsRepresentante] = useState(searchParams.get('tipo') === 'representante')
+  const [hijos, setHijos] = useState<HijoForm[]>([hijoVacio()])
+  const cambiarHijo = (i: number, cambio: Partial<HijoForm>) =>
+    setHijos((hs) => hs.map((h, j) => (j === i ? { ...h, ...cambio } : h)))
   const [fotoCarnet, setFotoCarnet] = useState<File | null>(null)
   const [previewCarnet, setPreviewCarnet] = useState<string | null>(null)
   const [fotoCarnetError, setFotoCarnetError] = useState('')
@@ -125,12 +149,14 @@ function RegisterForm() {
           nombre: formData.name,
           email: formData.email,
           telefono: formData.phone,
-          categoria: formData.categoria,
-          genero: formData.genero,
+          categoria: esRepresentante ? null : formData.categoria,
+          genero: esRepresentante ? null : formData.genero,
           pin: formData.pin,
           numeroAccion: esInvitado ? null : formData.numeroAccion,
           fotoCarnetUrl,
           esInvitado,
+          esRepresentante,
+          menores: esRepresentante ? hijos : [],
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -141,6 +167,7 @@ function RegisterForm() {
       setRegistroExitoso(true)
       setFormData({ name: '', email: '', phone: '', categoria: '', genero: '', pin: '', numeroAccion: '' })
       setEsInvitado(false)
+      setHijos([hijoVacio()])
       quitarFotoCarnet()
     } catch (err: any) {
       setError('❌ ' + err.message)
@@ -190,7 +217,7 @@ function RegisterForm() {
             textTransform: 'uppercase',
             marginTop: '8px',
           }}>
-            Registro de jugador
+            {esRepresentante ? 'Registro de representante' : 'Registro de jugador'}
           </p>
         </div>
 
@@ -203,7 +230,7 @@ function RegisterForm() {
             <p style={{ fontSize: '14px', color: 'var(--color-line)', marginBottom: '24px' }}>
               Revisa tu bandeja de entrada (y la de spam, por si acaso) y haz clic en el enlace de verificación antes de iniciar sesión.
             </p>
-            <a href={`/login?next=${encodeURIComponent(destinoDespuesDeRegistrar)}`} style={{
+            <a href={`/login?next=${encodeURIComponent(esRepresentante && !nextParam ? '/torneo/inscripcion/infantil' : destinoDespuesDeRegistrar)}`} style={{
               display: 'inline-block', color: 'var(--color-ink)', fontSize: '15px', fontWeight: 700,
               fontFamily: 'var(--font-body)', textDecoration: 'none', background: 'var(--color-ball)',
               borderRadius: '4px', padding: '12px 26px',
@@ -221,8 +248,34 @@ function RegisterForm() {
           </div>
         ) : (
         <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '22px' }}>
+            <label style={labelStyle}>¿Quién se registra? *</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {([
+                [false, '🎾 Soy jugador/a', 'Juego en la escalera o en los torneos del club.'],
+                [true, '👨‍👧 Soy representante de un niño/a (no juego)', 'Solo inscribo a mi hijo/a en los torneos infantiles.'],
+              ] as const).map(([valor, titulo, detalle]) => (
+                <button
+                  key={String(valor)}
+                  type="button"
+                  onClick={() => setEsRepresentante(valor)}
+                  aria-pressed={esRepresentante === valor}
+                  style={{
+                    textAlign: 'left', padding: '12px 14px', borderRadius: '6px', cursor: 'pointer',
+                    fontFamily: 'var(--font-body)', fontSize: '15px', color: 'var(--color-ink)',
+                    border: esRepresentante === valor ? '2px solid var(--color-court)' : '1px solid rgba(15,27,38,0.2)',
+                    background: esRepresentante === valor ? 'rgba(212,225,87,0.25)' : 'white',
+                  }}
+                >
+                  <strong>{titulo}</strong>
+                  <span style={{ display: 'block', fontSize: '12px', color: 'var(--color-line)', marginTop: '2px' }}>{detalle}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ marginBottom: '18px' }}>
-            <label style={labelStyle}>Nombre completo *</label>
+            <label style={labelStyle}>{esRepresentante ? 'Tu nombre completo (representante) *' : 'Nombre completo *'}</label>
             <input
               type="text"
               required
@@ -277,7 +330,9 @@ function RegisterForm() {
             <span>
               <strong>No soy socio: me registro como invitado</strong>
               <span style={{ display: 'block', fontSize: '12px', color: 'var(--color-line)', marginTop: '2px' }}>
-                Podrás jugar los torneos a los que te invite el club. La escalera, los retos y las reservas son para socios, salvo que un administrador te habilite.
+                {esRepresentante
+                  ? 'Tu hijo/a podrá jugar si el club lo autoriza.'
+                  : 'Podrás jugar los torneos a los que te invite el club. La escalera, los retos y las reservas son para socios, salvo que un administrador te habilite.'}
               </span>
             </span>
           </label>
@@ -294,7 +349,9 @@ function RegisterForm() {
               style={inputStyle}
             />
             <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
-              La escalera es exclusiva para socios del club — se validará tu número de acción.
+              {esRepresentante
+                ? 'El de la familia. Se usa también para tu hijo/a y el club lo validará.'
+                : 'La escalera es exclusiva para socios del club — se validará tu número de acción.'}
             </p>
           </div>
 
@@ -335,7 +392,7 @@ function RegisterForm() {
           </div>
           </>}
 
-          <div style={{ marginBottom: '18px' }}>
+          {!esRepresentante && <div style={{ marginBottom: '18px' }}>
             <label style={labelStyle}>Género *</label>
             <select
               required
@@ -347,7 +404,7 @@ function RegisterForm() {
               <option value="caballeros">Caballeros</option>
               <option value="damas">Damas</option>
             </select>
-          </div>
+          </div>}
 
           <div style={{ marginBottom: '18px' }}>
             <label style={labelStyle}>Crea un PIN de 4 dígitos *</label>
@@ -364,10 +421,38 @@ function RegisterForm() {
               style={{ ...inputStyle, fontFamily: 'var(--font-mono)', letterSpacing: '0.3em' }}
             />
             <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '4px' }}>
-              Lo usarás junto con tu email para iniciar sesión y gestionar tus retos.
+              {esRepresentante
+                ? 'Lo usarás junto con tu email para entrar e inscribir a tu hijo/a.'
+                : 'Lo usarás junto con tu email para iniciar sesión y gestionar tus retos.'}
             </p>
           </div>
 
+          {esRepresentante ? (
+            <div style={{ marginBottom: '24px' }}>
+              {hijos.map((h, i) => (
+                <FichaHijo
+                  key={i}
+                  indice={i}
+                  total={hijos.length}
+                  hijo={h}
+                  onCambio={(c) => cambiarHijo(i, c)}
+                  onQuitar={() => setHijos((hs) => hs.filter((_, j) => j !== i))}
+                />
+              ))}
+              {hijos.length < MAX_MENORES_REGISTRO && (
+                <button
+                  type="button"
+                  onClick={() => setHijos((hs) => [...hs, hijoVacio()])}
+                  style={{ background: 'white', border: '1px dashed var(--color-court)', color: 'var(--color-ink)', borderRadius: '6px', padding: '10px 14px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', width: '100%' }}
+                >
+                  ➕ Agregar otro hijo/a
+                </button>
+              )}
+              <p style={{ fontSize: '12px', color: 'var(--color-line)', marginTop: '8px' }}>
+                La categoría del torneo la eliges después de entrar: la app sugiere la que le toca por su edad.
+              </p>
+            </div>
+          ) : (
           <div style={{ marginBottom: '28px' }}>
             <label style={labelStyle}>Categoría *</label>
             <select
@@ -383,6 +468,7 @@ function RegisterForm() {
               <option value="cuarta">Cuarta</option>
             </select>
           </div>
+          )}
 
           {error && (
             <div style={{
@@ -439,6 +525,61 @@ function RegisterForm() {
         />
       )}
     </div>
+  )
+}
+
+function FichaHijo({ indice, total, hijo, onCambio, onQuitar }: {
+  indice: number
+  total: number
+  hijo: HijoForm
+  onCambio: (c: Partial<HijoForm>) => void
+  onQuitar: () => void
+}) {
+  const campo = (etiqueta: string, nodo: React.ReactNode) => (
+    <div style={{ marginBottom: '12px' }}>
+      <label style={{ ...labelStyle, fontSize: '13px' }}>{etiqueta}</label>
+      {nodo}
+    </div>
+  )
+  return (
+    <fieldset style={{ border: '1px solid rgba(15,27,38,0.15)', borderLeft: '4px solid var(--color-ball)', borderRadius: '6px', padding: '14px', margin: '0 0 12px 0', background: 'white' }}>
+      <legend style={{ fontWeight: 700, color: 'var(--color-ink)', fontSize: '14px', padding: '0 6px' }}>
+        {total > 1 ? `Hijo/a ${indice + 1}` : 'Datos de tu hijo/a'}
+      </legend>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ flex: 1 }}>{campo('Nombre *', <input required value={hijo.nombre} onChange={(e) => onCambio({ nombre: e.target.value })} style={inputStyle} />)}</div>
+        <div style={{ flex: 1 }}>{campo('Apellido *', <input required value={hijo.apellido} onChange={(e) => onCambio({ apellido: e.target.value })} style={inputStyle} />)}</div>
+      </div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ flex: 1 }}>{campo('Fecha de nacimiento *', <input type="date" required value={hijo.fecha_nacimiento} onChange={(e) => onCambio({ fecha_nacimiento: e.target.value })} style={inputStyle} />)}</div>
+        <div style={{ flex: 1 }}>{campo('Niño o niña *', (
+          <select required value={hijo.genero} onChange={(e) => onCambio({ genero: e.target.value })} style={{ ...inputStyle, background: 'white' }}>
+            <option value="">--</option>
+            <option value="caballeros">Niño</option>
+            <option value="damas">Niña</option>
+          </select>
+        ))}</div>
+      </div>
+      {campo('Tu parentesco *', (
+        <select required value={hijo.parentesco} onChange={(e) => onCambio({ parentesco: e.target.value })} style={{ ...inputStyle, background: 'white' }}>
+          <option value="">-- Selecciona --</option>
+          {PARENTESCOS.map((p) => <option key={p} value={p}>{ETIQUETA_PARENTESCO[p]}</option>)}
+        </select>
+      ))}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ flex: 1 }}>{campo('Contacto de emergencia *', <input required placeholder="Nombre" value={hijo.emergencia_nombre} onChange={(e) => onCambio({ emergencia_nombre: e.target.value })} style={inputStyle} />)}</div>
+        <div style={{ flex: 1 }}>{campo('Su teléfono *', <input required type="tel" placeholder="0414-0000000" value={hijo.emergencia_telefono} onChange={(e) => onCambio({ emergencia_telefono: e.target.value })} style={inputStyle} />)}</div>
+      </div>
+      <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', color: 'var(--color-ink)', cursor: 'pointer' }}>
+        <input type="checkbox" required checked={hijo.autorizacionParticipacion} onChange={(e) => onCambio({ autorizacionParticipacion: e.target.checked })} style={{ marginTop: '3px' }} />
+        <span>Soy su representante y lo/la autorizo a participar en las actividades de tenis del club. *</span>
+      </label>
+      {total > 1 && (
+        <button type="button" onClick={onQuitar} style={{ marginTop: '10px', background: 'none', border: 'none', color: '#a83226', fontSize: '12px', cursor: 'pointer', padding: 0 }}>
+          Quitar este hijo/a
+        </button>
+      )}
+    </fieldset>
   )
 }
 

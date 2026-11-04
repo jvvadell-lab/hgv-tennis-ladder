@@ -23,6 +23,7 @@ export async function GET(request: Request) {
         .select('id', { count: 'exact', head: true })
         .eq('activo', true)
         .eq('es_prueba', false)
+        .eq('es_representante', false)
       if (error) throw error
       return NextResponse.json({ ok: true, total: count || 0 })
     }
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
       .select('id, nombre, categoria, genero')
       .eq('activo', true)
       .eq('es_prueba', false)
+      .eq('es_representante', false)
       .order('nombre', { ascending: true })
     if (error) throw error
 
