@@ -190,13 +190,33 @@ function ArmarDuplaJugadores({ categoria, ocupado, accion }: {
           onChange={(e) => setBuscar((x) => (lado === 0 ? [e.target.value, x[1]] : [x[0], e.target.value]))}
           style={{ width: '100%', boxSizing: 'border-box', padding: '6px', fontSize: '13px', marginBottom: '4px' }}
         />
-        <select value={valor} onChange={(e) => setValor(e.target.value)} size={6} style={{ width: '100%', fontSize: '13px' }}>
-          {lista.map((c) => (
-            <option key={c.id} value={c.id} disabled={!c.seleccionable}>
-              {c.nombre}{c.esInvitado ? ' (invitado)' : ''} — {c.seleccionable ? ETIQUETA_CANDIDATO[c.estado] : c.motivo}
-            </option>
-          ))}
-        </select>
+        {/* Lista de botones y no un <select size>: en el iPhone el select se
+            ve como un selector nativo que muestra el primer nombre como
+            elegido sin elegirlo de verdad (con un solo resultado de la
+            búsqueda no había forma de seleccionarlo y el botón no hacía nada). */}
+        <div role="listbox" aria-label={`Jugador ${lado + 1}`} style={{ maxHeight: '190px', overflowY: 'auto', border: '1px solid #ccc', borderRadius: '6px', background: 'white' }}>
+          {lista.length === 0 && <p style={{ margin: 0, padding: '8px', color: '#888', fontSize: '13px' }}>Nadie con ese nombre</p>}
+          {lista.map((c) => {
+            const sel = valor === c.id
+            return (
+              <button
+                key={c.id}
+                type="button"
+                role="option"
+                aria-selected={sel}
+                disabled={!c.seleccionable}
+                onClick={() => setValor(sel ? '' : c.id)}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', fontSize: '13px', border: 'none', borderBottom: '1px solid #f0f0f0',
+                  background: sel ? '#1c7ec4' : 'white', color: sel ? 'white' : c.seleccionable ? '#222' : '#aaa',
+                  cursor: c.seleccionable ? 'pointer' : 'not-allowed', fontWeight: sel ? 'bold' : 'normal',
+                }}
+              >
+                {sel ? '✓ ' : ''}{c.nombre}{c.esInvitado ? ' (invitado)' : ''} — {c.seleccionable ? ETIQUETA_CANDIDATO[c.estado] : c.motivo}
+              </button>
+            )
+          })}
+        </div>
       </div>
     )
   }
