@@ -37,7 +37,7 @@ export type DatosProgramacion = {
 export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Promise<DatosProgramacion> {
   const { data: categorias, error: errCat } = await db
     .from('torneo_categorias')
-    .select('id, nombre, orden, es_infantil, duracion_min, genero')
+    .select('id, nombre, orden, es_infantil, duracion_min, genero, fecha_inicio, fecha_fin')
     .eq('torneo_id', torneo.id)
   if (errCat) throw errCat
   const catPorId = new Map((categorias || []).map((c) => [c.id, c]))
@@ -84,6 +84,8 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
       categoriaNombre: c.nombre,
       categoriaOrden: c.orden,
       esInfantil: c.es_infantil,
+      fechaInicioCategoria: c.fecha_inicio,
+      fechaFinCategoria: c.fecha_fin,
       esMixto: c.genero === 'mixto',
       duracionMin: c.duracion_min,
       fase: p.fase as Fase,

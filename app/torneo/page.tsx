@@ -116,6 +116,8 @@ export default function TorneoPublico() {
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '12px' }}>
                 {[
                   ...(torneo.estado === 'inscripcion' ? [['/torneo/inscripcion', '✍️ Inscribirme']] : []),
+                  // Las infantiles tienen su propio calendario: se inscriben aunque los adultos ya estén jugando.
+                  ...(torneo.estado === 'sorteado' || torneo.estado === 'en_curso' ? [['/torneo/inscripcion/infantil', '🧒 Infantil y juvenil']] : []),
                   ['/torneo/mis-partidos', '📋 Mis partidos'],
                 ].map(([href, texto]) => (
                   <a key={href} href={href} style={{ color: 'var(--color-ink)', fontSize: '13px', fontWeight: 700, textDecoration: 'none', border: '1px solid var(--color-court)', borderRadius: '4px', padding: '7px 14px' }}>{texto}</a>

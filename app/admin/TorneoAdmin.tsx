@@ -4,6 +4,8 @@ import { formatearFechaConAnio, formatearFechaHora, instanteEnCaracas } from '@/
 import { ETIQUETA_ESTADO_INSCRIPCION, ETIQUETA_ESTADO_TORNEO, NIVELES, type EstadoInscripcion, type EstadoTorneo, type GeneroCategoria, type Nivel } from '@/lib/torneo'
 import {
   categoriaAbierta,
+  categoriaAntesDelSorteo,
+  cierreDeCategoria,
   DIAS_TORNEO,
   ETIQUETA_GENERO_JUGADOR,
   ETIQUETA_NIVEL,
@@ -106,8 +108,12 @@ type Categoria = {
   plantilla_turnos: unknown | null
   inscripciones_abiertas: boolean; inscripciones_cambiadas_at: string | null; admin_cambio: { nombre: string } | null
   sorteo_publicado_at: string | null; sorteo_metodo: 'bombos' | 'serpentina' | null; cancelada_at: string | null
+  // Calendario propio (infantiles): inscripción y juegos en sus propias fechas.
+  cierre_inscripciones_at: string | null; fecha_inicio: string | null; fecha_fin: string | null
   num_grupos: number; llave_desde: string; partidos_minimos: number | null
 }
+
+const fechaDia = (iso: string) => formatearFechaConAnio(instanteEnCaracas(iso, '12:00'))
 
 type Disponibilidad = { jugador_id: string; no_disponible: string[]; nota: string | null }
 
@@ -356,6 +362,11 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     : <>Single · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}</>}
                   {c.sorteo_publicado_at && <> · 🎲 sorteada</>}
                 </p>
+                {c.fecha_inicio && c.fecha_fin && (
+                  <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#1c7ec4', fontWeight: 'bold' }}>
+                    🗓️ Calendario propio: inscripción hasta el {c.cierre_inscripciones_at ? formatearFechaHora(c.cierre_inscripciones_at) : '—'} · juegos del {fechaDia(c.fecha_inicio)} al {fechaDia(c.fecha_fin)}
+                  </p>
+                )}
               </div>
               <InscripcionesCategoria
                 categoria={c}
@@ -377,8 +388,8 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
               equipos={datos.equipos}
               invitaciones={datos.invitaciones}
               listaEspera={datos.listaEspera}
-              editable={esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && !c.sorteo_publicado_at}
-              cerrada={!categoriaAbierta(torneo.estado, c) || (!!torneo.cierre_inscripciones_at && new Date(torneo.cierre_inscripciones_at).getTime() <= Date.now())}
+              editable={esAdminCompleto && categoriaAntesDelSorteo(torneo.estado, c)}
+              cerrada={!categoriaAbierta(torneo.estado, c) || (() => { const cierre = cierreDeCategoria(torneo, c); return !!cierre && new Date(cierre).getTime() <= Date.now() })()}
               ocupado={ocupado}
               accion={accion}
             />
@@ -395,7 +406,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '3px 10px', borderRadius: '999px', background: COLOR_ESTADO[ins.estado].fondo, color: COLOR_ESTADO[ins.estado].texto }}>
                       {ins.estado === 'pendiente_pago' ? 'Pendiente' : ETIQUETA_ESTADO_INSCRIPCION[ins.estado]}
                     </span>
-                    {esAdminCompleto && ins.estado !== 'retirada' && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && !c.sorteo_publicado_at && (
+                    {esAdminCompleto && ins.estado !== 'retirada' && categoriaAntesDelSorteo(torneo.estado, c) && (
                       <button
                         disabled={ocupado === `retirar-${ins.id}`}
                         onClick={() => {
@@ -453,7 +464,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     {ins.invitado_autorizado_at
                       ? <span style={{ color: '#1e6b34', fontWeight: 'bold' }}>🎟️ Autorizado como invitado / wild card el {formatearFechaHora(ins.invitado_autorizado_at)}</span>
                       : <span style={{ color: '#8a5a00', fontWeight: 'bold' }}>🎟️ No socio: el torneo es solo para socios</span>}
-                    {esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && (
+                    {esAdminCompleto && categoriaAntesDelSorteo(torneo.estado, { ...c, sorteo_publicado_at: null }) && (
                       <button
                         disabled={ocupado === `invitado-${ins.id}`}
                         onClick={() => {
@@ -477,7 +488,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     menor={ins.menor}
                     categoria={c}
                     categorias={categorias}
-                    editable={esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && ins.estado !== 'retirada'}
+                    editable={esAdminCompleto && categoriaAntesDelSorteo(torneo.estado, c) && ins.estado !== 'retirada'}
                     ocupado={ocupado === `cert-${ins.id}` || ocupado?.startsWith('pago-') === true}
                     onCertificar={(body, exito) => accion(`cert-${ins.id}`, 'infantil/certificar', { inscripcionId: ins.id, ...body }, exito)}
                     onPago={(pagoId, validar) => {
@@ -581,10 +592,10 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
         )
       })}
 
-      {esAdminCompleto && (torneo.estado === 'borrador' || torneo.estado === 'inscripcion') && categorias.some((c) => c.es_infantil) && (
+      {esAdminCompleto && categorias.some((c) => c.es_infantil && categoriaAntesDelSorteo(torneo.estado, c)) && (
         <FormMenorAdmin
           torneo={torneo}
-          categorias={categorias.filter((c) => c.es_infantil)}
+          categorias={categorias.filter((c) => c.es_infantil && categoriaAntesDelSorteo(torneo.estado, c))}
           jugadores={datos.jugadoresActivos}
           fechaCorte={datos.fechaCorte}
           ocupado={ocupado === 'menor-nuevo'}
@@ -724,7 +735,7 @@ function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, av
 }) {
   const abierta = categoria.inscripciones_abiertas
   // Se puede cerrar y reabrir mientras no se publique el sorteo de la categoría.
-  const antesDelSorteo = (estadoTorneo === 'borrador' || estadoTorneo === 'inscripcion') && !categoria.sorteo_publicado_at && !categoria.cancelada_at
+  const antesDelSorteo = categoriaAntesDelSorteo(estadoTorneo, categoria)
   const recibe = categoriaAbierta(estadoTorneo, categoria)
   return (
     <div style={{ textAlign: 'right' }}>
@@ -741,7 +752,7 @@ function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, av
             onClick={() => {
               const texto = abierta
                 ? `${avisoCerrar ? `⚠️ ${avisoCerrar}\n\n` : ''}¿Cerrar las inscripciones de ${categoria.nombre}? Nadie más podrá inscribirse, invitar ni aceptar invitaciones en ella; las inscripciones y duplas hechas se mantienen y puedes seguir armando duplas, trasladando y certificando hasta el sorteo. Se puede reabrir mientras no publiques su sorteo.`
-                : `¿Abrir las inscripciones de ${categoria.nombre}?${estadoTorneo === 'inscripcion' ? ' Los jugadores podrán inscribirse desde la app.' : ' Recibirá inscripciones cuando abras las del torneo.'}`
+                : `¿Abrir las inscripciones de ${categoria.nombre}?${estadoTorneo === 'inscripcion' || categoriaAbierta(estadoTorneo, { ...categoria, inscripciones_abiertas: true }) ? ' Los jugadores podrán inscribirse desde la app.' : ' Recibirá inscripciones cuando abras las del torneo.'}`
               if (confirm(texto)) onCambiar(!abierta)
             }}
             style={boton(abierta ? '#c0392b' : 'var(--color-court)')}

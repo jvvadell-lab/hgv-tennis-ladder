@@ -29,8 +29,8 @@ export async function POST(request: Request) {
     const db = supabaseServer()
     const torneo = await torneoVigente(db)
     if (!torneo) return NextResponse.json({ error: 'No hay un torneo en organización' }, { status: 404 })
-    if (!['borrador', 'inscripcion'].includes(torneo.estado)) {
-      return NextResponse.json({ error: 'El sorteo ya se hizo' }, { status: 400 })
+    if (torneo.estado === 'finalizado') {
+      return NextResponse.json({ error: 'El torneo ya terminó' }, { status: 400 })
     }
 
     const r = await publicarSorteo(db, torneo, categoriaId, metodo as MetodoSorteo, grupos, session!.id)

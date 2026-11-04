@@ -130,6 +130,13 @@ export type TorneoCategoria = {
   plantilla_turnos: unknown | null         // ver PlantillaTurnosInfantil en lib/torneoInfantil.ts
   partidos_minimos: number | null
   inscripciones_abiertas: boolean          // además del torneo en 'inscripcion'
+  // Calendario propio (las infantiles del Navidad 2026: inscripción hasta el
+  // 20-nov, juegos del 23-nov al 4-dic). Con fecha_inicio, la categoría sigue
+  // recibiendo inscripciones y se sortea aunque el torneo ya esté sorteado o
+  // en curso, y no frena el paso del torneo a 'sorteado'. Null = el del torneo.
+  cierre_inscripciones_at: string | null
+  fecha_inicio: string | null
+  fecha_fin: string | null
   inscripciones_cambiadas_por: string | null
   inscripciones_cambiadas_at: string | null
   // Sorteo por categoría; cancelada = no se sortea (fusionada_en = destino).

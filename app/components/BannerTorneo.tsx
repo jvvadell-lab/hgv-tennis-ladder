@@ -23,6 +23,11 @@ export type CategoriaPortada = {
   cupo: number
   inscritas: number
   abiertas: boolean
+  // Calendario propio (infantiles del Navidad 2026: inscripción hasta el
+  // 20-nov, juegos del 23-nov al 4-dic). Null = el del torneo.
+  cierre_inscripciones_at?: string | null
+  fecha_inicio?: string | null
+  fecha_fin?: string | null
 }
 
 export type TorneoPortada = {
@@ -95,7 +100,11 @@ export default function BannerTorneo({ torneo, conectado, principales }: {
   const adultos = torneo.categorias.filter((c) => !c.es_infantil)
   const infantil = torneo.categorias.filter((c) => c.es_infantil)
   const hayAbiertas = torneo.categorias.some((c) => c.abiertas)
+  const adultosAbiertas = adultos.some((c) => c.abiertas)
   const infantilAbierta = infantil.some((c) => c.abiertas)
+  // Fechas propias de las infantiles (todas comparten calendario).
+  const calInfantil = infantil.find((c) => c.fecha_inicio)
+  const cierreInfantil = calInfantil?.cierre_inscripciones_at ?? null
   const enJuego = torneo.estado === 'sorteado' || torneo.estado === 'en_curso'
   const destino = (ruta: string) => (conectado ? ruta : `/login?next=${encodeURIComponent(ruta)}`)
 
@@ -131,7 +140,8 @@ export default function BannerTorneo({ torneo, conectado, principales }: {
                 </p>
                 <p className="banner-torneo-tarifas">{textoTarifas(torneo)}</p>
               </div>
-              {hayAbiertas && torneo.cierre_inscripciones_at && <CuentaRegresiva hasta={torneo.cierre_inscripciones_at} />}
+              {adultosAbiertas && torneo.cierre_inscripciones_at && <CuentaRegresiva hasta={torneo.cierre_inscripciones_at} />}
+              {!adultosAbiertas && infantilAbierta && cierreInfantil && <CuentaRegresiva hasta={cierreInfantil} />}
             </div>
             <ul className="banner-torneo-cupos">
               {adultos.map((c) => {
@@ -145,12 +155,24 @@ export default function BannerTorneo({ torneo, conectado, principales }: {
               })}
               {infantil.length > 0 && (
                 <li data-estado={infantilAbierta ? 'abierta' : 'cerrada'}>
-                  <span>Infantil y juvenil</span>
+                  <span>Infantil y juvenil{infantilAbierta && cierreInfantil ? ` · hasta el ${formatearFechaCorta(new Date(cierreInfantil))}` : ''}</span>
                   <strong>{infantilAbierta ? `${infantil.reduce((s, c) => s + c.inscritas, 0)} niños` : 'Cerrada'}</strong>
                 </li>
               )}
             </ul>
           </>
+        )}
+
+        {/* Adultos ya en juego, infantiles todavía inscribiendo (calendario propio). */}
+        {enJuego && infantilAbierta && (
+          <div className="banner-torneo-fila">
+            <p className="banner-torneo-texto">
+              🧒 <strong>Infantil y juvenil:</strong> inscripciones abiertas
+              {cierreInfantil ? ` hasta el ${formatearFechaCorta(new Date(cierreInfantil))}` : ''}
+              {calInfantil?.fecha_inicio && calInfantil.fecha_fin ? ` · juegos del ${fechaCorta(calInfantil.fecha_inicio)} al ${fechaCorta(calInfantil.fecha_fin)}` : ''}
+            </p>
+            {cierreInfantil && <CuentaRegresiva hasta={cierreInfantil} />}
+          </div>
         )}
 
         {enJuego && (
@@ -181,6 +203,7 @@ export default function BannerTorneo({ torneo, conectado, principales }: {
             </>
           )}
           {enJuego && <Link href="/torneo" className="banner-torneo-cta">Ver llaves y calendario</Link>}
+          {enJuego && infantilAbierta && <Link href={destino('/torneo/inscripcion/infantil')} className="banner-torneo-secundario">Inscribir a mi hijo/a</Link>}
           {!enJuego && <Link href="/torneo" className="banner-torneo-link">Ver el torneo →</Link>}
         </div>
 

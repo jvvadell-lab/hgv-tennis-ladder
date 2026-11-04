@@ -131,6 +131,10 @@ export type PartidoProg = {
   personas: string[]
   // Partido ya jugado (o WO): no se mueve.
   cerrado: boolean
+  // Calendario propio de la categoría (infantiles: 23-nov a 4-dic). Sin él,
+  // vale el del torneo.
+  fechaInicioCategoria?: string | null
+  fechaFinCategoria?: string | null
 }
 
 export type Ocupacion = { cancha: string; inicio: number; fin: number; motivo: string; tipo: 'bloqueo' | 'reserva' | 'reto' }
@@ -251,6 +255,9 @@ export function revisarHorario(ctx: ContextoProgramacion, horarios: Map<string, 
     errores.push(`${h.cancha} no abre para un turno de ${p.duracionMin} min el ${fechaHora(iniMs)}`)
   }
   if (dia(iniMs) < ctx.fechaInicio || dia(iniMs) > ctx.fechaFin) errores.push('La fecha está fuera del torneo')
+  else if (p.fechaInicioCategoria && p.fechaFinCategoria && (dia(iniMs) < p.fechaInicioCategoria || dia(iniMs) > p.fechaFinCategoria)) {
+    errores.push(`${p.categoriaNombre} se juega del ${formatearFechaCortaISO(p.fechaInicioCategoria)} al ${formatearFechaCortaISO(p.fechaFinCategoria)}`)
+  }
 
   // Finales de adultos: el último día del torneo, y ese día solo finales.
   if (!p.esInfantil) {

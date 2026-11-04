@@ -5,6 +5,7 @@ import { competidoresDeCategorias } from '@/lib/torneoEquiposServidor'
 import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 import { finDelDiaEnCaracas, inicioDelDiaEnCaracas } from '@/lib/tiempo'
 import { COLUMNAS_PUBLICAS } from '@/lib/patrocinantes'
+import { categoriaAbierta } from '@/lib/torneoInscripcion'
 
 // Datos de la portada que no puede leer la clave anónima:
 //  * torneo: el vigente (no finalizado; en borrador sale como "muy pronto") con cupos por categoría — duplas
@@ -26,7 +27,7 @@ export async function GET() {
     if (torneo) {
       const { data: categorias, error: errC } = await db
         .from('torneo_categorias')
-        .select('id, nombre, modalidad, es_infantil, cupo, orden, inscripciones_abiertas, cancelada_at, fusionada_en')
+        .select('id, nombre, modalidad, es_infantil, cupo, orden, inscripciones_abiertas, cancelada_at, fusionada_en, sorteo_publicado_at, cierre_inscripciones_at, fecha_inicio, fecha_fin')
         .eq('torneo_id', torneo.id)
         .order('orden')
       if (errC) throw errC
@@ -78,7 +79,11 @@ export async function GET() {
           modalidad: c.modalidad,
           cupo: c.cupo,
           inscritas: equipos.filter((e) => e.categoria_id === c.id).length,
-          abiertas: torneo.estado === 'inscripcion' && c.inscripciones_abiertas,
+          // Con calendario propio (infantiles) sigue abierta aunque el torneo ya esté sorteado.
+          abiertas: categoriaAbierta(torneo.estado, c),
+          cierre_inscripciones_at: c.cierre_inscripciones_at,
+          fecha_inicio: c.fecha_inicio,
+          fecha_fin: c.fecha_fin,
         })),
         partidosHoy,
       }

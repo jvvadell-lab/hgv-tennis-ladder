@@ -28,7 +28,7 @@ export async function GET() {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden, es_infantil, inscripciones_abiertas, inscripciones_cambiadas_at, admin_cambio:inscripciones_cambiadas_por(nombre), edad_min, edad_max, duracion_min, formato_partido, plantilla_turnos, sorteo_publicado_at, sorteo_metodo, cancelada_at, fusionada_en, num_grupos, llave_desde, partidos_minimos')
+      .select('id, nombre, modalidad, genero, categoria_nivel, cupo, orden, es_infantil, inscripciones_abiertas, inscripciones_cambiadas_at, admin_cambio:inscripciones_cambiadas_por(nombre), edad_min, edad_max, duracion_min, formato_partido, plantilla_turnos, sorteo_publicado_at, sorteo_metodo, cancelada_at, fusionada_en, num_grupos, llave_desde, partidos_minimos, cierre_inscripciones_at, fecha_inicio, fecha_fin')
       .eq('torneo_id', torneo.id)
       .order('orden')
     if (errCat) throw errCat

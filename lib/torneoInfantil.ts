@@ -9,7 +9,7 @@
 
 import { diaDeLaSemanaEnCaracas, edadEnFecha, instanteEnCaracas, minutosDesdeMedianocheEnCaracas, fechaISOEnCaracas } from './tiempo'
 import { MAX_CATEGORIAS_POR_JUGADOR, CANCHAS_TORNEO, type CanchaTorneo, type EstadoInscripcion, type EstadoTorneo, type Torneo, type TorneoCategoria } from './torneo'
-import { categoriaAbierta, ERROR_CATEGORIA_CERRADA, type Pendiente } from './torneoInscripcion'
+import { categoriaAbierta, categoriaAntesDelSorteo, ERROR_CATEGORIA_CERRADA, type CalendarioCategoria, type Pendiente } from './torneoInscripcion'
 
 export const ETIQUETA_GENERO_MENOR: Record<string, string> = {
   caballeros: 'Niño',
@@ -142,20 +142,25 @@ export type DatosInscripcionMenor = {
   estadoTorneo: EstadoTorneo
   soloSocios: boolean            // un no socio se inscribe igual; queda pendiente de autorización
   fechaCorte: string
-  categoria: CategoriaInfantil & Pick<TorneoCategoria, 'cupo' | 'es_infantil' | 'inscripciones_abiertas'>
+  categoria: CategoriaInfantil & Pick<TorneoCategoria, 'cupo' | 'es_infantil' | 'inscripciones_abiertas'> & CalendarioCategoria
   menor: { nombre: string; genero: string; fecha_nacimiento: string; numero_accion: string | null }
   autorizacionParticipacion: boolean
   ocupados: number
   // Categorías (ids) en las que el menor ya está inscrito en este torneo.
   categoriasDelMenor: string[]
-  // El admin puede inscribir con el torneo cerrado (borrador), no después del sorteo.
+  // El admin puede inscribir con el torneo cerrado (borrador) o la categoría
+  // cerrada, no después del sorteo de la categoría.
   porAdmin?: boolean
 }
 
 export function validarInscripcionMenor(d: DatosInscripcionMenor): { ok: false; error: string } | { ok: true } {
   const { categoria, menor } = d
-  const abiertas = d.porAdmin ? ['borrador', 'inscripcion'] : ['inscripcion']
-  if (!abiertas.includes(d.estadoTorneo)) return { ok: false, error: 'Las inscripciones del torneo no están abiertas' }
+  // Con calendario propio, la categoría sigue recibiendo aunque el torneo
+  // ya esté sorteado o en curso (lib/torneoInscripcion.ts).
+  const torneoRecibe = d.porAdmin
+    ? categoriaAntesDelSorteo(d.estadoTorneo, categoria)
+    : d.estadoTorneo === 'inscripcion' || categoriaAbierta(d.estadoTorneo, categoria)
+  if (!torneoRecibe) return { ok: false, error: 'Las inscripciones del torneo no están abiertas' }
   if (!categoria.es_infantil) return { ok: false, error: 'Esa no es una categoría infantil' }
   // El admin inscribe aunque la categoría siga cerrada (igual que con el torneo en borrador).
   if (!d.porAdmin && !categoriaAbierta(d.estadoTorneo, categoria)) return { ok: false, error: ERROR_CATEGORIA_CERRADA }
