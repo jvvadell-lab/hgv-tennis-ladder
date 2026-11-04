@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     // 2. ¿Es jugador?
     const { data: jugador } = await db
       .from('jugadores')
-      .select('id, nombre, email, pin, categoria, genero, activo, email_verificado')
+      .select('id, nombre, email, pin, categoria, genero, activo, email_verificado, es_representante')
       .eq('email', email)
       .maybeSingle()
 
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
         nombre: jugador.nombre,
         categoria: jugador.categoria,
         genero: jugador.genero,
+        es_representante: !!jugador.es_representante,
       })
     }
 

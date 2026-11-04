@@ -35,9 +35,12 @@ export async function POST(request: Request) {
 
     const { data: jugador } = await db
       .from('jugadores')
-      .select('estado_verificacion')
+      .select('estado_verificacion, es_representante')
       .eq('id', session.id)
       .maybeSingle()
+    if (jugador?.es_representante) {
+      return NextResponse.json({ error: 'Tu cuenta es de representante: inscribes a tus hijos, pero no juegas. Si quieres jugar, pídele a un administrador que te pase a jugador.' }, { status: 403 })
+    }
     if (jugador?.estado_verificacion === 'no_permitido') {
       return NextResponse.json({ error: 'Tu cuenta no está habilitada para participar en el escalafón. Contacta a un administrador.' }, { status: 403 })
     }

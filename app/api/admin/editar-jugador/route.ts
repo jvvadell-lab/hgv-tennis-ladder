@@ -9,9 +9,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Solo un administrador puede hacer esto' }, { status: 403 })
     }
 
-    const { jugadorId, nombre, email, telefono, categoria, genero, numeroAccion, activo } = await request.json()
+    const { jugadorId, nombre, email, telefono, categoria: categoriaEntrada, genero: generoEntrada, numeroAccion, activo, esRepresentante } = await request.json()
     if (!jugadorId || !nombre?.trim() || !email?.trim()) {
       return NextResponse.json({ error: 'Faltan datos obligatorios' }, { status: 400 })
+    }
+    if (typeof jugadorId !== 'string' || !/^[0-9a-f-]{36}$/i.test(jugadorId)) {
+      return NextResponse.json({ error: 'Jugador no válido' }, { status: 400 })
+    }
+    // Cuenta de representante (no juega): sin categoría ni género. Al pasarla
+    // a jugador hacen falta los dos.
+    const esRep = esRepresentante === true
+    const categoria: string | null = esRep ? null : categoriaEntrada || null
+    const genero: string | null = esRep ? null : generoEntrada || null
+    if (!esRep && (!categoria || !genero)) {
+      return NextResponse.json({ error: 'Un jugador necesita categoría y género' }, { status: 400 })
     }
 
     const db = supabaseServer()
@@ -28,6 +39,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Ya hay otro jugador con ese email.' }, { status: 400 })
     }
 
+    if (esRep) {
+      // Un representante no puede seguir en la escalera.
+      const { count, error: errLp } = await db
+        .from('ladder_posiciones')
+        .select('id', { count: 'exact', head: true })
+        .eq('jugador_id', jugadorId)
+      if (errLp) throw errLp
+      if (count) {
+        return NextResponse.json({ error: 'Está o estuvo en el escalafón: no se puede pasar a representante. Retíralo del escalafón o déjalo como jugador.' }, { status: 400 })
+      }
+      const { count: propias, error: errIns } = await db
+        .from('torneo_inscripciones')
+        .select('id', { count: 'exact', head: true })
+        .or(`jugador1_id.eq.${jugadorId},jugador2_id.eq.${jugadorId}`)
+        .neq('estado', 'retirada')
+      if (errIns) throw errIns
+      if (propias) {
+        return NextResponse.json({ error: 'Tiene inscripciones propias en el torneo: no se puede pasar a representante.' }, { status: 400 })
+      }
+    }
+
     const { error } = await db
       .from('jugadores')
       .update({
@@ -36,6 +68,8 @@ export async function POST(request: Request) {
         telefono: telefono || null,
         categoria,
         genero,
+        es_representante: esRep,
+        ...(esRep ? { categoria_torneo: null, categoria_torneo_asignada_por: null, categoria_torneo_asignada_at: null } : {}),
         numero_accion: numeroAccion || null,
         activo: activo !== false,
       })

@@ -3,6 +3,7 @@ import { formatTelefonoLocal, prefijoFotoCarnet, toTitleCase, validarRegistro } 
 
 const SUPABASE_URL = 'https://proyecto.supabase.co'
 const opciones = { supabaseUrl: SUPABASE_URL }
+const HOY = '2026-11-03'
 const FOTO = `${SUPABASE_URL}/storage/v1/object/public/fotos-partidos/carnets/1729000000000-ab12cd.jpg`
 
 const valido = {
@@ -17,13 +18,13 @@ const valido = {
 }
 
 const error = (entrada: unknown, o = opciones) => {
-  const r = validarRegistro(entrada, o)
+  const r = validarRegistro(entrada, o, HOY)
   return r.ok ? null : r.error
 }
 
 describe('validarRegistro', () => {
   it('normaliza los datos del formulario', () => {
-    expect(validarRegistro(valido, opciones)).toEqual({
+    expect(validarRegistro(valido, opciones, HOY)).toEqual({
       ok: true,
       datos: {
         nombre: 'Juan García',
@@ -35,7 +36,9 @@ describe('validarRegistro', () => {
         numero_accion: '1234',
         foto_carnet_url: FOTO,
         es_invitado: false,
+        es_representante: false,
       },
+      menores: [],
     })
   })
 
@@ -50,17 +53,17 @@ describe('validarRegistro', () => {
       token_verificacion: 'conocido',
       invitado_habilitado_at: '2026-10-20',
       id: '00000000-0000-0000-0000-000000000000',
-    }, opciones)
+    }, opciones, HOY)
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(Object.keys(r.datos).sort()).toEqual(
-        ['categoria', 'email', 'es_invitado', 'foto_carnet_url', 'genero', 'nombre', 'numero_accion', 'pin', 'telefono'],
+        ['categoria', 'email', 'es_invitado', 'es_representante', 'foto_carnet_url', 'genero', 'nombre', 'numero_accion', 'pin', 'telefono'],
       )
     }
   })
 
   it('la foto del carné es opcional', () => {
-    const r = validarRegistro({ ...valido, fotoCarnetUrl: null }, opciones)
+    const r = validarRegistro({ ...valido, fotoCarnetUrl: null }, opciones, HOY)
     expect(r.ok && r.datos.foto_carnet_url).toBe(null)
   })
 
@@ -106,7 +109,7 @@ describe('validarRegistro', () => {
     })
 
     it('con permitirInvitado: sin N.º de acción ni carné', () => {
-      const r = validarRegistro(invitado, { ...opciones, permitirInvitado: true })
+      const r = validarRegistro(invitado, { ...opciones, permitirInvitado: true }, HOY)
       expect(r.ok).toBe(true)
       if (r.ok) {
         expect(r.datos.es_invitado).toBe(true)
@@ -116,9 +119,53 @@ describe('validarRegistro', () => {
     })
 
     it('solo true cuenta como invitado', () => {
-      const r = validarRegistro({ ...valido, esInvitado: 'true' }, { ...opciones, permitirInvitado: true })
+      const r = validarRegistro({ ...valido, esInvitado: 'true' }, { ...opciones, permitirInvitado: true }, HOY)
       expect(r.ok && r.datos.es_invitado).toBe(false)
     })
+  })
+})
+
+describe('representante (no juega)', () => {
+  const hijo = {
+    nombre: ' Sofía ', apellido: 'Pérez', fecha_nacimiento: '2020-05-12', genero: 'damas',
+    parentesco: 'madre', emergencia_nombre: 'Abuela Ana', emergencia_telefono: '0414-0000000',
+    autorizacionParticipacion: true,
+  }
+  const rep = { ...valido, categoria: '', genero: '', esRepresentante: true, menores: [hijo] }
+
+  it('sin categoría ni género, con la ficha del hijo', () => {
+    const r = validarRegistro(rep, opciones, HOY)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.datos).toMatchObject({ es_representante: true, categoria: null, genero: null, numero_accion: '1234' })
+      expect(r.menores).toEqual([expect.objectContaining({ nombre: 'Sofía', apellido: 'Pérez', parentesco: 'madre', genero: 'damas' })])
+    }
+  })
+
+  it('ignora categoría y género aunque los mande', () => {
+    const r = validarRegistro({ ...rep, categoria: 'cuarta', genero: 'caballeros' }, opciones, HOY)
+    expect(r.ok && [r.datos.categoria, r.datos.genero]).toEqual([null, null])
+  })
+
+  it('exige al menos un hijo', () => {
+    expect(error({ ...rep, menores: [] })).toMatch(/hijo/)
+  })
+
+  it('exige la autorización de participación de cada hijo', () => {
+    expect(error({ ...rep, menores: [hijo, { ...hijo, nombre: 'Luis', autorizacionParticipacion: false }] })).toMatch(/autorización.*hijo\/a 2/)
+  })
+
+  it('valida la ficha del hijo', () => {
+    expect(error({ ...rep, menores: [{ ...hijo, emergencia_telefono: '' }] })).toMatch(/emergencia/)
+    expect(error({ ...rep, menores: [{ ...hijo, fecha_nacimiento: '2026-12-01' }] })).toMatch(/fecha/)
+  })
+
+  it('un jugador sigue necesitando categoría y género', () => {
+    expect(error({ ...valido, categoria: '' })).toMatch(/categoría/)
+  })
+
+  it('máximo de hijos en el registro', () => {
+    expect(error({ ...rep, menores: Array(5).fill(hijo) })).toMatch(/hasta 4/)
   })
 })
 

@@ -87,6 +87,8 @@ export default function AdminPage() {
   const [filterCategoria, setFilterCategoria] = useState('')
   const [filterGenero, setFilterGenero] = useState('')
   const [filterInscripcion, setFilterInscripcion] = useState<'todos' | 'inscritos' | 'no_inscritos'>('todos')
+  // Representantes (padres que no juegan) van en su propia lista.
+  const [filterTipoCuenta, setFilterTipoCuenta] = useState<'jugadores' | 'representantes'>('jugadores')
 
   const [temporadaActiva, setTemporadaActiva] = useState<any>(null)
   const [ladderPreview, setLadderPreview] = useState<Record<string, any[]>>({})
@@ -2163,6 +2165,7 @@ export default function AdminPage() {
       genero: jugador.genero || '',
       numeroAccion: jugador.numero_accion || '',
       activo: jugador.activo !== false,
+      esRepresentante: !!jugador.es_representante,
     })
     setEditJugadorMsg('')
   }
@@ -2194,7 +2197,9 @@ export default function AdminPage() {
     }
   }
 
+  const totalRepresentantes = players.filter((p) => p.es_representante).length
   const filteredPlayers = players.filter(p => {
+    if (!!p.es_representante !== (filterTipoCuenta === 'representantes')) return false
     const matchCat = filterCategoria ? p.categoria === filterCategoria : true
     const matchGen = filterGenero ? p.genero === filterGenero : true
     const inscrito = inscritosTempActivaIds.has(p.id)
@@ -2475,6 +2480,15 @@ export default function AdminPage() {
                 <span style={{ fontWeight: 'bold', color: '#333' }}>🔍 Filtrar:</span>
 
                 <select
+                  value={filterTipoCuenta}
+                  onChange={(e) => setFilterTipoCuenta(e.target.value as 'jugadores' | 'representantes')}
+                  style={{ padding: '8px 12px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px', fontWeight: 'bold' }}
+                >
+                  <option value="jugadores">🎾 Jugadores</option>
+                  <option value="representantes">👨‍👧 Representantes ({totalRepresentantes})</option>
+                </select>
+
+                <select
                   value={filterGenero}
                   onChange={(e) => setFilterGenero(e.target.value)}
                   style={{ padding: '8px 12px', borderRadius: '8px', border: '2px solid #ddd', fontSize: '14px' }}
@@ -2517,7 +2531,7 @@ export default function AdminPage() {
                 </button>
 
                 <span style={{ marginLeft: 'auto', color: '#6b6b6b', fontSize: '14px' }}>
-                  Total: <strong>{filteredPlayers.length}</strong> jugadores
+                  Total: <strong>{filteredPlayers.length}</strong> {filterTipoCuenta === 'representantes' ? 'representantes' : 'jugadores'}
                 </span>
               </div>
 
@@ -2547,7 +2561,7 @@ export default function AdminPage() {
                       {filteredPlayers.length === 0 ? (
                         <tr>
                           <td colSpan={12} style={{ textAlign: 'center', padding: '40px', color: '#6b6b6b' }}>
-                            😔 No hay jugadores registrados aún
+                            {filterTipoCuenta === 'representantes' ? 'No hay representantes registrados' : '😔 No hay jugadores registrados aún'}
                           </td>
                         </tr>
                       ) : (
@@ -2564,6 +2578,11 @@ export default function AdminPage() {
                               title="Ver trayectoria"
                             >
                               {player.nombre}
+                              {player.hijos?.length > 0 && (
+                                <div style={{ fontSize: '12px', fontWeight: 'normal', color: '#5b6b2a', marginTop: '3px', textDecoration: 'none' }}>
+                                  👧 Representa a: {player.hijos.map((h: any) => h.nombre).join(', ')}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '12px 16px', color: '#555', fontSize: '14px' }}>
                               {player.email}
@@ -2622,7 +2641,7 @@ export default function AdminPage() {
                               )}
                             </td>
                             <td style={{ padding: '12px 16px' }}>
-                              <span style={{
+                              {player.es_representante ? <span style={{ color: '#9ca3af' }}>—</span> : <span style={{
                                 background: player.genero === 'caballeros' ? '#dbeafe' : '#fce7f3',
                                 color: player.genero === 'caballeros' ? '#1e40af' : '#9d174d',
                                 padding: '4px 10px',
@@ -2631,10 +2650,14 @@ export default function AdminPage() {
                                 fontWeight: '600'
                               }}>
                                 {player.genero === 'caballeros' ? '♂️' : '♀️'} {generoLabel(player.genero)}
-                              </span>
+                              </span>}
                             </td>
                             <td style={{ padding: '12px 16px' }}>
-                              <span style={{
+                              {player.es_representante ? (
+                                <span style={{ background: '#eef3d6', color: '#4d5a12', padding: '4px 10px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                  👨‍👧 Representante
+                                </span>
+                              ) : <span style={{
                                 background: getCategoriaColor(player.categoria),
                                 color: 'var(--color-chalk)',
                                 padding: '4px 10px',
@@ -2643,7 +2666,7 @@ export default function AdminPage() {
                                 fontWeight: '600'
                               }}>
                                 {categoriaLabel(player.categoria)}
-                              </span>
+                              </span>}
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                               {!nombreTempActivaParaBadge ? (
@@ -2779,12 +2802,25 @@ export default function AdminPage() {
                                     />
                                   </div>
                                   <div>
+                                    <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Tipo de cuenta</label>
+                                    <select
+                                      value={editJugadorForm.esRepresentante ? 'representante' : 'jugador'}
+                                      onChange={(e) => setEditJugadorForm({ ...editJugadorForm, esRepresentante: e.target.value === 'representante' })}
+                                      style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box' }}
+                                    >
+                                      <option value="jugador">🎾 Jugador</option>
+                                      <option value="representante">👨‍👧 Representante (no juega)</option>
+                                    </select>
+                                  </div>
+                                  {!editJugadorForm.esRepresentante && <>
+                                  <div>
                                     <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Género</label>
                                     <select
                                       value={editJugadorForm.genero}
                                       onChange={(e) => setEditJugadorForm({ ...editJugadorForm, genero: e.target.value })}
                                       style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box' }}
                                     >
+                                      <option value="">-- Elige --</option>
                                       {GENEROS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
                                     </select>
                                   </div>
@@ -2795,9 +2831,11 @@ export default function AdminPage() {
                                       onChange={(e) => setEditJugadorForm({ ...editJugadorForm, categoria: e.target.value })}
                                       style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd', boxSizing: 'border-box' }}
                                     >
+                                      <option value="">-- Elige --</option>
                                       {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                     </select>
                                   </div>
+                                  </>}
                                   <div>
                                     <label style={{ fontSize: '11px', color: '#6b6b6b', display: 'block' }}>Activo</label>
                                     <select

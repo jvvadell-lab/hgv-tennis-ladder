@@ -42,7 +42,13 @@ function LoginForm() {
 
       setMessage(`✅ ¡Bienvenido ${data.nombre}!`)
       setTimeout(() => {
-        router.push(data.role === 'admin' ? '/admin' : data.role === 'academia' ? '/academia' : destinoDespuesDeLogin)
+        router.push(
+          data.role === 'admin' ? '/admin'
+          : data.role === 'academia' ? '/academia'
+          // Representante (no juega): sin destino pedido, directo a sus hijos.
+          : data.es_representante && !nextParam ? '/torneo/inscripcion/infantil'
+          : destinoDespuesDeLogin
+        )
       }, 1000)
     } catch {
       setMessage('❌ Error al iniciar sesión. Intenta de nuevo.')

@@ -496,6 +496,7 @@ export async function candidatosArmarDuplaAdmin(db: SupabaseClient, torneo: Torn
     .select('id, nombre, genero, categoria, categoria_torneo, es_invitado, activo, estado_verificacion')
     .eq('activo', true)
     .eq('es_prueba', false)
+    .eq('es_representante', false)
     .neq('estado_verificacion', 'no_permitido')
     .order('nombre')
   if (error) throw error

@@ -16,7 +16,7 @@ export async function GET() {
     const db = supabaseServer()
     const { data, error } = await db
       .from('jugadores')
-      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide, es_invitado, invitado_habilitado_at, es_prueba')
+      .select('id, nombre, email, telefono, numero_accion, categoria, genero, activo, estado_verificacion, email_verificado, created_at, foto_carnet_url, numero_accion_ocr, numero_accion_coincide, es_invitado, invitado_habilitado_at, es_prueba, es_representante')
       .order('created_at', { ascending: false })
     if (error) throw error
     const jugadores = (data || []) as any[]
@@ -44,9 +44,27 @@ export async function GET() {
       }
     }
 
+    // Hijos que representa cada cuenta (representantes y jugadores que
+    // también inscriben a sus hijos): solo nombre y fecha de nacimiento.
+    const { data: menores, error: errMen } = await db
+      .from('torneo_menores')
+      .select('representante_jugador_id, nombre, apellido, fecha_nacimiento')
+      .order('fecha_nacimiento')
+    if (errMen) throw errMen
+    const hijosDe = new Map<string, { nombre: string; fecha_nacimiento: string }[]>()
+    for (const m of (menores || []) as any[]) {
+      const lista = hijosDe.get(m.representante_jugador_id) || []
+      lista.push({ nombre: `${m.nombre} ${m.apellido}`, fecha_nacimiento: m.fecha_nacimiento })
+      hijosDe.set(m.representante_jugador_id, lista)
+    }
+
     return NextResponse.json({
       ok: true,
-      jugadores: jugadores.map((j) => (j.es_invitado ? { ...j, invitado_por: invitadoPor.get(j.id) ?? null } : j)),
+      jugadores: jugadores.map((j) => ({
+        ...j,
+        ...(j.es_invitado ? { invitado_por: invitadoPor.get(j.id) ?? null } : {}),
+        hijos: hijosDe.get(j.id) || [],
+      })),
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error al cargar jugadores' }, { status: 500 })

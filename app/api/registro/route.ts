@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { validarRegistro } from '@/lib/registro'
 import { enviarCorreoBienvenida, verificarCarnetRegistro } from '@/lib/registroServidor'
 import { vincularInvitacionesPorTelefono } from '@/lib/torneoDoblesServidor'
+import { ahora, hoyEnCaracas } from '@/lib/tiempo'
 
 const MENSAJE_EMAIL_DUPLICADO =
   'Ya existe un jugador registrado con ese correo. Si es tuyo, usa "¿Olvidaste tu PIN?" en la página de inicio de sesión.'
@@ -15,7 +16,7 @@ const MENSAJE_EMAIL_DUPLICADO =
 export async function POST(request: Request) {
   try {
     const entrada = await request.json().catch(() => null)
-    const resultado = validarRegistro(entrada, { supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '', permitirInvitado: true })
+    const resultado = validarRegistro(entrada, { supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '', permitirInvitado: true }, hoyEnCaracas())
     if (!resultado.ok) return NextResponse.json({ error: resultado.error }, { status: 400 })
     // Invitado (no socio): sin N.º de acción ni carné (lib/invitados.ts).
     const datos = resultado.datos
@@ -40,6 +41,29 @@ export async function POST(request: Request) {
     if (error) {
       if (error.code === '23505') return NextResponse.json({ error: MENSAJE_EMAIL_DUPLICADO }, { status: 409 })
       throw error
+    }
+
+    // Fichas de los hijos (representante, o jugador que también inscribe a
+    // sus hijos). Si fallan, se borra la cuenta recién creada para que pueda
+    // volver a registrarse con el mismo correo.
+    if (resultado.menores.length) {
+      const momento = ahora().toISOString()
+      const { error: errMen } = await db.from('torneo_menores').insert(
+        resultado.menores.map((m) => ({
+          ...m,
+          // El N.º de acción del hijo es el de la familia si no se escribió otro.
+          numero_accion: m.numero_accion ?? datos.numero_accion,
+          representante_jugador_id: nuevo.id,
+          autorizacion_participacion: true,
+          autorizacion_participacion_at: momento,
+          autorizacion_imagen: false,
+          registrado_por_jugador: nuevo.id,
+        }))
+      )
+      if (errMen) {
+        await db.from('jugadores').delete().eq('id', nuevo.id)
+        throw errMen
+      }
     }
 
     // Correo de bienvenida y lectura del carné después de responder: si

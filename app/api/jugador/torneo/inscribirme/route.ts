@@ -40,10 +40,11 @@ export async function POST(request: Request) {
 
     const { data: yo, error: errJug } = await db
       .from('jugadores')
-      .select('id, nombre, genero, categoria, categoria_torneo, activo, estado_verificacion')
+      .select('id, nombre, genero, categoria, categoria_torneo, activo, estado_verificacion, es_representante')
       .eq('id', session.id)
       .single()
     if (errJug) throw errJug
+    if (yo.es_representante) return NextResponse.json({ error: 'Tu cuenta es de representante: inscribes a tus hijos, pero no juegas. Si quieres jugar, pídele a un administrador que te pase a jugador.' }, { status: 403 })
 
     // Inscripciones vivas del torneo: cupo de la categoría y mis categorías.
     const { data: vivas, error: errVivas } = await db

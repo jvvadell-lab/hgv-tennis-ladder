@@ -8,10 +8,12 @@ import { verificarNumeroAccion } from '@/lib/verificarAccion'
 // /verificar-carnet) que aceptaban cualquier jugadorId; ahora solo las llama
 // el servidor con el id que acaba de insertar.
 
+const escapar = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+
 export async function enviarCorreoBienvenida(db: SupabaseClient, jugadorId: string): Promise<void> {
   const { data: jugador, error } = await db
     .from('jugadores')
-    .select('nombre, email, token_verificacion')
+    .select('nombre, email, token_verificacion, es_representante')
     .eq('id', jugadorId)
     .maybeSingle()
   if (error) throw error
@@ -33,6 +35,29 @@ export async function enviarCorreoBienvenida(db: SupabaseClient, jugadorId: stri
       </div>
     `
     : ''
+
+  // Representante (no juega): correo corto, sin las reglas de la escalera.
+  if (jugador.es_representante) {
+    const htmlRep = `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
+        <p style="font-size: 28px; margin: 0 0 10px 0;">🎾</p>
+        <h2 style="color: #1c7ec4; margin: 0 0 4px 0;">¡Bienvenido/a, ${escapar(jugador.nombre || '')}!</h2>
+        <p>Ya tienes tu cuenta de <strong>representante</strong> en HGV Tennis Club. Con ella inscribes a tus hijos en los torneos del club, reportas el pago y recibes los avisos de sus partidos.</p>
+        ${bloqueVerificacion}
+        <div style="background: #fdf6d8; border: 1px solid #d4e157; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+          <p style="margin: 0 0 8px 0; font-weight: bold; color: #1c7ec4;">Siguientes pasos</p>
+          <ol style="margin: 0; padding-left: 18px; font-size: 14px;">
+            <li>Confirma tu correo con el botón de arriba.</li>
+            <li>Entra con tu correo y tu PIN: verás a tu hijo/a listo para inscribir.</li>
+            <li>Elige su categoría, marca las autorizaciones y reporta el pago.</li>
+          </ol>
+        </div>
+        <p style="font-size: 13px; color: #666;">Si también quieres jugar, pídele a un administrador del club que pase tu cuenta a jugador.</p>
+      </div>
+    `
+    await enviarCorreo(jugador.email, '🎾 HGV Tennis Club — Tu cuenta de representante', htmlRep)
+    return
+  }
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
