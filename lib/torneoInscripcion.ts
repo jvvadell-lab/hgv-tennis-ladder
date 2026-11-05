@@ -214,23 +214,54 @@ export type Pendiente =
   // Torneo solo para socios: un invitado (o menor sin N.º de acción) necesita
   // la autorización del admin como invitado / wild card.
   | { tipo: 'invitado_por_autorizar'; jugadorId: string }
+  // Lo pagado (en €, a la tasa de cada pago) no alcanza el monto de la
+  // inscripción: p. ej. el admin subió el monto después del pago.
+  | { tipo: 'saldo'; jugadorId: string; saldoEur: number }
+
+// Un pago de la inscripción. monto (Bs.) y tasa_bcv_eur son opcionales: sin
+// ellos (o sin montoEur en los datos) no se calcula saldo y basta con que
+// haya un pago validado, como antes.
+export type PagoEstado = { jugador_id: string; validado: boolean; monto?: number | string | null; tasa_bcv_eur?: number | string | null }
+
+// Diferencias menores a esto son redondeo de la tasa, no saldo.
+export const TOLERANCIA_SALDO_EUR = 0.05
+
+const eurDePago = (p: PagoEstado): number | null =>
+  p.monto != null && p.tasa_bcv_eur != null && Number(p.tasa_bcv_eur) > 0 ? Number(p.monto) / Number(p.tasa_bcv_eur) : null
+
+// Lo que le falta a un pagador: sin pago, pago por validar, o saldo (lo
+// validado no alcanza el monto y lo por validar tampoco lo completa).
+export function pendientePagoDe(jugadorId: string, pagos: PagoEstado[], montoEur?: number | string | null): Pendiente | null {
+  const suyos = pagos.filter((p) => p.jugador_id === jugadorId)
+  if (!suyos.length) return { tipo: 'pago', jugadorId }
+  const validados = suyos.filter((p) => p.validado)
+  if (!validados.length) return { tipo: 'pago_por_validar', jugadorId }
+  if (montoEur == null) return null
+  const eurValidados = validados.map(eurDePago)
+  if (eurValidados.some((e) => e === null)) return null
+  const pagado = (eurValidados as number[]).reduce((s, e) => s + e, 0)
+  const faltan = Number(montoEur) - pagado
+  if (faltan <= TOLERANCIA_SALDO_EUR) return null
+  const porValidar = suyos.filter((p) => !p.validado).reduce((s, p) => s + (eurDePago(p) ?? faltan), 0)
+  if (porValidar >= faltan - TOLERANCIA_SALDO_EUR) return { tipo: 'pago_por_validar', jugadorId }
+  return { tipo: 'saldo', jugadorId, saldoEur: Math.round((faltan - porValidar) * 100) / 100 }
+}
 
 export type DatosEstadoInscripcion = {
   estado: EstadoInscripcion
   nivelCategoria: Nivel | null
   jugadores: { id: string; categoria_torneo: string | null; es_invitado: boolean }[]
-  pagos: { jugador_id: string; validado: boolean }[]
+  pagos: PagoEstado[]
   soloSocios: boolean
   invitadoAutorizado: boolean   // torneo_inscripciones.invitado_autorizado_at
+  montoEur?: number | string | null  // torneo_inscripciones.monto_eur: con él se calcula el saldo
 }
 
 export function pendientesInscripcion(d: DatosEstadoInscripcion): Pendiente[] {
   const pendientes: Pendiente[] = []
   for (const j of d.jugadores) {
-    const suyos = d.pagos.filter((p) => p.jugador_id === j.id)
-    if (!suyos.some((p) => p.validado)) {
-      pendientes.push({ tipo: suyos.length ? 'pago_por_validar' : 'pago', jugadorId: j.id })
-    }
+    const pago = pendientePagoDe(j.id, d.pagos, d.montoEur)
+    if (pago) pendientes.push(pago)
     if (!j.categoria_torneo) pendientes.push({ tipo: 'categoria', jugadorId: j.id })
     else if (!nivelAdmitido(d.nivelCategoria, j.categoria_torneo)) pendientes.push({ tipo: 'categoria_incompatible', jugadorId: j.id })
     if (d.soloSocios && j.es_invitado && !d.invitadoAutorizado) pendientes.push({ tipo: 'invitado_por_autorizar', jugadorId: j.id })
@@ -254,6 +285,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
       case 'categoria_incompatible': return 'Tu categoría oficial no corresponde a esta categoría'
       case 'categoria_por_certificar': return 'Falta que el admin certifique la categoría'
       case 'invitado_por_autorizar': return 'Eres invitado: falta que el admin te autorice (invitado / wild card)'
+      case 'saldo': return `Falta pagar la diferencia: ${p.saldoEur.toFixed(2).replace('.', ',')} €`
     }
   }
   switch (p.tipo) {
@@ -263,6 +295,7 @@ export function textoPendiente(p: Pendiente, nombre: string | null): string {
     case 'categoria_incompatible': return `La categoría oficial de ${nombre} no corresponde a esta categoría`
     case 'categoria_por_certificar': return `Falta certificar la categoría de ${nombre}`
     case 'invitado_por_autorizar': return `${nombre} no es socio: falta autorizarlo como invitado / wild card`
+    case 'saldo': return `Falta la diferencia de ${nombre}: ${p.saldoEur.toFixed(2).replace('.', ',')} €`
   }
 }
 

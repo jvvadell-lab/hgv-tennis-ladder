@@ -123,7 +123,8 @@ export async function GET() {
         estado: i.estado,
         nivelCategoria: categoria.categoria_nivel as Nivel | null,
         jugadores: [{ id: yo.id, categoria_torneo: yo.categoria_torneo, es_invitado: !!yo.es_invitado }],
-        pagos: suyos.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado })),
+        pagos: suyos.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado, monto: p.monto, tasa_bcv_eur: p.tasa_bcv_eur })),
+          montoEur: i.monto_eur,
         soloSocios: torneo.solo_socios,
         invitadoAutorizado: !!i.invitado_autorizado_at,
       })

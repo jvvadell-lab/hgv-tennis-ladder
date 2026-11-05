@@ -28,7 +28,7 @@ export const MINIMO_PARA_SORTEAR = 3
 // validando después. Lo que sí impide sortear es lo que define quién puede
 // jugar: categoría oficial sin asignar o incompatible, menor sin certificar
 // o invitado sin autorizar. Esas se resuelven o se retiran antes.
-export const PENDIENTES_QUE_NO_BLOQUEAN_SORTEO: Pendiente['tipo'][] = ['pago', 'pago_por_validar']
+export const PENDIENTES_QUE_NO_BLOQUEAN_SORTEO: Pendiente['tipo'][] = ['pago', 'pago_por_validar', 'saldo']
 
 export function pendientesQueBloqueanSorteo<P extends { tipo: Pendiente['tipo'] }>(pendientes: P[]): P[] {
   return pendientes.filter((p) => !PENDIENTES_QUE_NO_BLOQUEAN_SORTEO.includes(p.tipo))

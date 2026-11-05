@@ -262,7 +262,9 @@ function MisRepresentados({ datos, onCambio, onEditar }: { datos: Datos; onCambi
 
           {(r.inscripciones || []).map((ins) => {
             const color = COLOR_ESTADO[ins.estado]
-            const pagoVivo = ins.pagos.length > 0
+            // Con saldo (el admin subió el monto después del pago) se reporta la diferencia.
+            const saldo = (ins.pendientes as { tipo: string; saldoEur?: number }[]).find((p) => p.tipo === 'saldo')?.saldoEur ?? null
+            const pagoVivo = ins.pagos.length > 0 && saldo === null
             return (
               <div key={ins.id} style={{ borderTop: '1px dashed #e2e2e2', marginTop: '10px', paddingTop: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -285,8 +287,8 @@ function MisRepresentados({ datos, onCambio, onEditar }: { datos: Datos; onCambi
                   pagandoId === ins.id ? (
                     <FormPagoTorneo
                       inscripcionId={ins.id}
-                      montoEur={ins.monto.monto_eur}
-                      etiquetaMonto={`(${ins.monto.ajuste ? 'monto ajustado por el admin' : ins.monto.motivo.toLowerCase()})`}
+                      montoEur={saldo ?? ins.monto.monto_eur}
+                      etiquetaMonto={saldo !== null ? '(diferencia que falta)' : `(${ins.monto.ajuste ? 'monto ajustado por el admin' : ins.monto.motivo.toLowerCase()})`}
                       onCancelar={() => setPagandoId(null)}
                       onListo={async () => {
                         setPagandoId(null)
@@ -294,7 +296,7 @@ function MisRepresentados({ datos, onCambio, onEditar }: { datos: Datos; onCambi
                       }}
                     />
                   ) : (
-                    <button onClick={() => setPagandoId(ins.id)} style={{ ...botonPrincipal(false), marginTop: '8px' }}>💳 Reportar el pago</button>
+                    <button onClick={() => setPagandoId(ins.id)} style={{ ...botonPrincipal(false), marginTop: '8px' }}>{saldo !== null ? '💳 Pagar la diferencia' : '💳 Reportar el pago'}</button>
                   )
                 )}
               </div>

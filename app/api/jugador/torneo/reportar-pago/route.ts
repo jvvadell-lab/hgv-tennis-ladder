@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { hoyEnCaracas } from '@/lib/tiempo'
 import { obtenerTasaVigente, tasaParaCalculo } from '@/lib/tasaBcv'
 import { torneoVigente } from '@/lib/torneoServidor'
-import { TIPOS_PAGO_TORNEO, montoInscripcionBs } from '@/lib/torneoInscripcion'
+import { TIPOS_PAGO_TORNEO, montoInscripcionBs, pendientePagoDe } from '@/lib/torneoInscripcion'
 
 // El jugador reporta el pago de su inscripción (y, en dobles, opcionalmente
 // también el de su pareja), o el de la inscripción de un menor que representa
@@ -63,14 +63,20 @@ export async function POST(request: Request) {
     const cubiertos = [session.id, ...(incluyePareja && parejaId ? [parejaId] : [])]
 
     // Un pago vivo (por validar o validado) por jugador e inscripción. Uno
-    // rechazado se borra, así que no estorba para volver a reportar.
+    // rechazado se borra, así que no estorba para volver a reportar. La
+    // excepción es el saldo: si el admin subió el monto después del pago, se
+    // reporta solo la diferencia.
     const { data: existentes, error: errExist } = await db
       .from('pagos')
-      .select('jugador_id, validado, jugadores:jugador_id(nombre)')
+      .select('jugador_id, validado, monto, tasa_bcv_eur, jugadores:jugador_id(nombre)')
       .eq('torneo_inscripcion_id', ins.id)
       .in('jugador_id', cubiertos)
     if (errExist) throw errExist
-    if (existentes?.length) {
+    const saldo = existentes?.length && !incluyePareja
+      ? pendientePagoDe(session.id, existentes.map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado, monto: p.monto, tasa_bcv_eur: p.tasa_bcv_eur })), ins.monto_eur)
+      : null
+    const montoEurAPagar = saldo?.tipo === 'saldo' ? saldo.saldoEur : Number(ins.monto_eur)
+    if (existentes?.length && saldo?.tipo !== 'saldo') {
       const yaPago = existentes[0]
       const quien = yaPago.jugador_id === session.id ? 'tuyo' : `de ${(yaPago.jugadores as any)?.nombre || 'tu pareja'}`
       return NextResponse.json({ error: `Ya hay un pago ${quien} reportado en esta inscripción${yaPago.validado ? ' (ya validado)' : ', pendiente de validación'}` }, { status: 400 })
@@ -79,7 +85,7 @@ export async function POST(request: Request) {
     const tasa = await obtenerTasaVigente(db, fechaPago)
     if (!tasa) return NextResponse.json({ error: 'No hay tasa BCV registrada para esa fecha. Avísale al administrador.' }, { status: 400 })
     const tasaEur = tasaParaCalculo(tasa.eur)
-    const monto = montoInscripcionBs(Number(ins.monto_eur), tasa.eur)
+    const monto = montoInscripcionBs(montoEurAPagar, tasa.eur)
 
     const { data: creados, error } = await db
       .from('pagos')

@@ -9,7 +9,7 @@
 
 import { diaDeLaSemanaEnCaracas, edadEnFecha, instanteEnCaracas, minutosDesdeMedianocheEnCaracas, fechaISOEnCaracas } from './tiempo'
 import { MAX_CATEGORIAS_POR_JUGADOR, CANCHAS_TORNEO, type CanchaTorneo, type EstadoInscripcion, type EstadoTorneo, type Torneo, type TorneoCategoria } from './torneo'
-import { categoriaAbierta, categoriaAntesDelSorteo, ERROR_CATEGORIA_CERRADA, type CalendarioCategoria, type Pendiente } from './torneoInscripcion'
+import { categoriaAbierta, categoriaAntesDelSorteo, ERROR_CATEGORIA_CERRADA, pendientePagoDe, type CalendarioCategoria, type PagoEstado, type Pendiente } from './torneoInscripcion'
 
 export const ETIQUETA_GENERO_MENOR: Record<string, string> = {
   caballeros: 'Niño',
@@ -192,7 +192,8 @@ export type DatosEstadoInscripcionMenor = {
   menorId: string
   representanteJugadorId: string
   certificada: boolean
-  pagos: { jugador_id: string; validado: boolean }[]
+  pagos: PagoEstado[]
+  montoEur?: number | string | null  // con él se calcula el saldo (lib/torneoInscripcion.ts)
   // Torneo solo para socios: un menor sin N.º de acción entra como invitado
   // / wild card con la autorización del admin.
   soloSocios: boolean
@@ -202,10 +203,8 @@ export type DatosEstadoInscripcionMenor = {
 
 export function pendientesInscripcionMenor(d: DatosEstadoInscripcionMenor): Pendiente[] {
   const pendientes: Pendiente[] = []
-  const suyos = d.pagos.filter((p) => p.jugador_id === d.representanteJugadorId)
-  if (!suyos.some((p) => p.validado)) {
-    pendientes.push({ tipo: suyos.length ? 'pago_por_validar' : 'pago', jugadorId: d.representanteJugadorId })
-  }
+  const pago = pendientePagoDe(d.representanteJugadorId, d.pagos, d.montoEur)
+  if (pago) pendientes.push(pago)
   if (!d.certificada) pendientes.push({ tipo: 'categoria_por_certificar', jugadorId: d.menorId })
   if (d.soloSocios && !d.menorConAccion && !d.invitadoAutorizado) pendientes.push({ tipo: 'invitado_por_autorizar', jugadorId: d.menorId })
   return pendientes

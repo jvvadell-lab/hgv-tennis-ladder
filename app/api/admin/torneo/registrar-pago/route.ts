@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { hoyEnCaracas } from '@/lib/tiempo'
 import { obtenerTasaVigente, tasaParaCalculo } from '@/lib/tasaBcv'
 import { avisarInscripcionConfirmada, escaparHtml, notificarJugadores, recalcularInscripcion, torneoVigente } from '@/lib/torneoServidor'
-import { montoInscripcionBs } from '@/lib/torneoInscripcion'
+import { montoInscripcionBs, pendientePagoDe } from '@/lib/torneoInscripcion'
 
 // El admin registra el pago de inscripción de un jugador (o del
 // representante de un menor) que pagó por fuera de la app. Mismo cálculo
@@ -20,7 +20,8 @@ type Pendiente = {
   nombre: string            // jugador, o el menor
   categoria: string
   categoriaOrden: number
-  montoEur: number
+  montoEur: number          // lo que falta: el monto, o el saldo
+  esSaldo: boolean
 }
 
 // GET: inscripciones vivas del torneo vigente con alguien que todavía no
@@ -44,16 +45,19 @@ export async function GET() {
 
     const ids = (inscripciones || []).map((i: any) => i.id)
     const { data: pagos, error: errP } = ids.length
-      ? await db.from('pagos').select('torneo_inscripcion_id, jugador_id').in('torneo_inscripcion_id', ids)
+      ? await db.from('pagos').select('torneo_inscripcion_id, jugador_id, validado, monto, tasa_bcv_eur').in('torneo_inscripcion_id', ids)
       : { data: [] as any[], error: null }
     if (errP) throw errP
-    const conPago = new Set((pagos || []).map((p: any) => `${p.torneo_inscripcion_id}:${p.jugador_id}`))
 
     const pendientes: Pendiente[] = []
     for (const i of (inscripciones || []) as any[]) {
       const menor = i.torneo_menores
       const pagadorId: string | null = menor ? menor.representante_jugador_id : i.jugador1_id
-      if (!pagadorId || conPago.has(`${i.id}:${pagadorId}`)) continue
+      if (!pagadorId) continue
+      // Sin pago, o con saldo (el monto subió después de pagar).
+      const suyos = (pagos || []).filter((p: any) => p.torneo_inscripcion_id === i.id).map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado, monto: p.monto, tasa_bcv_eur: p.tasa_bcv_eur }))
+      const falta = pendientePagoDe(pagadorId, suyos, i.monto_eur)
+      if (falta?.tipo !== 'pago' && falta?.tipo !== 'saldo') continue
       pendientes.push({
         inscripcionId: i.id,
         pagadorId,
@@ -61,7 +65,8 @@ export async function GET() {
         nombre: menor ? `${menor.nombre} ${menor.apellido}` : i.jugadores?.nombre || '—',
         categoria: i.torneo_categorias?.nombre || '',
         categoriaOrden: i.torneo_categorias?.orden ?? 0,
-        montoEur: Number(i.monto_eur),
+        montoEur: falta.tipo === 'saldo' ? falta.saldoEur : Number(i.monto_eur),
+        esSaldo: falta.tipo === 'saldo',
       })
     }
     pendientes.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
@@ -107,21 +112,24 @@ export async function POST(request: Request) {
     const pagadorId: string | null = (ins.torneo_menores as any)?.representante_jugador_id ?? ins.jugador1_id
     if (!pagadorId) return NextResponse.json({ error: 'La inscripción no tiene a quién cargarle el pago' }, { status: 400 })
 
-    const { data: existente, error: errEx } = await db
+    const { data: existentes, error: errEx } = await db
       .from('pagos')
-      .select('numero_recibo, validado')
+      .select('numero_recibo, validado, jugador_id, monto, tasa_bcv_eur')
       .eq('torneo_inscripcion_id', ins.id)
       .eq('jugador_id', pagadorId)
-      .maybeSingle()
     if (errEx) throw errEx
-    if (existente) {
-      return NextResponse.json({ error: `Ya hay un pago en esta inscripción (recibo #${existente.numero_recibo}${existente.validado ? ', validado' : ', por validar: valídalo en la lista'})` }, { status: 400 })
+    // Sin pago, o con saldo pendiente (el monto subió después de pagar).
+    const falta = pendientePagoDe(pagadorId, (existentes || []).map((p: any) => ({ jugador_id: p.jugador_id, validado: !!p.validado, monto: p.monto, tasa_bcv_eur: p.tasa_bcv_eur })), ins.monto_eur)
+    if (falta?.tipo !== 'pago' && falta?.tipo !== 'saldo') {
+      const e = (existentes || [])[0]
+      return NextResponse.json({ error: e ? `Ya hay un pago en esta inscripción (recibo #${e.numero_recibo}${e.validado ? ', validado' : ', por validar: valídalo en la lista'})` : 'Esta inscripción no tiene pago pendiente' }, { status: 400 })
     }
+    const montoEurAPagar = falta.tipo === 'saldo' ? falta.saldoEur : Number(ins.monto_eur)
 
     const tasa = await obtenerTasaVigente(db, fechaPago)
     if (!tasa) return NextResponse.json({ error: 'No hay tasa BCV registrada para esa fecha' }, { status: 400 })
     const tasaEur = tasaParaCalculo(tasa.eur)
-    const calculado = montoInscripcionBs(Number(ins.monto_eur), tasa.eur)
+    const calculado = montoInscripcionBs(montoEurAPagar, tasa.eur)
     const elegido = montoBs === undefined || montoBs === null || montoBs === '' ? calculado : Number(montoBs)
     if (!Number.isFinite(elegido) || elegido <= 0) return NextResponse.json({ error: 'El monto en Bs. no es válido' }, { status: 400 })
     const monto = Math.round(elegido * 100) / 100

@@ -232,7 +232,7 @@ export default function PagosTorneo({ onCambio }: { onCambio?: (porValidar: numb
 
 // Formulario del admin para registrar un pago hecho por fuera de la app
 // (/api/admin/torneo/registrar-pago): queda validado de una vez.
-type PendientePago = { inscripcionId: string; pagadorNombre: string; nombre: string; categoria: string; montoEur: number }
+type PendientePago = { inscripcionId: string; pagadorNombre: string; nombre: string; categoria: string; montoEur: number; esSaldo?: boolean }
 
 const campo: React.CSSProperties = { padding: '8px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '14px', width: '100%', boxSizing: 'border-box' }
 const etiqueta: React.CSSProperties = { display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#555', marginBottom: '4px' }
@@ -295,13 +295,13 @@ function RegistrarPago({ onCancelar, onListo }: { onCancelar: () => void; onList
       {pendientes && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={etiqueta} htmlFor="rp-buscar">Inscripción sin pago</label>
+            <label style={etiqueta} htmlFor="rp-buscar">Inscripción sin pago o con diferencia</label>
             <input id="rp-buscar" type="search" placeholder="Buscar por nombre o categoría…" value={buscar} onChange={(e) => setBuscar(e.target.value)} style={{ ...campo, marginBottom: '6px' }} />
             <select aria-label="Inscripción" value={inscripcionId} onChange={(e) => setInscripcionId(e.target.value)} style={campo}>
               <option value="">— Elige ({visibles.length}) —</option>
               {visibles.map((p) => (
                 <option key={p.inscripcionId} value={p.inscripcionId}>
-                  {p.nombre} · {p.categoria}{p.pagadorNombre !== p.nombre ? ` · paga ${p.pagadorNombre}` : ''} · {formatearEur(p.montoEur)}
+                  {p.nombre} · {p.categoria}{p.pagadorNombre !== p.nombre ? ` · paga ${p.pagadorNombre}` : ''} · {p.esSaldo ? `diferencia ${formatearEur(p.montoEur)}` : formatearEur(p.montoEur)}
                 </option>
               ))}
             </select>
