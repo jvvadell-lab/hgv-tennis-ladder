@@ -65,7 +65,7 @@ export type MenorConRepresentante = {
 export async function recalcularInscripcion(db: SupabaseClient, inscripcionId: string): Promise<ResultadoRecalculo> {
   const { data: ins, error } = await db
     .from('torneo_inscripciones')
-    .select('id, estado, jugador1_id, jugador2_id, menor_id, monto_eur, categoria_certificada_at, invitado_autorizado_at, torneo_categorias:categoria_id(nombre, categoria_nivel, torneos:torneo_id(nombre, solo_socios))')
+    .select('id, estado, jugador1_id, jugador2_id, menor_id, monto_eur, nivel_autorizado_at, categoria_certificada_at, invitado_autorizado_at, torneo_categorias:categoria_id(nombre, categoria_nivel, torneos:torneo_id(nombre, solo_socios))')
     .eq('id', inscripcionId)
     .single()
   if (error) throw error
@@ -89,6 +89,7 @@ export async function recalcularInscripcion(db: SupabaseClient, inscripcionId: s
     soloSocios: !!categoria.torneos.solo_socios,
     invitadoAutorizado: !!ins.invitado_autorizado_at,
     montoEur: (ins as any).monto_eur,
+    nivelAutorizado: !!(ins as any).nivel_autorizado_at,
   }
   const despues = estadoInscripcionCalculado(datos)
   if (despues !== ins.estado) {

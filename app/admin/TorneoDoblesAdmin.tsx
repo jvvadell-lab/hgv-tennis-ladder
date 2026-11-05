@@ -136,7 +136,9 @@ type InscripcionGestion = { id: string; categoria_id: string; estado: string; no
 
 // Armar una dupla con cualquier jugador del club (inscrito o no): el sistema
 // inscribe a los que falten y solo les queda pagar.
-type CandidatoArmar = { id: string; nombre: string; estado: 'disponible' | 'invitacion_enviada' | 'no_inscrito'; esInvitado: boolean; seleccionable: boolean; motivo: string | null }
+type CandidatoArmar = { id: string; nombre: string; estado: 'disponible' | 'invitacion_enviada' | 'no_inscrito'; esInvitado: boolean; seleccionable: boolean; motivo: string | null; fueraDeNivel?: boolean; nivel?: string | null }
+const ETIQUETA_NIVEL_CANDIDATO: Record<string, string> = { sexta_novatos: 'Sexta Novato', sexta: 'Sexta', quinta: 'Quinta', cuarta: 'Cuarta' }
+
 const ETIQUETA_CANDIDATO: Record<CandidatoArmar['estado'], string> = {
   disponible: 'inscrito, sin pareja',
   invitacion_enviada: 'inscrito, esperando respuesta',
@@ -212,7 +214,7 @@ function ArmarDuplaJugadores({ categoria, ocupado, accion }: {
                   cursor: c.seleccionable ? 'pointer' : 'not-allowed', fontWeight: sel ? 'bold' : 'normal',
                 }}
               >
-                {sel ? '✓ ' : ''}{c.nombre}{c.esInvitado ? ' (invitado)' : ''} — {c.seleccionable ? ETIQUETA_CANDIDATO[c.estado] : c.motivo}
+                {sel ? '✓ ' : ''}{c.nombre}{c.esInvitado ? ' (invitado)' : ''} — {c.seleccionable ? ETIQUETA_CANDIDATO[c.estado] : c.motivo}{c.fueraDeNivel && c.seleccionable ? ` · ⚠️ es ${ETIQUETA_NIVEL_CANDIDATO[c.nivel ?? ''] || c.nivel || 'sin categoría'}: juega con tu autorización` : ''}
               </button>
             )
           })}
@@ -225,6 +227,7 @@ function ArmarDuplaJugadores({ categoria, ocupado, accion }: {
   const resumen = listo ? [elegido(a), elegido(b)].filter(Boolean) as CandidatoArmar[] : []
   const nuevos = resumen.filter((c) => c.estado === 'no_inscrito')
   const invitados = resumen.filter((c) => c.esInvitado)
+  const otroNivel = resumen.filter((c) => c.fueraDeNivel)
 
   return (
     <div style={{ marginTop: '10px', borderTop: '1px solid #e5e5e5', paddingTop: '8px' }}>
@@ -247,6 +250,7 @@ function ArmarDuplaJugadores({ categoria, ocupado, accion }: {
               Dupla: <strong>{nombreDe(a)} / {nombreDe(b)}</strong>
               {nuevos.length > 0 && <> · se inscribe a {nuevos.map((c) => c.nombre).join(' y ')}</>}
               {invitados.length > 0 && <> · autoriza como invitado a {invitados.map((c) => c.nombre).join(' y ')}</>}
+              {otroNivel.length > 0 && <> · autoriza a {otroNivel.map((c) => c.nombre).join(' y ')} a jugar esta categoría (su categoría oficial no cambia)</>}
             </p>
           )}
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
@@ -256,6 +260,7 @@ function ArmarDuplaJugadores({ categoria, ocupado, accion }: {
                 const texto = `¿Armar la dupla ${nombreDe(a)} / ${nombreDe(b)} en ${categoria.nombre}?` +
                   (nuevos.length ? `\n\nSe inscribe a ${nuevos.map((c) => c.nombre).join(' y ')}.` : '') +
                   (invitados.length ? `\nCuenta como autorización de invitado de ${invitados.map((c) => c.nombre).join(' y ')}.` : '') +
+                  (otroNivel.length ? `\nAutorizas a ${otroNivel.map((c) => c.nombre).join(' y ')} a jugar ${categoria.nombre} aunque su categoría oficial no corresponda (no se le cambia).` : '') +
                   '\n\nSe les avisa por la app y por correo para que reporten su pago.'
                 if (!confirm(texto)) return
                 if (await accion('armar-jugadores', 'duplas', { accion: 'armar_jugadores', categoriaId: categoria.id, jugadorIds: [a, b] }, `Dupla armada: ${nombreDe(a)} / ${nombreDe(b)}`)) {

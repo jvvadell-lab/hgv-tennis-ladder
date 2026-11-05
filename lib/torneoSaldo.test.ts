@@ -48,3 +48,17 @@ describe('la inscripción no se confirma con saldo', () => {
     expect(estadoInscripcionCalculado({ ...datos, pagos: [pago(15, true), pago(5, true)], montoEur: 20 })).toBe('confirmada')
   })
 })
+
+describe('autorización de nivel del admin', () => {
+  const base = {
+    estado: 'pendiente_pago' as const, nivelCategoria: 'sexta' as const, soloSocios: true, invitadoAutorizado: false,
+    jugadores: [{ id: 'q', categoria_torneo: 'quinta', es_invitado: false }],
+    pagos: [{ jugador_id: 'q', validado: true }],
+  }
+  it('un Quinta en Sexta sin autorización: categoría incompatible', () => {
+    expect(pendientesInscripcion(base).map((p) => p.tipo)).toEqual(['categoria_incompatible'])
+  })
+  it('con la autorización del admin: confirmada, sin tocar su categoría', () => {
+    expect(estadoInscripcionCalculado({ ...base, nivelAutorizado: true })).toBe('confirmada')
+  })
+})

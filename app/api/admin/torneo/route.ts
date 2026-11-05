@@ -37,7 +37,7 @@ export async function GET() {
     const { data: inscripciones, error: errIns } = categoriaIds.length
       ? await db
           .from('torneo_inscripciones')
-          .select('id, categoria_id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, categoria_certificada_at, invitado_autorizado_at, devolucion_marcada_at, estado, inscrita_por, inscrita_por_admin, created_at, monto_eur, monto_calculado_eur, monto_motivo, monto_ajuste_nota, monto_ajustado_at')
+          .select('id, categoria_id, jugador1_id, jugador2_id, menor_id, menor_nombre_publico, categoria_certificada_at, invitado_autorizado_at, devolucion_marcada_at, estado, inscrita_por, inscrita_por_admin, created_at, monto_eur, monto_calculado_eur, monto_motivo, monto_ajuste_nota, monto_ajustado_at, nivel_autorizado_at')
           .in('categoria_id', categoriaIds)
           .order('created_at')
       : { data: [], error: null }
@@ -139,6 +139,7 @@ export async function GET() {
           montoEur: i.monto_eur,
         soloSocios: torneo.solo_socios,
         invitadoAutorizado: !!i.invitado_autorizado_at,
+        nivelAutorizado: !!i.nivel_autorizado_at,
       })
       return {
         ...i,

@@ -7,9 +7,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ahora } from '@/lib/tiempo'
-import type { Torneo, TorneoCategoria } from '@/lib/torneo'
+import type { Nivel, Torneo, TorneoCategoria } from '@/lib/torneo'
 import { candidatosArmarAdmin, errorDupla, normalizarTelefonoVe, telefonoLegible, venceInvitacion, type CandidatoAdmin, type EstadoEnDobles, type JugadorDobles } from '@/lib/torneoDobles'
-import { categoriaAbierta, mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
+import { categoriaAbierta, errorGeneros, mensajeErrorBaseInscripcion, nivelAdmitido, nivelParaTorneo } from '@/lib/torneoInscripcion'
 import { avisarInscripcionConfirmada, escaparHtml, notificarJugadores, recalcularInscripcion } from '@/lib/torneoServidor'
 import { textoMontoCorto } from '@/lib/torneoPrecios'
 
@@ -423,8 +423,11 @@ export async function armarDuplaAdmin(db: SupabaseClient, torneo: Torneo, inscri
   if (categoria.sorteo_publicado_at) return { ok: false, error: `${categoria.nombre} ya se sorteó` }
   const jugadores = await leerJugadores(db, ins!.map((i) => i.jugador1_id))
   const [a, b] = inscripcionIds.map((id) => jugadores.get(ins!.find((i) => i.id === id)!.jugador1_id)!)
-  const err = errorDupla(categoria, a, b)
-  if (err) return { ok: false, error: err }
+  // El admin arma aunque uno sea de otro nivel: queda autorizado a jugar esta
+  // categoría (nivel_autorizado_*), sin cambiar su categoría oficial.
+  const errGenero = errorGeneros(categoria.genero, [a.genero, b.genero])
+  if (errGenero) return { ok: false, error: errGenero }
+  const fueraDeNivel = ins!.filter((i) => !nivelAdmitido(categoria.categoria_nivel as Nivel | null, nivelParaTorneo(jugadores.get(i.jugador1_id)!))).map((i) => i.id)
 
   const { data: equipo, error: errE } = await db
     .from('torneo_equipos')
@@ -432,6 +435,13 @@ export async function armarDuplaAdmin(db: SupabaseClient, torneo: Torneo, inscri
     .select('id')
     .single()
   if (errE) return { ok: false, error: mensajeErrorBaseInscripcion(errE.message) ?? errE.message }
+  if (fueraDeNivel.length) {
+    await db.from('torneo_inscripciones')
+      .update({ nivel_autorizado_por: adminId, nivel_autorizado_at: ahora().toISOString() })
+      .in('id', fueraDeNivel)
+      .is('nivel_autorizado_at', null)
+    for (const id of fueraDeNivel) await recalcularInscripcion(db, id).catch((e) => console.error('[torneo] recalcular', id, e.message))
+  }
 
   await cancelarInvitacionesDe(db, inscripcionIds, 'El admin armó la dupla')
   await notificarJugadores(db, [a.id, b.id], {
@@ -528,8 +538,11 @@ export async function armarDuplaAdminConJugadores(
   const [a, b] = jugadorIds.map((id) => jugadores.get(id))
   if (!a || !b) return { ok: false, error: 'No encontramos a uno de los jugadores' }
   for (const x of [a, b]) if (!puedeJugar(x)) return { ok: false, error: `${x.nombre} no está activo en el club` }
-  const err = errorDupla(categoria, a, b)
-  if (err) return { ok: false, error: err }
+  // El admin puede armar con un jugador de otro nivel: queda autorizado a
+  // jugar ESTA categoría (nivel_autorizado_*), sin cambiar su categoría oficial.
+  const errGenero = errorGeneros(categoria.genero, [a.genero, b.genero])
+  if (errGenero) return { ok: false, error: errGenero }
+  const fueraDeNivel = new Set([a, b].filter((x) => !nivelAdmitido(categoria.categoria_nivel as Nivel | null, nivelParaTorneo(x))).map((x) => x.id))
 
   const { estado, inscripcionDeJugador } = await estadoDeCategoria(db, categoriaId)
   for (const x of [a, b]) if (estado.get(x.id) === 'en_dupla') return { ok: false, error: `${x.nombre} ya tiene dupla en ${categoria.nombre}` }
@@ -555,6 +568,7 @@ export async function armarDuplaAdminConJugadores(
         jugador1_id: x.id,
         inscrita_por_admin: adminId,
         ...(esInvitado.has(x.id) ? { invitado_autorizado_por: adminId, invitado_autorizado_at: momento } : {}),
+        ...(fueraDeNivel.has(x.id) ? { nivel_autorizado_por: adminId, nivel_autorizado_at: momento } : {}),
       })
       .select('id')
       .single()
@@ -583,6 +597,15 @@ export async function armarDuplaAdminConJugadores(
       .update({ invitado_autorizado_por: adminId, invitado_autorizado_at: momento })
       .in('id', yaInscritosInvitados)
       .is('invitado_autorizado_at', null)
+  }
+
+  // Ya inscritos de otro nivel: armar la dupla cuenta como su autorización.
+  const yaInscritosFueraDeNivel = [a, b].filter((x) => fueraDeNivel.has(x.id) && !creadas.includes(inscripcionIds[[a, b].indexOf(x)])).map((x) => inscripcionIds[[a, b].indexOf(x)])
+  if (yaInscritosFueraDeNivel.length) {
+    await db.from('torneo_inscripciones')
+      .update({ nivel_autorizado_por: adminId, nivel_autorizado_at: momento })
+      .in('id', yaInscritosFueraDeNivel)
+      .is('nivel_autorizado_at', null)
   }
 
   await cancelarInvitacionesDe(db, inscripcionIds, 'El admin armó la dupla')

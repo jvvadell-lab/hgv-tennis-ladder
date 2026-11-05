@@ -54,7 +54,7 @@ export async function GET() {
       categoriaIds.length
         ? db
             .from('torneo_inscripciones')
-            .select('id, categoria_id, jugador1_id, estado, invitado_autorizado_at, created_at, monto_eur, monto_motivo, monto_ajuste_nota')
+            .select('id, categoria_id, jugador1_id, estado, invitado_autorizado_at, created_at, monto_eur, monto_motivo, monto_ajuste_nota, nivel_autorizado_at')
             .in('categoria_id', categoriaIds)
             .neq('estado', 'retirada')
         : Promise.resolve({ data: [] as any[], error: null }),
@@ -127,6 +127,7 @@ export async function GET() {
           montoEur: i.monto_eur,
         soloSocios: torneo.solo_socios,
         invitadoAutorizado: !!i.invitado_autorizado_at,
+        nivelAutorizado: !!i.nivel_autorizado_at,
       })
       const pareja = categoria.modalidad === 'doble' ? parejaDe(i.id) : null
       const enviada = pendientesVigentes.find((v) => v.invita_inscripcion_id === i.id) ?? null

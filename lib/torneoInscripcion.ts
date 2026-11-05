@@ -255,6 +255,9 @@ export type DatosEstadoInscripcion = {
   soloSocios: boolean
   invitadoAutorizado: boolean   // torneo_inscripciones.invitado_autorizado_at
   montoEur?: number | string | null  // torneo_inscripciones.monto_eur: con él se calcula el saldo
+  // El admin autorizó jugar esta categoría aunque la categoría oficial no
+  // corresponda (torneo_inscripciones.nivel_autorizado_at).
+  nivelAutorizado?: boolean
 }
 
 export function pendientesInscripcion(d: DatosEstadoInscripcion): Pendiente[] {
@@ -262,7 +265,8 @@ export function pendientesInscripcion(d: DatosEstadoInscripcion): Pendiente[] {
   for (const j of d.jugadores) {
     const pago = pendientePagoDe(j.id, d.pagos, d.montoEur)
     if (pago) pendientes.push(pago)
-    if (!j.categoria_torneo) pendientes.push({ tipo: 'categoria', jugadorId: j.id })
+    if (d.nivelAutorizado) { /* el admin aprobó que juegue esta categoría */ }
+    else if (!j.categoria_torneo) pendientes.push({ tipo: 'categoria', jugadorId: j.id })
     else if (!nivelAdmitido(d.nivelCategoria, j.categoria_torneo)) pendientes.push({ tipo: 'categoria_incompatible', jugadorId: j.id })
     if (d.soloSocios && j.es_invitado && !d.invitadoAutorizado) pendientes.push({ tipo: 'invitado_por_autorizar', jugadorId: j.id })
   }
