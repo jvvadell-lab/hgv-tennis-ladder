@@ -288,8 +288,10 @@ export function candidatosArmarAdmin(d: {
       nombre: j.nombre,
       estado: inscrito ? estado! : 'no_inscrito',
       esInvitado: !!j.esInvitado,
-      seleccionable: !sinCupoPropio,
-      motivo: sinCupoPropio ? `ya está en ${MAX_CATEGORIAS_POR_JUGADOR} categorías` : null,
+      // El admin puede inscribirlo en una categoría más con su autorización
+      // (el trigger solo limita lo que hace el jugador).
+      seleccionable: true,
+      motivo: sinCupoPropio ? `ya está en ${MAX_CATEGORIAS_POR_JUGADOR} categorías: esta sería una más, con tu autorización` : null,
       fueraDeNivel,
       nivel: nivelParaTorneo(j),
     })
