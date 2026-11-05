@@ -187,6 +187,34 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   }, [])
 
   // POST a una ruta del torneo, con mensaje y recarga.
+  // Recordatorio de pago por correo y campana (/api/admin/torneo/recordar-pago).
+  const sinPago = (i: Inscripcion) => i.estado === 'pendiente_pago' && i.pendientes.some((p) => p.tipo === 'pago' || p.tipo === 'saldo')
+  const recordarPago = async (clave: string, inscripcionIds: string[], quien: string) => {
+    if (!confirm(`¿Enviar un recordatorio de pago (correo y campana) a ${quien}?`)) return
+    setOcupado(clave)
+    setMensaje('')
+    setError('')
+    try {
+      const res = await fetch('/api/admin/torneo/recordar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inscripcionIds }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo enviar el recordatorio')
+      const enviados: string[] = data.enviados || []
+      const omitidos: { nombre: string; motivo: string }[] = data.omitidos || []
+      setMensaje(
+        (enviados.length ? `📧 Recordatorio enviado a ${enviados.length}: ${enviados.join(', ')}.` : '📧 No se envió ningún recordatorio.') +
+        (omitidos.length ? ` Sin enviar: ${omitidos.map((o) => `${o.nombre} (${o.motivo})`).join(', ')}.` : '')
+      )
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setOcupado(null)
+    }
+  }
+
   const accion = async (clave: string, ruta: string, body: object, exito: string): Promise<boolean> => {
     setOcupado(clave)
     setMensaje('')
@@ -366,6 +394,18 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     : <>Single · {nivel} · cupo {lista.filter((i) => i.estado !== 'retirada').length}/{c.cupo}</>}
                   {c.sorteo_publicado_at && <> · 🎲 sorteada</>}
                 </p>
+                {(() => {
+                  const faltan = lista.filter(sinPago)
+                  return faltan.length > 0 ? (
+                    <button
+                      disabled={ocupado === `recordar-cat-${c.id}`}
+                      onClick={() => recordarPago(`recordar-cat-${c.id}`, faltan.map((i) => i.id), `los ${faltan.length} de ${c.nombre} que no han pagado`)}
+                      style={{ ...boton('#8a5a00'), margin: '2px 0 4px 0' }}
+                    >
+                      {ocupado === `recordar-cat-${c.id}` ? 'Enviando…' : `📧 Recordar pago a los ${faltan.length} que no han pagado`}
+                    </button>
+                  ) : null
+                })()}
                 {c.fecha_inicio && c.fecha_fin && (
                   <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#1c7ec4', fontWeight: 'bold' }}>
                     🗓️ Calendario propio: inscripción hasta el {c.cierre_inscripciones_at ? formatearFechaHora(c.cierre_inscripciones_at) : '—'} · juegos del {fechaDia(c.fecha_inicio)} al {fechaDia(c.fecha_fin)}
@@ -410,6 +450,16 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                     <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '3px 10px', borderRadius: '999px', background: COLOR_ESTADO[ins.estado].fondo, color: COLOR_ESTADO[ins.estado].texto }}>
                       {ins.estado === 'pendiente_pago' ? 'Pendiente' : ETIQUETA_ESTADO_INSCRIPCION[ins.estado]}
                     </span>
+                    {sinPago(ins) && (
+                      <button
+                        disabled={ocupado === `recordar-${ins.id}`}
+                        onClick={() => recordarPago(`recordar-${ins.id}`, [ins.id], nombreInscripcion(ins))}
+                        title="Envía un correo y un aviso en la campana recordando el pago"
+                        style={boton('#8a5a00')}
+                      >
+                        {ocupado === `recordar-${ins.id}` ? 'Enviando…' : '📧 Recordar pago'}
+                      </button>
+                    )}
                     {esAdminCompleto && ins.estado !== 'retirada' && categoriaAntesDelSorteo(torneo.estado, c) && (
                       <button
                         disabled={ocupado === `retirar-${ins.id}`}
