@@ -57,7 +57,7 @@ type MiInscripcion = {
     enviada: { id: string; nombre: string; telefono: string | null; vence_at: string } | null
     candidatos: CandidatoPareja[]
   } | null
-  pendientes: { tipo: string; jugadorId: string; texto: string }[]
+  pendientes: { tipo: string; jugadorId: string; texto: string; saldoEur?: number }[]
   pagos: { id: string; numero_recibo: number; jugador_id: string; jugador_nombre: string; tipo_pago: string; monto: number; fecha: string; referencia: string | null; validado: boolean }[]
 }
 
@@ -224,7 +224,9 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
       <h2 style={tituloSeccion}>Mis inscripciones</h2>
       {datos.misInscripciones.map((ins) => {
         const color = COLOR_ESTADO[ins.estado]
-        const pagoMioVivo = ins.pagos.some((p) => p.jugador_id === datos.yo.id)
+        // Con saldo (el admin subió el monto después del pago) se reporta la diferencia.
+        const saldo = ins.pendientes.find((p) => p.tipo === 'saldo' && p.jugadorId === datos.yo.id)?.saldoEur ?? null
+        const pagoMioVivo = ins.pagos.some((p) => p.jugador_id === datos.yo.id) && saldo === null
         return (
           <div key={ins.id} style={{ background: 'white', border: '1px solid rgba(15,27,38,0.12)', borderRadius: '6px', padding: '14px 16px', marginBottom: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -255,8 +257,8 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
               pagandoId === ins.id ? (
                 <FormPagoTorneo
                   inscripcionId={ins.id}
-                  montoEur={ins.monto.monto_eur}
-                  etiquetaMonto={`(${ins.monto.ajuste ? 'monto ajustado por el admin' : ins.monto.motivo.toLowerCase()})`}
+                  montoEur={saldo ?? ins.monto.monto_eur}
+                  etiquetaMonto={saldo !== null ? '(diferencia que falta)' : `(${ins.monto.ajuste ? 'monto ajustado por el admin' : ins.monto.motivo.toLowerCase()})`}
                   parejaNombre={null}
                   onCancelar={() => setPagandoId(null)}
                   onListo={async () => {
@@ -265,7 +267,7 @@ function MisInscripciones({ datos, onCambio }: { datos: Datos; onCambio: () => P
                   }}
                 />
               ) : (
-                <button onClick={() => setPagandoId(ins.id)} style={{ ...botonPrincipal(false), marginTop: '12px' }}>💳 Reportar mi pago</button>
+                <button onClick={() => setPagandoId(ins.id)} style={{ ...botonPrincipal(false), marginTop: '12px' }}>{saldo !== null ? '💳 Pagar la diferencia' : '💳 Reportar mi pago'}</button>
               )
             )}
           </div>
