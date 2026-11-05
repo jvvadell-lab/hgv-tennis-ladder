@@ -22,7 +22,7 @@ describe('candidatosArmarAdmin', () => {
     expect(r[0].fueraDeNivel).toBe(false)
   })
 
-  it('un no inscrito con 2 categorías no se puede elegir; uno ya inscrito sí', () => {
+  it('un no inscrito con 2 categorías se puede elegir con aviso (el admin autoriza una más)', () => {
     const r = candidatosArmarAdmin({
       categoria: masc,
       jugadores: [j('a', 'caballeros'), j('b', 'caballeros')],
@@ -31,10 +31,10 @@ describe('candidatosArmarAdmin', () => {
     })
     const a = r.find((c) => c.id === 'a')!
     const b = r.find((c) => c.id === 'b')!
-    expect(a.seleccionable).toBe(false)
+    expect(a.seleccionable).toBe(true)
     expect(a.motivo).toMatch(/2 categorías/)
     expect(b.seleccionable).toBe(true)
-    expect(r[r.length - 1].id).toBe('a') // los no elegibles van al final
+    expect(b.motivo).toBeNull()
   })
 
   it('en el Mixto admite los dos géneros y errorDupla exige uno de cada uno', () => {

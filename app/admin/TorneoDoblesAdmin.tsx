@@ -214,7 +214,7 @@ function ArmarDuplaJugadores({ categoria, ocupado, accion }: {
                   cursor: c.seleccionable ? 'pointer' : 'not-allowed', fontWeight: sel ? 'bold' : 'normal',
                 }}
               >
-                {sel ? '✓ ' : ''}{c.nombre}{c.esInvitado ? ' (invitado)' : ''} — {c.seleccionable ? ETIQUETA_CANDIDATO[c.estado] : c.motivo}{c.fueraDeNivel && c.seleccionable ? ` · ⚠️ es ${ETIQUETA_NIVEL_CANDIDATO[c.nivel ?? ''] || c.nivel || 'sin categoría'}: juega con tu autorización` : ''}
+                {sel ? '✓ ' : ''}{c.nombre}{c.esInvitado ? ' (invitado)' : ''} — {c.seleccionable ? ETIQUETA_CANDIDATO[c.estado] : c.motivo}{c.seleccionable && c.motivo ? ` · ⚠️ ${c.motivo}` : ''}{c.fueraDeNivel && c.seleccionable ? ` · ⚠️ es ${ETIQUETA_NIVEL_CANDIDATO[c.nivel ?? ''] || c.nivel || 'sin categoría'}: juega con tu autorización` : ''}
               </button>
             )
           })}
