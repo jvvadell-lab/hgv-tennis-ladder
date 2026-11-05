@@ -36,7 +36,7 @@ export async function resumenTorneo(db: SupabaseClient, torneo: Torneo): Promise
   const [{ data: ins, error: errI }, { data: equipos, error: errE }, { data: invs, error: errV }] = await Promise.all([
     ids.length
       ? db.from('torneo_inscripciones')
-          .select('id, categoria_id, estado, jugador1_id, menor_id, categoria_certificada_at, invitado_autorizado_at, torneo_menores(numero_accion)')
+          .select('id, categoria_id, estado, jugador1_id, menor_id, categoria_certificada_at, invitado_autorizado_at, nivel_autorizado_at, torneo_menores(numero_accion)')
           .in('categoria_id', ids).neq('estado', 'retirada')
       : Promise.resolve({ data: [] as any[], error: null }),
     ids.length ? db.from('torneo_equipos').select('id, categoria_id, inscripcion1_id, inscripcion2_id').in('categoria_id', ids).eq('estado', 'activo') : Promise.resolve({ data: [] as any[], error: null }),
@@ -68,7 +68,7 @@ export async function resumenTorneo(db: SupabaseClient, torneo: Torneo): Promise
       : pendientesInscripcion({
           estado: i.estado as EstadoInscripcion, nivelCategoria: catPorId.get(i.categoria_id)!.categoria_nivel as Nivel | null, pagos: [],
           jugadores: [{ id: i.jugador1_id, categoria_torneo: jug.get(i.jugador1_id)?.categoria_torneo ?? null, es_invitado: !!jug.get(i.jugador1_id)?.es_invitado }],
-          soloSocios: torneo.solo_socios, invitadoAutorizado: !!i.invitado_autorizado_at,
+          soloSocios: torneo.solo_socios, invitadoAutorizado: !!i.invitado_autorizado_at, nivelAutorizado: !!i.nivel_autorizado_at,
         })
     if (pendientesQueBloqueanSorteo(p).length) bloqueada.add(i.id)
   }

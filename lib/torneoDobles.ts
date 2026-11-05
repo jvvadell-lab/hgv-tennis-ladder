@@ -257,6 +257,11 @@ export type CandidatoAdmin = {
   esInvitado: boolean
   seleccionable: boolean
   motivo: string | null       // por qué no se puede elegir
+  // Su categoría oficial no corresponde a esta categoría: el admin puede
+  // elegirlo igual y armar la dupla cuenta como su autorización (solo para
+  // esta categoría; no cambia su categoría oficial).
+  fueraDeNivel: boolean
+  nivel: string | null
 }
 
 // Jugadores que el admin puede poner en una dupla de la categoría: género y
@@ -273,7 +278,7 @@ export function candidatosArmarAdmin(d: {
   const lista: CandidatoAdmin[] = []
   for (const j of d.jugadores) {
     if ((genero === 'caballeros' || genero === 'damas') && j.genero !== genero) continue
-    if (!nivelAdmitido(d.categoria.categoria_nivel as Nivel | null, nivelParaTorneo(j))) continue
+    const fueraDeNivel = !nivelAdmitido(d.categoria.categoria_nivel as Nivel | null, nivelParaTorneo(j))
     const estado = d.estadoEnCategoria.get(j.id)
     if (estado === 'en_dupla') continue
     const inscrito = estado === 'disponible' || estado === 'invitacion_enviada'
@@ -285,8 +290,11 @@ export function candidatosArmarAdmin(d: {
       esInvitado: !!j.esInvitado,
       seleccionable: !sinCupoPropio,
       motivo: sinCupoPropio ? `ya está en ${MAX_CATEGORIAS_POR_JUGADOR} categorías` : null,
+      fueraDeNivel,
+      nivel: nivelParaTorneo(j),
     })
   }
   const orden = { disponible: 0, invitacion_enviada: 1, no_inscrito: 2 }
-  return lista.sort((a, b) => Number(!a.seleccionable) - Number(!b.seleccionable) || orden[a.estado] - orden[b.estado] || a.nombre.localeCompare(b.nombre, 'es'))
+  return lista.sort((a, b) =>
+    Number(!a.seleccionable) - Number(!b.seleccionable) || Number(a.fueraDeNivel) - Number(b.fueraDeNivel) || orden[a.estado] - orden[b.estado] || a.nombre.localeCompare(b.nombre, 'es'))
 }

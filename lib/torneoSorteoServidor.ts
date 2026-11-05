@@ -44,7 +44,7 @@ export async function datosParaSorteo(db: SupabaseClient, torneo: Torneo, catego
   const [{ data: inscripciones, error: errIns }, equipos] = await Promise.all([
     db
       .from('torneo_inscripciones')
-      .select('id, categoria_id, estado, jugador1_id, menor_id, menor_nombre_publico, categoria_certificada_at, invitado_autorizado_at')
+      .select('id, categoria_id, estado, jugador1_id, menor_id, menor_nombre_publico, categoria_certificada_at, invitado_autorizado_at, nivel_autorizado_at')
       .in('categoria_id', ids)
       .neq('estado', 'retirada')
       .order('created_at'),
@@ -87,7 +87,7 @@ export async function datosParaSorteo(db: SupabaseClient, torneo: Torneo, catego
             jugadores: [{
               id: i.jugador1_id!, categoria_torneo: jugadorPorId.get(i.jugador1_id!)?.categoria_torneo ?? null, es_invitado: !!jugadorPorId.get(i.jugador1_id!)?.es_invitado,
             }],
-            soloSocios: torneo.solo_socios, invitadoAutorizado: !!i.invitado_autorizado_at,
+            soloSocios: torneo.solo_socios, invitadoAutorizado: !!i.invitado_autorizado_at, nivelAutorizado: !!(i as any).nivel_autorizado_at,
           })
       const quienIns = i.menor_id ? i.menor_nombre_publico ?? 'el menor' : jugadorPorId.get(i.jugador1_id!)?.nombre ?? '—'
       for (const p of pendientesQueBloqueanSorteo(pendientes)) {

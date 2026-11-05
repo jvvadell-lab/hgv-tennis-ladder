@@ -89,6 +89,7 @@ type Inscripcion = {
   categoria_certificada_at: string | null
   menor_nombre_publico: string | null
   invitado_autorizado_at: string | null
+  nivel_autorizado_at?: string | null   // el admin autorizó jugar esta categoría aunque el nivel no corresponda
   devolucion_marcada_at: string | null
   // Monto en € fijado al inscribirse (SPEC §2.5) y ajuste manual del admin.
   monto_eur: number
@@ -532,11 +533,20 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
                                 jugador={j}
                                 compatible={compatible}
                                 editable={esAdminCompleto}
-                                ocupado={ocupado === `cat-${j.id}`}
+                                ocupado={ocupado === `cat-${j.id}` || ocupado === `nivel-${ins.id}`}
                                 onGuardar={(categoria) =>
                                   accion(`cat-${j.id}`, 'categoria-jugador', { jugadorId: j.id, categoria },
                                     categoria ? `${j.nombre}: categoría oficial ${ETIQUETA_NIVEL[categoria as Nivel]}` : `${j.nombre}: categoría oficial quitada`)
                                 }
+                                categoriaNombre={c.nombre}
+                                nivelAutorizado={!!ins.nivel_autorizado_at}
+                                onAutorizarNivel={(autorizar) => {
+                                  if (!confirm(autorizar
+                                    ? `¿Autorizar a ${j.nombre} a jugar ${c.nombre}? Su categoría oficial (${ETIQUETA_NIVEL[j.categoria_torneo as Nivel] || j.categoria_torneo || 'sin certificar'}) no cambia: la autorización vale solo para esta categoría.`
+                                    : `¿Quitar la autorización de ${j.nombre} para jugar ${c.nombre}? Su inscripción vuelve a quedar pendiente.`)) return
+                                  accion(`nivel-${ins.id}`, 'autorizar-nivel', { inscripcionId: ins.id, autorizar },
+                                    autorizar ? `${j.nombre}: autorizado a jugar ${c.nombre}` : `${j.nombre}: autorización quitada`)
+                                }}
                               />
                             </td>
                             <td style={td}>
@@ -773,23 +783,38 @@ function InscripcionesCategoria({ categoria, estadoTorneo, editable, ocupado, av
   )
 }
 
-function CategoriaOficial({ jugador, compatible, editable, ocupado, onGuardar }: {
+function CategoriaOficial({ jugador, compatible, editable, ocupado, onGuardar, categoriaNombre, nivelAutorizado, onAutorizarNivel }: {
   jugador: Jugador
   compatible: boolean | null
   editable: boolean
   ocupado: boolean
   onGuardar: (categoria: string | null) => void
+  categoriaNombre: string
+  nivelAutorizado: boolean
+  onAutorizarNivel: (autorizar: boolean) => void
 }) {
   const actual = jugador.categoria_torneo
   return (
     <div>
       {actual ? (
-        <div style={{ fontWeight: 'bold', color: compatible ? '#1e6b34' : '#c0392b' }}>
+        <div style={{ fontWeight: 'bold', color: compatible || nivelAutorizado ? '#1e6b34' : '#c0392b' }}>
           {ETIQUETA_NIVEL[actual as Nivel] || actual}
-          {!compatible && <div style={{ fontWeight: 'normal' }}>No corresponde a esta categoría</div>}
+          {!compatible && !nivelAutorizado && <div style={{ fontWeight: 'normal' }}>No corresponde a esta categoría</div>}
         </div>
       ) : (
-        <div style={{ color: '#8a5a00', fontWeight: 'bold' }}>Por confirmar</div>
+        <div style={{ color: nivelAutorizado ? '#1e6b34' : '#8a5a00', fontWeight: 'bold' }}>{nivelAutorizado ? 'Sin certificar' : 'Por confirmar'}</div>
+      )}
+      {nivelAutorizado && (
+        <div style={{ marginTop: '4px', fontSize: '11px', fontWeight: 'bold', color: '#5b2a86', background: '#efe3ff', padding: '2px 8px', borderRadius: '8px', display: 'inline-block' }}>
+          ✓ Autorizado por el admin para {categoriaNombre}
+        </div>
+      )}
+      {editable && ((actual && !compatible) || nivelAutorizado) && (
+        <div style={{ marginTop: '6px' }}>
+          <button disabled={ocupado} onClick={() => onAutorizarNivel(!nivelAutorizado)} style={boton(nivelAutorizado ? '#777' : '#5b2a86', !nivelAutorizado)}>
+            {nivelAutorizado ? 'Quitar autorización' : `✓ Autorizar en ${categoriaNombre}`}
+          </button>
+        </div>
       )}
       {editable && (
         <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
