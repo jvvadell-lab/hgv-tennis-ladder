@@ -337,7 +337,7 @@ describe('formato cuadros (SPEC §16)', () => {
     expect(textoOrigenCuadros('G:C5')).toBe('Ganador C5')
   })
   it('la migración inserta la misma llave que generarLlaveCuadros', () => {
-    const sql = readFileSync('supabase/migrations/20261106030000_torneo_cuadros.sql', 'utf8')
+    const sql = readFileSync('supabase/migrations/20261106030738_torneo_cuadros.sql', 'utf8')
     const filas = (bloque: string) => [...bloque.matchAll(/\('(cuartos|semis|final)', (\d), '([^']+)', '([^']+)'\)/g)].map((m) => `${m[1]}${m[2]}=${m[3]}/${m[4]}`)
     const esperado = llave.map((p) => `${p.fase}${p.orden}=${p.origen_a}/${p.origen_b}`)
     expect(filas(sql)).toEqual([...esperado, ...esperado])   // el chequeo de llave ajena y el insert
