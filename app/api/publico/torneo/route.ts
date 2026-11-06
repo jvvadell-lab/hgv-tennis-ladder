@@ -22,7 +22,7 @@ export async function GET() {
 
     const { data: categorias, error: errCat } = await db
       .from('torneo_categorias')
-      .select('id, nombre, modalidad, genero, es_infantil, orden, llave_desde, formato_partido, duracion_min')
+      .select('*')   // incluye formato_llave si la migración torneo_cuadros ya está aplicada; la respuesta elige sus campos
       .eq('torneo_id', torneo.id)
       .order('orden')
     if (errCat) throw errCat
@@ -56,9 +56,11 @@ export async function GET() {
     }
 
     const letraDe = new Map((grupos || []).map((g) => [g.id, g.letra]))
+    const formatoDe = new Map((categorias || []).map((c) => [c.id, c.formato_llave ?? 'normal']))
     const partidosPublicos = (partidos || []).map((p) => ({
       id: p.id,
       categoria_id: p.categoria_id,
+      formato_llave: formatoDe.get(p.categoria_id),
       fase: p.fase,
       grupo: p.grupo_id ? letraDe.get(p.grupo_id) ?? null : null,
       orden: p.orden,
@@ -92,7 +94,9 @@ export async function GET() {
       ok: true,
       torneo: { nombre: torneo.nombre, fecha_inicio: torneo.fecha_inicio, fecha_fin: torneo.fecha_fin, estado: torneo.estado, sorteado: !!torneo.sorteo_publicado_at, programacion_publicada: publicada },
       categorias: (categorias || []).map((c) => ({
-        ...c,
+        id: c.id, nombre: c.nombre, modalidad: c.modalidad, genero: c.genero, es_infantil: c.es_infantil, orden: c.orden,
+        llave_desde: c.llave_desde, formato_partido: c.formato_partido, duracion_min: c.duracion_min,
+        formato_llave: c.formato_llave ?? 'normal',
         // Duplas formadas en dobles; inscritos en single e infantil.
         inscritas: equipos.filter((e) => e.categoria_id === c.id).length,
       })),

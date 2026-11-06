@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import FormMarcadorTorneo from '@/app/components/FormMarcadorTorneo'
 import { formatearFechaHora } from '@/lib/tiempo'
-import { ETIQUETA_FASE, PREFIJO_FASE, type EstadoPartido, type Fase, textoOrigen } from '@/lib/torneo'
+import { ETIQUETA_FASE, PREFIJO_FASE, etapaCuadros, type EstadoPartido, type Fase, type FormatoLlave, textoOrigen, textoOrigenCuadros } from '@/lib/torneo'
 import type { SetJugado, TipoResultado } from '@/lib/resultados'
 import { textoMarcador } from '@/lib/torneoResultados'
 import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
@@ -16,6 +16,7 @@ import LineaMonto from '@/app/components/LineaMonto'
 type Partido = {
   id: string
   categoria_nombre: string
+  formato_llave: FormatoLlave
   fase: Fase
   grupo_letra: string | null
   orden: number
@@ -47,6 +48,7 @@ const tarjeta: React.CSSProperties = { background: 'white', border: '1px solid r
 const tituloSeccion: React.CSSProperties = { fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '19px', margin: '24px 0 12px 0' }
 
 const etiquetaPartido = (p: Partido) =>
+  p.formato_llave === 'cuadros' ? etapaCuadros({ ...p, grupoLetra: p.grupo_letra }, true) :
   p.fase === 'grupo' ? `Grupo ${p.grupo_letra}` : `${ETIQUETA_FASE[p.fase]} ${PREFIJO_FASE[p.fase as Exclude<Fase, 'grupo'>]}${p.orden}`
 
 const origenTexto = (o: string | null) => {
@@ -130,7 +132,7 @@ export default function MisPartidos() {
         <span key={lado as string}>
           {i === 1 && <span style={{ color: '#888' }}> vs </span>}
           <span style={{ fontWeight: id && mias.has(id as string) ? 800 : 400, color: id && p.validado && p.ganador_equipo_id === id ? '#1e6b34' : 'inherit' }}>
-            {(nombre as string) ?? origenTexto(origen as string | null)}
+            {(nombre as string) ?? (p.formato_llave === 'cuadros' ? textoOrigenCuadros : origenTexto)(origen as string | null)}
           </span>
         </span>
       ))}

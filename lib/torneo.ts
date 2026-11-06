@@ -33,6 +33,12 @@ export type LlaveDesde = (typeof LLAVE_DESDE)[number]
 export const FORMATOS_PARTIDO = ['dos_sets_stb', 'un_set_6_tb', 'festival_4games'] as const
 export type FormatoPartido = (typeof FORMATOS_PARTIDO)[number]
 
+// Formato de la llave de la categoría (SPEC §16). 'normal' = grupos y una
+// llave; 'cuadros' = 1ª ronda de 8 juegos y dos llaves (A ganadores, B
+// perdedores).
+export const FORMATOS_LLAVE = ['normal', 'cuadros'] as const
+export type FormatoLlave = (typeof FORMATOS_LLAVE)[number]
+
 export const ESTADOS_INSCRIPCION = ['pendiente_pago', 'confirmada', 'retirada'] as const
 export type EstadoInscripcion = (typeof ESTADOS_INSCRIPCION)[number]
 
@@ -127,6 +133,7 @@ export type TorneoCategoria = {
   edad_min: number | null
   edad_max: number | null
   formato_partido: FormatoPartido
+  formato_llave?: FormatoLlave             // sin la migración torneo_cuadros: undefined = 'normal'
   plantilla_turnos: unknown | null         // ver PlantillaTurnosInfantil en lib/torneoInfantil.ts
   partidos_minimos: number | null
   inscripciones_abiertas: boolean          // además del torneo en 'inscripcion'
@@ -361,6 +368,64 @@ export function generarLlave(numGrupos: number, llaveDesde: LlaveDesde | 'final'
     for (let i = 0; i + 1 < codigos.length; i += 2) ronda.push([`G:${codigos[i]}`, `G:${codigos[i + 1]}`])
   }
   return partidos
+}
+
+// ---------------------------------------------------------------------------
+// Formato cuadro A / cuadro B (SPEC §16)
+// ---------------------------------------------------------------------------
+// 16 duplas, 1ª ronda de 8 juegos publicada como 8 grupos de 2 (J1 = grupo A…
+// J8 = grupo H): '1X' es el ganador del juego X y '2X' el perdedor. Los
+// ganadores van al cuadro A y los perdedores al B. Un partido de llave no
+// guarda su cuadro: sale de su código, que ya es único en la categoría
+// (C1–C4, S1–S2 y F1 son del A; C5–C8, S3–S4 y F2 del B).
+
+export type Cuadro = 'A' | 'B'
+export const CUADROS: Cuadro[] = ['A', 'B']
+
+export const TITULO_CUADRO: Record<Cuadro, string> = {
+  A: 'Cuadro A · ganadores',
+  B: 'Cuadro B · perdedores (consolación)',
+}
+
+const PARTIDOS_POR_CUADRO: Record<FaseLlave, number> = { cuartos: 4, semis: 2, final: 1 }
+
+export function cuadroDe(p: { fase: Fase; orden: number }): Cuadro | null {
+  if (p.fase === 'grupo') return null
+  return p.orden > PARTIDOS_POR_CUADRO[p.fase] ? 'B' : 'A'
+}
+
+// Número del juego de la 1ª ronda: grupo A → 1, grupo H → 8.
+export const numeroJuego = (letra: string) => letra.charCodeAt(0) - 64
+
+export function generarLlaveCuadros(): PartidoLlave[] {
+  const pares = ['AB', 'CD', 'EF', 'GH']
+  const partidos: PartidoLlave[] = []
+  const agregar = (fase: FaseLlave, orden: number, origen_a: string, origen_b: string) =>
+    partidos.push({ fase, orden, codigo: `${PREFIJO_FASE[fase]}${orden}`, origen_a, origen_b })
+  for (const [puesto, base] of [[1, 0], [2, 4]]) {
+    pares.forEach(([x, y], i) => agregar('cuartos', base + i + 1, `${puesto}${x}`, `${puesto}${y}`))
+  }
+  for (const [c, s] of [[1, 1], [3, 2], [5, 3], [7, 4]]) agregar('semis', s, `G:C${c}`, `G:C${c + 1}`)
+  agregar('final', 1, 'G:S1', 'G:S2')
+  agregar('final', 2, 'G:S3', 'G:S4')
+  return partidos
+}
+
+// Etapa de un partido de esta categoría: "1ª ronda · J3", "Cuadro B – Semifinal"
+// o, con código, "Cuadro B – Semifinal S3". La final no lo necesita: hay una por cuadro.
+export function etapaCuadros(p: { fase: Fase; orden: number; grupoLetra: string | null }, conCodigo = false): string {
+  if (p.fase === 'grupo') return `1ª ronda · J${p.grupoLetra ? numeroJuego(p.grupoLetra) : p.orden}`
+  const codigo = conCodigo && p.fase !== 'final' ? ` ${PREFIJO_FASE[p.fase]}${p.orden}` : ''
+  return `Cuadro ${cuadroDe(p)} – ${ETIQUETA_FASE[p.fase]}${codigo}`
+}
+
+// Mientras no hay rival: G3 = ganador del J3, P3 = perdedor del J3.
+export function textoOrigenCuadros(origen: string | null): string {
+  const o = origen ? parsearOrigen(origen) : null
+  if (!o) return origen ?? '—'
+  if (o.tipo === 'grupo') return `${o.puesto === 1 ? 'G' : 'P'}${numeroJuego(o.letra)}`
+  if (o.tipo === 'ganador') return `Ganador ${o.codigo}`
+  return textoOrigen(origen)
 }
 
 // Texto de un origen para mostrar mientras el partido no tiene rivales.

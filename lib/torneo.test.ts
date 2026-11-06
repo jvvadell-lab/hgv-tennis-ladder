@@ -1,11 +1,16 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { SetJugado } from './resultados'
 import {
   crucesTodosContraTodos,
+  cuadroDe,
   distribuirSerpentina,
+  etapaCuadros,
   generarLlave,
+  generarLlaveCuadros,
   ordenarGrupo,
   parsearOrigen,
+  textoOrigenCuadros,
   validarMarcadorTorneo,
   type PartidoParaTabla,
 } from './torneo'
@@ -287,5 +292,54 @@ describe('ordenarGrupo', () => {
     }
     const [a] = ordenarGrupo([retiro], miembros('A', 'B'))
     expect(a).toMatchObject({ sets_favor: 2, sets_contra: 0, games_favor: 6 + 7, games_contra: 1 + 5 })
+  })
+})
+
+describe('formato cuadros (SPEC §16)', () => {
+  const llave = generarLlaveCuadros()
+  const por = (codigo: string) => llave.find((p) => p.codigo === codigo)!
+
+  it('son 14 partidos de llave, con los orígenes acordados', () => {
+    expect(llave.map((p) => `${p.codigo}=${p.origen_a}/${p.origen_b}`)).toEqual([
+      'C1=1A/1B', 'C2=1C/1D', 'C3=1E/1F', 'C4=1G/1H',
+      'C5=2A/2B', 'C6=2C/2D', 'C7=2E/2F', 'C8=2G/2H',
+      'S1=G:C1/G:C2', 'S2=G:C3/G:C4', 'S3=G:C5/G:C6', 'S4=G:C7/G:C8',
+      'F1=G:S1/G:S2', 'F2=G:S3/G:S4',
+    ])
+  })
+  it('parsearOrigen entiende C5–C8, S3–S4 y F2', () => {
+    for (const p of llave) for (const o of [p.origen_a, p.origen_b]) expect(parsearOrigen(o)).not.toBeNull()
+    expect(parsearOrigen('G:C8')).toEqual({ tipo: 'ganador', codigo: 'C8' })
+    expect(parsearOrigen('G:S4')).toEqual({ tipo: 'ganador', codigo: 'S4' })
+    expect(parsearOrigen('2H')).toEqual({ tipo: 'grupo', puesto: 2, letra: 'H' })
+  })
+  it('el cuadro sale del código', () => {
+    expect(llave.filter((p) => cuadroDe(p) === 'A').map((p) => p.codigo)).toEqual(['C1', 'C2', 'C3', 'C4', 'S1', 'S2', 'F1'])
+    expect(llave.filter((p) => cuadroDe(p) === 'B').map((p) => p.codigo)).toEqual(['C5', 'C6', 'C7', 'C8', 'S3', 'S4', 'F2'])
+    expect(cuadroDe({ fase: 'grupo', orden: 1 })).toBeNull()
+  })
+  it('ningún partido del cuadro A sale del cuadro B ni al revés', () => {
+    for (const p of llave.filter((q) => q.fase !== 'cuartos')) {
+      for (const o of [p.origen_a, p.origen_b]) expect(cuadroDe(por(o.slice(2)))).toBe(cuadroDe(p))
+    }
+  })
+  it('rotula la 1ª ronda y la llave', () => {
+    expect(etapaCuadros({ fase: 'grupo', orden: 1, grupoLetra: 'H' })).toBe('1ª ronda · J8')
+    expect(etapaCuadros({ fase: 'semis', orden: 3, grupoLetra: null })).toBe('Cuadro B – Semifinal')
+    expect(etapaCuadros({ fase: 'semis', orden: 3, grupoLetra: null }, true)).toBe('Cuadro B – Semifinal S3')
+    expect(etapaCuadros({ fase: 'cuartos', orden: 4, grupoLetra: null }, true)).toBe('Cuadro A – Cuartos de final C4')
+    expect(etapaCuadros({ fase: 'final', orden: 2, grupoLetra: null }, true)).toBe('Cuadro B – Final')
+  })
+  it('mientras no hay rivales muestra G1…G8 y P1…P8', () => {
+    expect(textoOrigenCuadros('1A')).toBe('G1')
+    expect(textoOrigenCuadros('1H')).toBe('G8')
+    expect(textoOrigenCuadros('2H')).toBe('P8')
+    expect(textoOrigenCuadros('G:C5')).toBe('Ganador C5')
+  })
+  it('la migración inserta la misma llave que generarLlaveCuadros', () => {
+    const sql = readFileSync('supabase/migrations/20261106030000_torneo_cuadros.sql', 'utf8')
+    const filas = (bloque: string) => [...bloque.matchAll(/\('(cuartos|semis|final)', (\d), '([^']+)', '([^']+)'\)/g)].map((m) => `${m[1]}${m[2]}=${m[3]}/${m[4]}`)
+    const esperado = llave.map((p) => `${p.fase}${p.orden}=${p.origen_a}/${p.origen_b}`)
+    expect(filas(sql)).toEqual([...esperado, ...esperado])   // el chequeo de llave ajena y el insert
   })
 })

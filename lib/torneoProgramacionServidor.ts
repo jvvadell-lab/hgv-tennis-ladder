@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { ESTADOS_RETO_OCUPAN_CANCHA } from '@/lib/choquesCancha'
 import { DURACION_RETO_MIN, DURACION_SINGLE_MIN, ESTADOS_RESERVA_OCUPAN_CANCHA } from '@/lib/reservas'
 import { ahora, formatearFechaHora, instanteEnCaracas, sumarDiasEnCaracas } from '@/lib/tiempo'
-import { CANCHAS_TORNEO, ETIQUETA_FASE, crucesTodosContraTodos, type CanchaTorneo, type EstadoPartido, type Fase, type Torneo } from '@/lib/torneo'
+import { CANCHAS_TORNEO, ETIQUETA_FASE, crucesTodosContraTodos, etapaCuadros, type CanchaTorneo, type EstadoPartido, type Fase, type Torneo } from '@/lib/torneo'
 import { codigoPartido, dependenciasDe, etiquetaPartido, revisarHorario, type ContextoProgramacion, type Franja, type Horario, type Ocupacion, type PartidoProg } from '@/lib/torneoProgramacion'
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
 import { competidoresPorId, pagosPendientes, personasDe } from '@/lib/torneoEquiposServidor'
@@ -37,7 +37,7 @@ export type DatosProgramacion = {
 export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Promise<DatosProgramacion> {
   const { data: categorias, error: errCat } = await db
     .from('torneo_categorias')
-    .select('id, nombre, orden, es_infantil, duracion_min, genero, fecha_inicio, fecha_fin')
+    .select('*')   // incluye formato_llave si la migración torneo_cuadros ya está aplicada
     .eq('torneo_id', torneo.id)
   if (errCat) throw errCat
   const catPorId = new Map((categorias || []).map((c) => [c.id, c]))
@@ -86,6 +86,7 @@ export async function datosProgramacion(db: SupabaseClient, torneo: Torneo): Pro
       esInfantil: c.es_infantil,
       fechaInicioCategoria: c.fecha_inicio,
       fechaFinCategoria: c.fecha_fin,
+      formatoLlave: c.formato_llave ?? 'normal',
       esMixto: c.genero === 'mixto',
       duracionMin: c.duracion_min,
       fase: p.fase as Fase,
@@ -162,8 +163,10 @@ async function ocupacionesDelClub(db: SupabaseClient, torneo: Torneo, bloqueosPr
   ]
 }
 
-// "Pelota Naranja · Grupo A" / "Doble Masculino Sexta · Semifinal (S1)".
-export function nombrePartido(p: Pick<PartidoDetalle, 'categoriaNombre' | 'fase' | 'grupoLetra' | 'orden'>): string {
+// "Pelota Naranja · Grupo A" / "Doble Masculino Sexta · Semifinal (S1)" /
+// "Mixto con handicap – Cuadro B – Semifinal S3".
+export function nombrePartido(p: Pick<PartidoDetalle, 'categoriaNombre' | 'fase' | 'grupoLetra' | 'orden' | 'formatoLlave'>): string {
+  if (p.formatoLlave === 'cuadros') return `${p.categoriaNombre} – ${etapaCuadros(p, true)}`
   return p.fase === 'grupo'
     ? `${p.categoriaNombre} · Grupo ${p.grupoLetra}`
     : `${p.categoriaNombre} · ${ETIQUETA_FASE[p.fase]} (${codigoPartido(p)})`

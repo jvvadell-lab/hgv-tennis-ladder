@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import FormMarcadorTorneo from '@/app/components/FormMarcadorTorneo'
 import { formatearFechaHora } from '@/lib/tiempo'
-import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, PREFIJO_FASE, type EstadoPartido, type Fase } from '@/lib/torneo'
+import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, PREFIJO_FASE, etapaCuadros, type EstadoPartido, type Fase, type FormatoLlave } from '@/lib/torneo'
 import type { SetJugado, TipoResultado } from '@/lib/resultados'
 import { textoMarcador } from '@/lib/torneoResultados'
 
@@ -16,6 +16,7 @@ type Partido = {
   id: string
   categoria_id: string
   categoria_nombre: string
+  formato_llave: FormatoLlave
   fase: Fase
   grupo_letra: string | null
   orden: number
@@ -44,6 +45,7 @@ const btn = (color: string, relleno = false): React.CSSProperties => ({
 })
 
 const etiqueta = (p: Partido) =>
+  p.formato_llave === 'cuadros' ? etapaCuadros({ ...p, grupoLetra: p.grupo_letra }, true) :
   p.fase === 'grupo' ? `Grupo ${p.grupo_letra} · P${p.orden}` : `${ETIQUETA_FASE[p.fase]} ${PREFIJO_FASE[p.fase as Exclude<Fase, 'grupo'>]}${p.orden}`
 
 const porValidar = (p: Partido) => !p.validado && !!p.reportado_at

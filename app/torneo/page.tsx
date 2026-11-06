@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { fechaISOEnCaracas, formatearFechaConAnio, formatearFechaCorta, formatearFechaLarga, formatearHora, instanteEnCaracas } from '@/lib/tiempo'
-import { ETIQUETA_ESTADO_TORNEO, ETIQUETA_FASE, PREFIJO_FASE, type EstadoTorneo, type Fase, textoOrigen } from '@/lib/torneo'
+import { CUADROS, ETIQUETA_ESTADO_TORNEO, ETIQUETA_FASE, PREFIJO_FASE, TITULO_CUADRO, cuadroDe, etapaCuadros, numeroJuego, type Cuadro, type EstadoTorneo, type Fase, type FormatoLlave, textoOrigen, textoOrigenCuadros } from '@/lib/torneo'
 import type { SetJugado } from '@/lib/resultados'
 import NavJugador from '@/app/components/NavJugador'
 
@@ -12,11 +12,11 @@ import NavJugador from '@/app/components/NavJugador'
 // vienen de /api/publico/torneo (solo nombres públicos; de los menores,
 // "Nombre I.").
 
-type Categoria = { id: string; nombre: string; modalidad: string; genero: string; es_infantil: boolean; orden: number; llave_desde: string; inscritas: number }
+type Categoria = { id: string; nombre: string; modalidad: string; genero: string; es_infantil: boolean; orden: number; llave_desde: string; formato_llave: FormatoLlave; inscritas: number }
 type Fila = { equipo_id: string; posicion: number; pj: number; pg: number; pp: number; sets_favor: number; sets_contra: number; games_favor: number; games_contra: number; stb_puntos_favor: number; stb_puntos_contra: number; requiere_sorteo: boolean }
 type Grupo = { id: string; categoria_id: string; letra: string; tabla: Fila[] }
 type Partido = {
-  id: string; categoria_id: string; fase: Fase; grupo: string | null; orden: number
+  id: string; categoria_id: string; formato_llave: FormatoLlave; fase: Fase; grupo: string | null; orden: number
   origen_a: string | null; origen_b: string | null; equipo_a: string | null; equipo_b: string | null
   cancha: string | null; fecha_hora: string | null; estado: string; sets: SetJugado[] | null; tipo_resultado: string
   ganador: string | null; wo_ausente: string | null; retirada: string | null; handicap: string | null
@@ -62,7 +62,7 @@ function marcador(p: Partido, lado: 'a' | 'b'): string {
 
 const mayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
-const etapa = (p: Partido) => (p.fase === 'grupo' ? `Grupo ${p.grupo}` : `${ETIQUETA_FASE[p.fase]}${p.fase === 'final' ? '' : ` ${PREFIJO_FASE[p.fase]}${p.orden}`}`)
+const etapa = (p: Partido) => p.formato_llave === 'cuadros' ? etapaCuadros({ ...p, grupoLetra: p.grupo }, true) : (p.fase === 'grupo' ? `Grupo ${p.grupo}` : `${ETIQUETA_FASE[p.fase]}${p.fase === 'final' ? '' : ` ${PREFIJO_FASE[p.fase]}${p.orden}`}`)
 
 export default function TorneoPublico() {
   const [datos, setDatos] = useState<Datos | null>(null)
@@ -172,8 +172,19 @@ export default function TorneoPublico() {
                 </p>
               ) : (
                 <>
-                  <Grupos grupos={datos.grupos.filter((g) => g.categoria_id === categoria.id)} nombre={nombre} mias={mias} />
-                  <Llave partidos={datos.partidos.filter((p) => p.categoria_id === categoria.id && p.fase !== 'grupo')} nombre={nombre} mias={mias} />
+                  {categoria.formato_llave === 'cuadros' ? (
+                    <>
+                      <PrimeraRonda partidos={datos.partidos.filter((p) => p.categoria_id === categoria.id && p.fase === 'grupo')} nombre={nombre} mias={mias} />
+                      {CUADROS.map((c) => (
+                        <Llave key={c} cuadro={c} partidos={datos.partidos.filter((p) => p.categoria_id === categoria.id && cuadroDe(p) === c)} nombre={nombre} mias={mias} />
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <Grupos grupos={datos.grupos.filter((g) => g.categoria_id === categoria.id)} nombre={nombre} mias={mias} />
+                      <Llave partidos={datos.partidos.filter((p) => p.categoria_id === categoria.id && p.fase !== 'grupo')} nombre={nombre} mias={mias} />
+                    </>
+                  )}
                   <Calendario
                     partidos={datos.partidos.filter((p) => p.categoria_id === categoria.id)}
                     categorias={[categoria]}
@@ -236,6 +247,27 @@ function Grupos({ grupos, nombre, mias }: { grupos: Grupo[]; nombre: (id: string
   )
 }
 
+// Formato cuadros: la 1ª ronda son 8 juegos sueltos, sin tabla de posiciones.
+function PrimeraRonda({ partidos, nombre, mias }: { partidos: Partido[]; nombre: (id: string | null) => string | null; mias: Set<string> }) {
+  const juegos = [...partidos].sort((a, b) => (a.grupo ?? '').localeCompare(b.grupo ?? ''))
+  return (
+    <section>
+      <h2 style={titulo}>1ª ronda</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '8px' }}>
+        {juegos.map((p) => (
+          <Ficha
+            key={p.id}
+            p={p}
+            nombre={nombre}
+            mias={mias}
+            encabezado={`J${numeroJuego(p.grupo ?? 'A')}${p.fecha_hora ? ` · ${formatearFechaCorta(p.fecha_hora, { mes: 'corto' })} ${formatearHora(p.fecha_hora)} · ${p.cancha}` : ''}`}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function Ficha({ p, nombre, mias, encabezado }: { p: Partido; nombre: (id: string | null) => string | null; mias: Set<string>; encabezado?: string }) {
   const lado = (l: 'a' | 'b') => {
     const id = l === 'a' ? p.equipo_a : p.equipo_b
@@ -243,7 +275,7 @@ function Ficha({ p, nombre, mias, encabezado }: { p: Partido; nombre: (id: strin
     return (
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '5px 8px', background: id && mias.has(id) ? RESALTE : undefined, fontWeight: gana ? 800 : 500 }}>
         <span style={{ color: id ? 'var(--color-ink)' : '#888', fontStyle: id ? 'normal' : 'italic', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {id ? nombre(id) : origenTexto(l === 'a' ? p.origen_a : p.origen_b)}
+          {id ? nombre(id) : (p.formato_llave === 'cuadros' ? textoOrigenCuadros : origenTexto)(l === 'a' ? p.origen_a : p.origen_b)}
         </span>
         <span style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{marcador(p, l)}</span>
       </div>
@@ -264,13 +296,14 @@ function Ficha({ p, nombre, mias, encabezado }: { p: Partido; nombre: (id: strin
   )
 }
 
-function Llave({ partidos, nombre, mias }: { partidos: Partido[]; nombre: (id: string | null) => string | null; mias: Set<string> }) {
+function Llave({ partidos, nombre, mias, cuadro }: { partidos: Partido[]; nombre: (id: string | null) => string | null; mias: Set<string>; cuadro?: Cuadro }) {
   if (!partidos.length) return null
+  const final = partidos.find((p) => p.fase === 'final')
   const columnas = FASES_LLAVE.map((f) => partidos.filter((p) => p.fase === f).sort((a, b) => a.orden - b.orden)).filter((c) => c.length)
   const altura = Math.max(...columnas.map((c) => c.length)) * 120
   return (
     <section>
-      <h2 style={titulo}>Llave</h2>
+      <h2 style={titulo}>{cuadro ? TITULO_CUADRO[cuadro] : 'Llave'}</h2>
       <div style={{ display: 'flex', gap: '14px', overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '8px' }}>
         {columnas.map((col) => (
           <div key={col[0].fase} style={{ flex: '0 0 min(260px, 82vw)', scrollSnapAlign: 'start', display: 'flex', flexDirection: 'column' }}>
@@ -278,15 +311,26 @@ function Llave({ partidos, nombre, mias }: { partidos: Partido[]; nombre: (id: s
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-around', gap: '10px', minHeight: `${altura}px` }}>
               {col.map((p, i) => (
                 <div key={p.id}>
-                  {col.length > 1 && i === col.length / 2 && <div style={{ borderTop: '1px dashed rgba(15,27,38,0.25)', margin: '0 0 10px 0' }} />}
-                  <Ficha p={p} nombre={nombre} mias={mias} />
+                  {!cuadro && col.length > 1 && i === col.length / 2 && <div style={{ borderTop: '1px dashed rgba(15,27,38,0.25)', margin: '0 0 10px 0' }} />}
+                  <Ficha
+                    p={p}
+                    nombre={nombre}
+                    mias={mias}
+                    // El título y la columna ya dicen el cuadro y la ronda.
+                    encabezado={cuadro ? `${PREFIJO_FASE[p.fase as Exclude<Fase, 'grupo'>]}${p.orden}${p.fecha_hora ? ` · ${formatearFechaCorta(p.fecha_hora, { mes: 'corto' })} ${formatearHora(p.fecha_hora)} · ${p.cancha}` : ''}` : undefined}
+                  />
                 </div>
               ))}
             </div>
           </div>
         ))}
       </div>
-      {columnas[0].length > 1 && <p style={{ fontSize: '11px', color: '#888', margin: '4px 0 0 0' }}>Serie 1 arriba, serie 2 abajo: dos del mismo grupo solo pueden volver a verse en la final.</p>}
+      {cuadro && final?.ganador && (
+        <p style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-ink)', margin: '6px 0 0 0' }}>
+          🏆 {cuadro === 'A' ? 'Campeones' : 'Campeones de consolación'}: {nombre(final.ganador)}
+        </p>
+      )}
+      {!cuadro && columnas[0].length > 1 && <p style={{ fontSize: '11px', color: '#888', margin: '4px 0 0 0' }}>Serie 1 arriba, serie 2 abajo: dos del mismo grupo solo pueden volver a verse en la final.</p>}
     </section>
   )
 }

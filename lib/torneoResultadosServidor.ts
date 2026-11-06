@@ -14,8 +14,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { ahora } from '@/lib/tiempo'
-import { ETIQUETA_FASE, ordenarGrupo, ordenarPrimeros, type EstadoTorneo, type Fase } from '@/lib/torneo'
+import { ETIQUETA_FASE, etapaCuadros, ordenarGrupo, ordenarPrimeros, type EstadoTorneo, type Fase, type FormatoLlave } from '@/lib/torneo'
 import {
+  avanceCuadros,
   avanceGrupo,
   avanceMejoresPrimeros,
   avanceLlave,
@@ -48,13 +49,16 @@ const ESTADOS_CON_RESULTADOS: EstadoTorneo[] = ['sorteado', 'en_curso']
 async function cargarPartido(db: SupabaseClient, partidoId: string) {
   const { data, error } = await db
     .from('torneo_partidos')
-    .select(`${COLUMNAS_PARTIDO}, torneo_categorias:categoria_id(nombre, torneo_id, torneos:torneo_id(id, nombre, estado))`)
+    // Categoría con *: incluye formato_llave si la migración torneo_cuadros ya está aplicada.
+    .select(`${COLUMNAS_PARTIDO}, torneo_grupos:grupo_id(letra), torneo_categorias:categoria_id(*, torneos:torneo_id(id, nombre, estado))`)
     .eq('id', partidoId)
     .maybeSingle()
   if (error) throw error
   if (!data) return null
-  const cat = data.torneo_categorias as unknown as { nombre: string; torneo_id: string; torneos: { id: string; nombre: string; estado: EstadoTorneo } }
-  return { partido: data as unknown as PartidoFila, categoriaNombre: cat.nombre, torneo: cat.torneos }
+  const cat = data.torneo_categorias as unknown as { nombre: string; torneo_id: string; formato_llave?: FormatoLlave; torneos: { id: string; nombre: string; estado: EstadoTorneo } }
+  const partido = data as unknown as PartidoFila
+  const grupoLetra = (data.torneo_grupos as unknown as { letra: string } | null)?.letra ?? null
+  return { partido, partidoNombre: nombrePartido({ ...partido, grupoLetra, formato: cat.formato_llave }, cat.nombre), torneo: cat.torneos }
 }
 
 // Personas de cada equipo (los ids de partidos y grupos son equipos): sus
@@ -65,7 +69,13 @@ export async function personasDeInscripciones(db: SupabaseClient, ids: string[])
   return new Map([...equipos].map(([id, e]) => [id, personasDe(e)]))
 }
 
-const nombrePartido = (fase: Fase, categoria: string) => `${categoria} — ${ETIQUETA_FASE[fase]}`
+type DatosEtapa = { fase: Fase; orden: number; grupoLetra: string | null; formato?: FormatoLlave }
+
+const etapaDe = (p: DatosEtapa) => (p.formato === 'cuadros' ? etapaCuadros(p) : ETIQUETA_FASE[p.fase])
+
+// "Pelota Naranja — Fase de grupos" / "Mixto con handicap – Cuadro B – Semifinal".
+const nombrePartido = (p: DatosEtapa, categoria: string) =>
+  `${categoria} ${p.formato === 'cuadros' ? '–' : '—'} ${etapaDe(p)}`
 
 // --- Reportar ---------------------------------------------------------------
 
@@ -117,9 +127,9 @@ export async function reportarResultado(
       .filter((id) => id !== p.porJugadorId)
     await notificarJugadores(db, otros, {
       tipo: 'torneo_resultado_reportado',
-      mensaje: `🎾 Se reportó el resultado de tu partido de ${nombrePartido(partido.fase, c.categoriaNombre)}. Queda por validar.`,
+      mensaje: `🎾 Se reportó el resultado de tu partido de ${c.partidoNombre}. Queda por validar.`,
       asunto: `🎾 Resultado reportado — ${c.torneo.nombre}`,
-      cuerpoHtml: () => `<p>Se reportó el resultado de tu partido de <strong>${escaparHtml(nombrePartido(partido.fase, c.categoriaNombre))}</strong>. Si no es correcto, avísale al admin antes de que lo valide.</p>`,
+      cuerpoHtml: () => `<p>Se reportó el resultado de tu partido de <strong>${escaparHtml(c.partidoNombre)}</strong>. Si no es correcto, avísale al admin antes de que lo valide.</p>`,
     })
   }
   return { ok: true, ganador: r.ganador }
@@ -151,7 +161,7 @@ export async function validarResultado(
 
   await marcarEnCurso(db, c.torneo.id)
   const avance = await avanzarCategoria(db, partido.categoria_id, p.adminId)
-  await avisarResultadoValidado(db, partido, c.categoriaNombre, c.torneo.nombre)
+  await avisarResultadoValidado(db, partido, c.partidoNombre, c.torneo.nombre)
   return { ok: true, avisos: avance.avisos }
 }
 
@@ -206,7 +216,7 @@ export async function registrarWO(
 
   await marcarEnCurso(db, c.torneo.id)
   const avance = await avanzarCategoria(db, partido.categoria_id, p.adminId)
-  await avisarResultadoValidado(db, { ...partido, estado: doble ? 'doble_wo' : 'wo' }, c.categoriaNombre, c.torneo.nombre)
+  await avisarResultadoValidado(db, { ...partido, estado: doble ? 'doble_wo' : 'wo' }, c.partidoNombre, c.torneo.nombre)
   return { ok: true, avisos: avance.avisos }
 }
 
@@ -260,9 +270,11 @@ export type DesempatePendiente =
   | { tipo: 'primeros'; categoria: string; categoriaId: string; grupos: { letra: string; nombre: string }[] }
 
 export async function desempatesPendientes(db: SupabaseClient, torneoId: string): Promise<DesempatePendiente[]> {
-  const { data: categorias, error } = await db.from('torneo_categorias').select('id, nombre, orden_primeros_manual').eq('torneo_id', torneoId).order('orden')
+  const { data: todas, error } = await db.from('torneo_categorias').select('*').eq('torneo_id', torneoId).order('orden')
   if (error) throw error
-  const ids = (categorias || []).map((c) => c.id)
+  // En el formato cuadros no hay tabla que desempatar: un doble WO deja el lugar vacante.
+  const categorias = (todas || []).filter((c) => c.formato_llave !== 'cuadros')
+  const ids = categorias.map((c) => c.id)
   if (!ids.length) return []
   const [{ data: partidos, error: errP }, { data: grupos, error: errG }] = await Promise.all([
     db.from('torneo_partidos').select(COLUMNAS_PARTIDO).in('categoria_id', ids),
@@ -307,8 +319,9 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
   const avisos = new Set<string>()
   const completados = new Set<string>()   // partidos de llave que quedaron con los 2 rivales
 
-  const { data: cat, error: errCat } = await db.from('torneo_categorias').select('orden_primeros_manual').eq('id', categoriaId).single()
+  const { data: cat, error: errCat } = await db.from('torneo_categorias').select('*').eq('id', categoriaId).single()
   if (errCat) throw errCat
+  const cuadros = cat.formato_llave === 'cuadros'
 
   for (let vuelta = 0; vuelta < 10; vuelta++) {
     const [{ data: partidos, error: errP }, { data: grupos, error: errG }] = await Promise.all([
@@ -321,17 +334,25 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
     const llave = todos.filter((p) => p.fase !== 'grupo')
 
     const cambios: CambioAvance[] = []
-    for (const g of grupos || []) {
-      const r = avanceGrupo({ id: g.id, letra: g.letra }, todos, g.torneo_grupo_miembros as any, llave)
-      cambios.push(...r.cambios)
-      r.avisos.forEach((a) => avisos.add(a))
+    // Formato cuadros: el juego de la 1ª ronda de cada letra (un partido por grupo).
+    const juegos = cuadros
+      ? new Map((grupos || []).flatMap((g) => todos.filter((p) => p.grupo_id === g.id).map((p) => [g.letra, p] as [string, PartidoFila])))
+      : undefined
+    if (juegos) {
+      cambios.push(...avanceCuadros(juegos, llave).cambios)
+    } else {
+      for (const g of grupos || []) {
+        const r = avanceGrupo({ id: g.id, letra: g.letra }, todos, g.torneo_grupo_miembros as any, llave)
+        cambios.push(...r.cambios)
+        r.avisos.forEach((a) => avisos.add(a))
+      }
+      const mejores = avanceMejoresPrimeros(
+        (grupos || []).map((g: any) => ({ id: g.id, letra: g.letra, miembros: g.torneo_grupo_miembros })), todos, llave, cat.orden_primeros_manual)
+      cambios.push(...mejores.cambios)
+      mejores.avisos.forEach((a) => avisos.add(a))
     }
-    const mejores = avanceMejoresPrimeros(
-      (grupos || []).map((g: any) => ({ id: g.id, letra: g.letra, miembros: g.torneo_grupo_miembros })), todos, llave, cat.orden_primeros_manual)
-    cambios.push(...mejores.cambios)
-    mejores.avisos.forEach((a) => avisos.add(a))
     for (const p of llave.filter(partidoCerrado)) cambios.push(...avanceLlave(p, llave).cambios)
-    cambios.push(...pasesPorVacante(llave))
+    cambios.push(...pasesPorVacante(llave, juegos))
     if (!cambios.length) break
 
     const momento = ahora().toISOString()
@@ -345,8 +366,8 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
           .eq('id', cambio.partidoId)
           .eq('validado', false)
         if (error) throw error
-        const otro = cambio.lado === 'a' ? actual.equipo_b : actual.equipo_a
-        if (otro) completados.add(cambio.partidoId)
+        // avisarRivalConocido salta los que todavía no tienen los dos rivales.
+        completados.add(cambio.partidoId)
       } else {
         const { error } = await db
           .from('torneo_partidos')
@@ -362,9 +383,10 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
           .eq('id', cambio.partidoId)
           .eq('validado', false)
         if (error) throw error
+        const etapa = etapaDe({ ...actual, grupoLetra: null, formato: cat.formato_llave })
         avisos.add(cambio.tipo === 'pase'
-          ? `${ETIQUETA_FASE[actual.fase]}: un lado venía de un doble WO, el otro pasa por WO`
-          : `${ETIQUETA_FASE[actual.fase]}: los dos lados venían de doble WO`)
+          ? `${etapa}: un lado venía de un doble WO, el otro pasa por WO`
+          : `${etapa}: los dos lados venían de doble WO`)
       }
     }
   }
@@ -375,22 +397,22 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
 
 // --- Avisos -----------------------------------------------------------------
 
-async function avisarResultadoValidado(db: SupabaseClient, partido: PartidoFila, categoriaNombre: string, torneoNombre: string) {
+async function avisarResultadoValidado(db: SupabaseClient, partido: PartidoFila, partidoNombre: string, torneoNombre: string) {
   const personas = await personasDeInscripciones(db, [partido.equipo_a!, partido.equipo_b!])
   const ids = [...new Set([...(personas.get(partido.equipo_a!) ?? []), ...(personas.get(partido.equipo_b!) ?? [])])]
   const que = partido.estado === 'doble_wo' ? 'doble WO' : partido.estado === 'wo' ? 'WO' : 'el resultado'
   await notificarJugadores(db, ids, {
     tipo: 'torneo_resultado_validado',
-    mensaje: `✅ Se validó ${que} de tu partido de ${nombrePartido(partido.fase, categoriaNombre)}.`,
+    mensaje: `✅ Se validó ${que} de tu partido de ${partidoNombre}.`,
     asunto: `✅ Resultado validado — ${torneoNombre}`,
-    cuerpoHtml: () => `<p>Se validó ${que} de tu partido de <strong>${escaparHtml(nombrePartido(partido.fase, categoriaNombre))}</strong>. Puedes ver la tabla y la llave en la app, en <strong>Torneo</strong>.</p>`,
+    cuerpoHtml: () => `<p>Se validó ${que} de tu partido de <strong>${escaparHtml(partidoNombre)}</strong>. Puedes ver la tabla y la llave en la app, en <strong>Torneo</strong>.</p>`,
   })
 }
 
 async function avisarRivalConocido(db: SupabaseClient, partidoIds: string[]) {
   const { data, error } = await db
     .from('torneo_partidos')
-    .select('id, fase, equipo_a, equipo_b, torneo_categorias:categoria_id(nombre, torneos:torneo_id(nombre))')
+    .select('id, fase, orden, equipo_a, equipo_b, torneo_categorias:categoria_id(*, torneos:torneo_id(nombre))')
     .in('id', partidoIds)
   if (error) throw error
   const inscripcionIds = (data || []).flatMap((p) => [p.equipo_a, p.equipo_b]).filter(Boolean) as string[]
@@ -399,14 +421,15 @@ async function avisarRivalConocido(db: SupabaseClient, partidoIds: string[]) {
 
   for (const p of data || []) {
     if (!p.equipo_a || !p.equipo_b) continue
-    const cat = p.torneo_categorias as unknown as { nombre: string; torneos: { nombre: string } }
+    const cat = p.torneo_categorias as unknown as { nombre: string; formato_llave?: FormatoLlave; torneos: { nombre: string } }
+    const partido = nombrePartido({ fase: p.fase as Fase, orden: p.orden, grupoLetra: null, formato: cat.formato_llave }, cat.nombre)
     for (const [mia, rival] of [[p.equipo_a, p.equipo_b], [p.equipo_b, p.equipo_a]]) {
       const nombreRival = nombres.get(rival) || 'tu rival'
       await notificarJugadores(db, personas.get(mia) ?? [], {
         tipo: 'torneo_rival_conocido',
-        mensaje: `🎾 ${nombrePartido(p.fase as Fase, cat.nombre)}: tu rival es ${nombreRival}.`,
+        mensaje: `🎾 ${partido}: tu rival es ${nombreRival}.`,
         asunto: `🎾 Ya conoces a tu rival — ${cat.torneos.nombre}`,
-        cuerpoHtml: () => `<p>En <strong>${escaparHtml(nombrePartido(p.fase as Fase, cat.nombre))}</strong> tu rival es <strong>${escaparHtml(nombreRival)}</strong>. Revisa el horario en la app, en <strong>Torneo</strong>.</p>`,
+        cuerpoHtml: () => `<p>En <strong>${escaparHtml(partido)}</strong> tu rival es <strong>${escaparHtml(nombreRival)}</strong>. Revisa el horario en la app, en <strong>Torneo</strong>.</p>`,
       })
     }
   }
@@ -417,6 +440,7 @@ async function avisarRivalConocido(db: SupabaseClient, partidoIds: string[]) {
 export type PartidoLista = PartidoFila & {
   categoria_nombre: string
   categoria_orden: number
+  formato_llave: FormatoLlave
   grupo_letra: string | null
   nombre_a: string | null
   nombre_b: string | null
@@ -428,7 +452,7 @@ export type PartidoLista = PartidoFila & {
 // pestaña Torneo del admin). soloInscripciones filtra a los de esas
 // inscripciones.
 export async function listarPartidos(db: SupabaseClient, torneoId: string, soloInscripciones?: string[]): Promise<PartidoLista[]> {
-  const { data: categorias, error: errC } = await db.from('torneo_categorias').select('id, nombre, orden').eq('torneo_id', torneoId)
+  const { data: categorias, error: errC } = await db.from('torneo_categorias').select('*').eq('torneo_id', torneoId)
   if (errC) throw errC
   const catPorId = new Map((categorias || []).map((c) => [c.id, c]))
   if (!catPorId.size) return []
@@ -458,6 +482,7 @@ export async function listarPartidos(db: SupabaseClient, torneoId: string, soloI
       ...p,
       categoria_nombre: catPorId.get(p.categoria_id)!.nombre,
       categoria_orden: catPorId.get(p.categoria_id)!.orden,
+      formato_llave: (catPorId.get(p.categoria_id)!.formato_llave ?? 'normal') as FormatoLlave,
       grupo_letra: p.grupo_id ? letra.get(p.grupo_id) ?? null : null,
       nombre_a: p.equipo_a ? nombres.get(p.equipo_a) ?? null : null,
       nombre_b: p.equipo_b ? nombres.get(p.equipo_b) ?? null : null,
