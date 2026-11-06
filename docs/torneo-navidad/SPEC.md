@@ -208,6 +208,7 @@ Plantilla de turnos por día (hora Caracas, usar `lib/tiempo.ts`):
 - Regla: un partido de llave no se puede programar antes que los partidos de los que depende.
 - Asistente de programación (admin): propone automáticamente llenar los turnos libres en orden de fase (grupos → cuartos → semis → final) respetando las reglas; el admin ajusta a mano. Las 4 finales van fijas el viernes 11-dic (último día del torneo).
 - Cambio de horario: los horarios publicados son oficiales y no se aceptan solicitudes de cambio. Solo la Comisión reprograma, por fuerza mayor (lluvia o indisponibilidad de canchas), y se avisa a los afectados. Asignar el primer horario a un partido después de publicar (cuartos, semis…) no es una reprogramación: va con el aviso «Partido programado».
+- Intercambio (Admin → Torneo → Programación, «⇄ Intercambiar»): dos partidos se cambian el turno en un solo paso. Se guardan juntos en `guardarProgramacion`, con las mismas revisiones de siempre, y si la programación está publicada va el aviso de Reprogramación a los jugadores de los dos partidos.
 
 ### 4.1 Handicap del Mixto (aprobado 20-oct-2026)
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { crucesTodosContraTodos, generarLlaveCuadros } from './torneo'
 import { armarSorteoCategoria, planCategoria, type CategoriaParaSorteo } from './torneoSorteo'
 import {
+  asignacionesIntercambio,
   celdaDeTurno,
   dependenciasDe,
   etiquetaPartido,
@@ -313,6 +314,41 @@ describe('formato cuadros (SPEC §16)', () => {
     const vie11 = { cancha: 'HGV1' as const, inicio: en('2026-12-11', '18:30') }
     expect(revisarHorario(ctx, conSemis('S3', 'S4'), por('F2'), vie11).avisos).toEqual([])
   })
+  describe('intercambio de dos partidos', () => {
+    const turnoA = { cancha: 'HGV1' as const, inicio: en('2026-11-09', '20:00') }
+    const turnoB = { cancha: 'HGV2' as const, inicio: en('2026-11-10', '19:00') }
+    const antes = new Map<string, Horario>([['JA', turnoA], ['JB', turnoB]])
+
+    it('cada uno toma el turno del otro', () => {
+      expect(asignacionesIntercambio({ id: 'a', cancha: 'HGV1', inicio: 'x' }, { id: 'b', cancha: 'HGV2', inicio: 'y' })).toEqual([
+        { partidoId: 'a', cancha: 'HGV2', inicio: 'y' },
+        { partidoId: 'b', cancha: 'HGV1', inicio: 'x' },
+      ])
+    })
+    it('por separado choca; juntos no', () => {
+      const soloUno = new Map(antes); soloUno.delete('JA')
+      expect(revisarHorario(ctx, soloUno, por('JA'), turnoB).errores.join()).toContain('ya está ocupada')
+      const despues = new Map<string, Horario>([['JA', turnoB], ['JB', turnoA]])
+      for (const id of ['JA', 'JB']) {
+        const resto = new Map(despues); resto.delete(id)
+        expect(revisarHorario(ctx, resto, por(id), despues.get(id)!).errores).toEqual([])
+      }
+    })
+    it('un jugador con otro partido ese día: aviso; solapado: error', () => {
+      const conJugador = { ...ctx, partidos: partidos.map((p) => (p.id === 'JA' || p.id === 'JC' ? { ...p, personas: ['x'] } : p)) }
+      const pa = conJugador.partidos.find((p) => p.id === 'JA')!
+      const conJC = (hora: string) => new Map<string, Horario>([['JB', turnoA], ['JC', { cancha: 'HGV1', inicio: en('2026-11-10', hora) }]])
+      expect(revisarHorario(conJugador, conJC('20:30'), pa, turnoB).avisos.join()).toContain('ya juega ese día')
+      expect(revisarHorario(conJugador, conJC('20:00'), pa, turnoB).errores.join()).toContain('otro partido a esa hora')
+    })
+    it('no deja que un partido quede antes de los que dependen de él', () => {
+      const horarios = new Map<string, Horario>([['JA', turnoA], ['JB', turnoA], ['C1', { cancha: 'HGV2', inicio: en('2026-11-11', '19:00') }]])
+      const tarde = { cancha: 'HGV1' as const, inicio: en('2026-11-12', '20:30') }
+      const resto = new Map(horarios); resto.delete('JA')
+      expect(revisarHorario(ctx, resto, por('JA'), tarde).errores.join()).toContain('depende de este partido')
+    })
+  })
+
   it('el asistente programa los 22 partidos, con F1 el 11-dic', () => {
     const { horarios, sinHorario } = proponerProgramacion(ctx, new Map())
     expect(sinHorario).toEqual([])
