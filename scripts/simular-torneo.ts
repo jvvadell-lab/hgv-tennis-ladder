@@ -601,6 +601,27 @@ async function cuadrosPreparar(db: Db) {
     const b = fila!.bloqueos_cancha as unknown as { inicio: string; cancha: string; motivo: string }
     comprobar(new Date(b.inicio).getTime() === libre.inicio && b.cancha === libre.cancha && b.motivo.includes(TITULO_CUADRO[cuadro]), `Cambio de horario en ${TITULO_CUADRO[cuadro]} (${q.fase} ${q.orden}): el bloqueo se movió ("${b.motivo}")`)
   }
+  // Intercambio (Admin → Torneo → Programación): dos partidos de turno, en un paso.
+  const { asignacionesIntercambio } = await import('../lib/torneoProgramacion')
+  const tI = (await torneoVigente(db))!
+  const { horarios: hI, partidos: lI } = await datosProgramacion(db, tI)
+  const fichaI = (letra: string) => {
+    const q = lI.find((x) => x.categoriaNombre === 'Mixto con handicap' && x.grupoLetra === letra)!
+    const h = hI.get(q.id)!
+    return { ...q, cancha: h.cancha, inicio: new Date(h.inicio).toISOString() }
+  }
+  const [pA, pB] = [fichaI('A'), fichaI('E')]
+  await db.from('notificaciones').delete().eq('tipo', 'torneo_programacion')
+  const rI = await guardarProgramacion(db, tI, asignacionesIntercambio(pA, pB), true, admin)
+  if (!rI.ok) throw new Error(`${rI.error}: ${rI.errores?.join(' · ')}`)
+  const { data: filasI } = await db.from('torneo_partidos').select('id, cancha, fecha_hora, bloqueos_cancha:bloqueo_id(cancha, inicio)').in('id', [pA.id, pB.id])
+  const filaA = filasI!.find((f) => f.id === pA.id)!, filaB = filasI!.find((f) => f.id === pB.id)!
+  const bloqueoDe = (f: typeof filaA) => f.bloqueos_cancha as unknown as { cancha: string; inicio: string }
+  comprobar(filaA.cancha === pB.cancha && new Date(filaA.fecha_hora!).toISOString() === pB.inicio && filaB.cancha === pA.cancha && new Date(filaB.fecha_hora!).toISOString() === pA.inicio, 'Intercambio: cada partido quedó en el turno del otro')
+  comprobar(bloqueoDe(filaA).cancha === pB.cancha && new Date(bloqueoDe(filaA).inicio).toISOString() === pB.inicio && new Date(bloqueoDe(filaB).inicio).toISOString() === pA.inicio, 'Intercambio: los dos bloqueos se movieron')
+  const { data: avisosI } = await db.from('notificaciones').select('jugador_id, mensaje').eq('tipo', 'torneo_programacion')
+  const personasI = new Set([...pA.avisar, ...pB.avisar])
+  comprobar(new Set(avisosI?.map((n) => n.jugador_id)).size === personasI.size && avisosI!.every((n) => n.mensaje.startsWith('📅 Cambio de horario')), `Intercambio: reprogramación a los ${personasI.size} jugadores de los dos partidos`)
   console.log('\nSiguiente: npm run simular -- cuadros-jugar ronda1')
 }
 
