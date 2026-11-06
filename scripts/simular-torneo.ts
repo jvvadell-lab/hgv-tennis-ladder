@@ -677,6 +677,29 @@ async function cuadrosJugar(db: Db, etapa: EtapaCuadros) {
     const c4 = await buscar(MX, 'cuartos', 4), c8 = await buscar(MX, 'cuartos', 8)
     comprobar(c4.estado === 'doble_wo' && c8.estado === 'doble_wo', 'Doble WO en los Partidos 7 y 8: C4 y C8 quedan como doble WO')
     comprobar(!(await desempatesPendientes(db, torneo.id)).length, 'Ningún desempate pendiente: un doble WO no pide decisión del admin')
+
+    // Con la programación publicada: primer horario ≠ reprogramación. C1 y lo
+    // que depende de él se quedan sin horario y C1 lo recupera.
+    const { guardarProgramacion } = await import('../lib/torneoProgramacionServidor')
+    const { torneoVigente } = await import('../lib/torneoServidor')
+    const [c1m, s1m, f1m] = [await buscar(MX, 'cuartos', 1), await buscar(MX, 'semis', 1), await buscar(MX, 'final', 1)]
+    const previo = [c1m, s1m, f1m].map((q) => ({ partidoId: q.id, cancha: q.cancha, inicio: q.fecha_hora }))
+    const quitar = await guardarProgramacion(db, (await torneoVigente(db))!, previo.map((a) => ({ ...a, cancha: null, inicio: null })), true, admin)
+    if (!quitar.ok) throw new Error(`${quitar.error}: ${quitar.errores?.join(' · ')}`)
+    await db.from('notificaciones').delete().eq('tipo', 'torneo_programacion')
+    const poner = await guardarProgramacion(db, (await torneoVigente(db))!, previo, true, admin)
+    if (!poner.ok) throw new Error(`${poner.error}: ${poner.errores?.join(' · ')}`)
+    const { data: nuevos } = await db.from('notificaciones').select('mensaje').eq('tipo', 'torneo_programacion')
+    comprobar(nuevos?.length && nuevos.every((n) => n.mensaje.startsWith('📅 Partido programado')), `Primer horario tras publicar: "${nuevos?.[0]?.mensaje.slice(0, 90)}…"`)
+    await db.from('notificaciones').delete().eq('tipo', 'torneo_programacion')
+    const quitarDependientes = await guardarProgramacion(db, (await torneoVigente(db))!, [previo[2], previo[1]].map((a) => ({ ...a, cancha: null, inicio: null })), true, admin)
+    if (!quitarDependientes.ok) throw new Error(quitarDependientes.error)
+    const quitarC1 = await guardarProgramacion(db, (await torneoVigente(db))!, [{ ...previo[0], cancha: null, inicio: null }], true, admin)
+    if (!quitarC1.ok) throw new Error(quitarC1.error)
+    const { data: repro } = await db.from('notificaciones').select('mensaje').eq('tipo', 'torneo_programacion')
+    comprobar(repro?.length && repro.every((n) => n.mensaje.startsWith('📅 Cambio de horario')), 'Quitar un horario que existía sigue siendo reprogramación')
+    const volver = await guardarProgramacion(db, (await torneoVigente(db))!, previo, true, admin)
+    if (!volver.ok) throw new Error(`${volver.error}: ${volver.errores?.join(' · ')}`)
   } else {
     for (const cat of [DM, MX]) {
       for (const p of (await lista()).filter((q) => q.categoria_nombre === cat && q.fase === etapa).sort((a, b) => a.orden - b.orden)) {
