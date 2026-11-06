@@ -172,9 +172,50 @@ export function nombrePartido(p: Pick<PartidoDetalle, 'categoriaNombre' | 'fase'
     : `${p.categoriaNombre} · ${ETIQUETA_FASE[p.fase]} (${codigoPartido(p)})`
 }
 
+const NORMAS_PROGRAMACION = [
+  'Los horarios publicados son oficiales y de obligatorio cumplimiento. No se aceptan solicitudes de cambio de fecha, hora ni cancha.',
+  'Preséntate con antelación, listo para jugar a la hora indicada.',
+  'Pasados 15 minutos de la hora fijada sin presentarse, se declarará W.O. a favor del rival.',
+  'Solo la Comisión puede modificar la programación por causas de fuerza mayor (lluvia o indisponibilidad de canchas); en ese caso te avisaremos por esta misma vía.',
+  'Para disputar tu primer partido, tu inscripción debe estar pagada y validada.',
+]
+
+// Textos del aviso a un jugador: la programación oficial (al publicar) o una
+// reprogramación (cambio = true). `lineas` son sus partidos.
+export function textosAvisoProgramacion(torneoNombre: string, lineas: string[], cambio: boolean) {
+  const lista = `<ul>${lineas.map((l) => `<li>${escaparHtml(l)}</li>`).join('')}</ul>`
+  if (cambio) {
+    return {
+      mensaje: `📅 Cambio de horario en el ${torneoNombre}: ${lineas.join(' · ')}`,
+      asunto: `📅 Reprogramación — ${torneoNombre}`,
+      correoPropio: false,
+      cuerpoHtml: `
+        <p>La Comisión ha reprogramado tu partido por causa de fuerza mayor:</p>
+        ${lista}
+        <p>Tolerancia de 15 minutos: pasado ese tiempo se declara WO a favor del rival.</p>
+      `,
+    }
+  }
+  const n = lineas.length
+  return {
+    mensaje: `📅 Programación oficial del ${torneoNombre}: ${n} partido${n === 1 ? '' : 's'}. ${lineas[0]}${n > 1 ? '…' : '.'} Horarios oficiales: no se aceptan cambios.`,
+    asunto: `🎾 Programación oficial — ${torneoNombre}`,
+    correoPropio: true,
+    cuerpoHtml: `
+      <p>Estimado/a jugador/a:</p>
+      <p>La Comisión de Tenis del Club Hermandad Gallega de Valencia publica la programación oficial del <strong>${escaparHtml(torneoNombre)}</strong>. Estos son tus partidos:</p>
+      ${lista}
+      <p><strong>Normas de la programación</strong></p>
+      <ul>${NORMAS_PROGRAMACION.map((n) => `<li>${n}</li>`).join('')}</ul>
+      <p>Gracias por tu puntualidad y compromiso: son los que dan categoría a este torneo. ¡Mucho éxito!</p>
+      <p>Comisión de Tenis · Club Hermandad Gallega de Valencia</p>
+    `,
+  }
+}
+
 // Avisa a cada jugador o representante (campana + correo) de sus partidos
-// con horario. `soloPartidos` limita el aviso a esos partidos (cambios
-// después de publicar); `titulo` cambia el asunto.
+// con horario: la programación oficial al publicar, o una reprogramación si
+// opciones.cambio (después de publicar, solo los partidos que se movieron).
 export async function avisarProgramacion(
   db: SupabaseClient,
   torneoNombre: string,
@@ -192,18 +233,8 @@ export async function avisarProgramacion(
     for (const id of p.avisar) porPersona.set(id, [...(porPersona.get(id) || []), linea])
   }
   for (const [id, lineas] of porPersona) {
-    await notificarJugadores(db, [id], {
-      tipo: 'torneo_programacion',
-      mensaje: opciones.cambio
-        ? `📅 Cambio de horario en el ${torneoNombre}: ${lineas.join(' · ')}`
-        : `📅 Ya está el calendario del ${torneoNombre}: ${lineas.length} partido${lineas.length === 1 ? '' : 's'}. ${lineas[0]}${lineas.length > 1 ? '…' : ''}`,
-      asunto: opciones.cambio ? `📅 Cambio de horario — ${torneoNombre}` : `📅 Tus partidos — ${torneoNombre}`,
-      cuerpoHtml: () => `
-        <p>${opciones.cambio ? 'Cambió el horario de' : 'Ya está publicado el calendario del'} <strong>${escaparHtml(torneoNombre)}</strong>${opciones.cambio ? ':' : '. Tus partidos:'}</p>
-        <ul>${lineas.map((l) => `<li>${escaparHtml(l)}</li>`).join('')}</ul>
-        <p>Tolerancia de 15 minutos: pasado ese tiempo se declara WO a favor del rival. Si no puedes en algún horario, avísale al admin cuanto antes.</p>
-      `,
-    })
+    const { cuerpoHtml, ...aviso } = textosAvisoProgramacion(torneoNombre, lineas, opciones.cambio)
+    await notificarJugadores(db, [id], { tipo: 'torneo_programacion', ...aviso, cuerpoHtml: () => cuerpoHtml })
   }
 }
 
