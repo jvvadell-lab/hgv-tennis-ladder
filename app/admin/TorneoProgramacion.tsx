@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { fechaISOEnCaracas, formatearFechaHora, formatearFechaLarga, formatearHora } from '@/lib/tiempo'
+import { asignacionesIntercambio } from '@/lib/torneoProgramacion'
 import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, etapaCuadros, type EstadoPartido, type Fase, type FormatoLlave, textoOrigen, textoOrigenCuadros } from '@/lib/torneo'
 
 // Programación del torneo (SPEC §4), dentro de la pestaña Torneo del admin:
@@ -81,6 +82,7 @@ export default function TorneoProgramacion() {
   const [propuesta, setPropuesta] = useState<Propuesta | null>(null)
   const [categoria, setCategoria] = useState('todas')
   const [eleccion, setEleccion] = useState<Record<string, string>>({})
+  const [intercambio, setIntercambio] = useState<string | null>(null)   // primer partido elegido
 
   const cargar = async () => {
     try {
@@ -137,6 +139,16 @@ export default function TorneoProgramacion() {
   const conHorario = partidos.filter((p) => p.inicio).length
   const conConflicto = partidos.filter((p) => p.errores.length || p.avisos.length).length
   const opcionesDe = (p: Partido) => (p.esInfantil ? turnos.infantiles[p.duracionMin] || [] : turnos.adultos)
+  const elegido1 = intercambio ? porId.get(intercambio) ?? null : null
+  const turnoDe = (p: Partido) => `${formatearFechaHora(p.inicio!)} · ${p.cancha}`
+
+  const intercambiar = (a: Partido, b: Partido) => {
+    const aviso = torneo.programacion_publicada_at ? '\n\nSe enviará el correo de Reprogramación a los jugadores de los dos partidos.' : ''
+    if (!confirm(`¿Intercambiar estos partidos?\n\n${a.categoriaNombre} · ${etiqueta(a)} → ${turnoDe(b)}\n${b.categoriaNombre} · ${etiqueta(b)} → ${turnoDe(a)}${aviso}`)) return
+    ejecutar('intercambio', async () => {
+      if (await guardar(asignacionesIntercambio(a, b), 'Partidos intercambiados')) setIntercambio(null)
+    })
+  }
 
   return (
     <div>
@@ -248,6 +260,13 @@ export default function TorneoProgramacion() {
         ))}
       </div>
 
+      {elegido1 && (
+        <div style={{ position: 'fixed', left: '12px', right: '12px', bottom: '12px', zIndex: 50, maxWidth: '640px', margin: '0 auto', background: '#fff4d6', color: '#8a5a00', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 4px 16px rgba(0,0,0,0.25)' }}>
+          <span>⇄ <strong>{elegido1.categoriaNombre} · {etiqueta(elegido1)}</strong> ({turnoDe(elegido1)}). Ahora elige con qué partido intercambiarlo.</span>
+          <button onClick={() => setIntercambio(null)} style={btn('#8a5a00')}>Cancelar</button>
+        </div>
+      )}
+
       <div style={tarjeta}>
         {visibles.map((p, idx) => {
           const opciones = opcionesDe(p)
@@ -280,6 +299,14 @@ export default function TorneoProgramacion() {
                       await guardar([{ partidoId: p.id, cancha, inicio }], 'Horario guardado')
                       setEleccion((e) => ({ ...e, [p.id]: '' }))
                     })} style={btn('var(--color-court)', true)}>Guardar</button>
+                    {p.inicio && !intercambio && (
+                      <button onClick={() => { setMensaje(''); setError(''); setDetalle(null); setIntercambio(p.id) }} style={btn('var(--color-court)')}>⇄ Intercambiar</button>
+                    )}
+                    {p.inicio && elegido1 && elegido1.id !== p.id && (
+                      <button disabled={ocupado === 'intercambio'} onClick={() => intercambiar(elegido1, p)} style={btn('var(--color-court)', true)}>
+                        {ocupado === 'intercambio' ? 'Intercambiando…' : '⇄ Intercambiar con este'}
+                      </button>
+                    )}
                     {p.inicio && (
                       <button disabled={ocupado === p.id} onClick={() => {
                         if (!confirm('¿Quitar el horario de este partido? Se libera la cancha.')) return

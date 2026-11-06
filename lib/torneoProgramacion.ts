@@ -209,6 +209,16 @@ function calcularDependencias(p: PartidoProg, todos: PartidoProg[]): PartidoProg
   return deps
 }
 
+// Intercambio de dos partidos: cada uno toma el turno del otro. Van juntos a
+// guardarProgramacion, que revisa la programación completa que quedaría; por
+// separado chocarían con la cancha que el otro todavía ocupa.
+export function asignacionesIntercambio<T extends { id: string; cancha: string | null; inicio: string | null }>(a: T, b: T) {
+  return [
+    { partidoId: a.id, cancha: b.cancha, inicio: b.inicio },
+    { partidoId: b.id, cancha: a.cancha, inicio: a.inicio },
+  ]
+}
+
 const DIAS_CELDA = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
 // Celda de disponibilidad de un turno de adultos: 1er turno (18:30/19:00) o
