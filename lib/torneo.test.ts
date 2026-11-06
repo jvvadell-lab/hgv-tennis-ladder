@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest'
 import type { SetJugado } from './resultados'
 import {
   TITULO_CUADRO,
+  cabezasDeSerieCuadros,
   crucesTodosContraTodos,
   cuadroDe,
   distribuirSerpentina,
   etapaCuadros,
   generarLlave,
   generarLlaveCuadros,
+  llaveDibujable,
   ordenarGrupo,
   parsearOrigen,
   textoOrigenCuadros,
@@ -337,6 +339,20 @@ describe('formato cuadros (SPEC §16)', () => {
     expect(textoOrigenCuadros('1H')).toBe('Partido 8')
     expect(textoOrigenCuadros('2H')).toBe('Partido 8')
     expect(textoOrigenCuadros('G:C5')).toBe('Ganador C5')
+  })
+  it('las cabezas de serie están en las puntas', () => {
+    const ronda = [...'ABCDEFGH'].map((grupo) => ({ fase: 'grupo' as const, grupo, equipo_a: `${grupo}1`, equipo_b: `${grupo}2` }))
+    expect([...cabezasDeSerieCuadros(ronda)]).toEqual([['A1', 1], ['H2', 2]])
+  })
+  it('se dibuja la llave de cuadros por cuadro y las normales, no la de byes', () => {
+    const de = (c: number, s: number, f: number) => [
+      ...Array(c).fill({ fase: 'cuartos' }), ...Array(s).fill({ fase: 'semis' }), ...Array(f).fill({ fase: 'final' }),
+    ]
+    expect(llaveDibujable(de(4, 2, 1))).toBe(true)
+    expect(llaveDibujable(de(0, 2, 1))).toBe(true)
+    expect(llaveDibujable(de(0, 0, 1))).toBe(true)
+    expect(llaveDibujable(de(2, 2, 1))).toBe(false)
+    expect(llaveDibujable([])).toBe(false)
   })
   it('la migración inserta la misma llave que generarLlaveCuadros', () => {
     const filas = (bloque: string) => [...bloque.matchAll(/\('(cuartos|semis|final)', (\d), '([^']+)', '([^']+)'\)/g)].map((m) => `${m[1]}${m[2]}=${m[3]}/${m[4]}`)
