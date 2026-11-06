@@ -427,7 +427,7 @@ Lo usan **Doble Masculino Sexta** y **Mixto con handicap** (16 duplas cada una).
 | A | C1 = 1A-1B · C2 = 1C-1D · C3 = 1E-1F · C4 = 1G-1H | S1 = G:C1-G:C2 · S2 = G:C3-G:C4 | F1 = G:S1-G:S2 |
 | B | C5 = 2A-2B · C6 = 2C-2D · C7 = 2E-2F · C8 = 2G-2H | S3 = G:C5-G:C6 · S4 = G:C7-G:C8 | F2 = G:S3-G:S4 |
 
-En este formato '1X' es el **ganador** del partido de primera ronda X y '2X' el **perdedor**. Mientras no hay rivales se muestran como G1…G8 y P1…P8.
+En este formato '1X' es el **ganador** del partido de primera ronda X y '2X' el **perdedor**. Mientras no hay rivales, los dos cuadros muestran «Partido 1…8».
 
 **Modelo:** `torneo_categorias.formato_llave` ('normal' | 'cuadros'), único dato nuevo (migración `torneo_cuadros`). El cuadro de un partido no se guarda: sale de su código (`cuadroDe` en `lib/torneo.ts`), que `torneo_partidos_llave_unica` ya hace único. La marca va en la categoría porque también rotula los Partidos 1…8, y un jugador que solo carga sus partidos de la primera ronda no ve ninguna fila de llave. `torneo_crear_llave_cuadros(categoría)` marca la categoría e inserta los 14 partidos; es idempotente, no pisa una llave de otro formato y llena los lugares de los partidos ya validados.
 

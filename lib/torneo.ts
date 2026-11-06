@@ -420,11 +420,12 @@ export function etapaCuadros(p: { fase: Fase; orden: number; grupoLetra: string 
   return `${TITULO_CUADRO[cuadroDe(p)!]} – ${ETIQUETA_FASE[p.fase]}${codigo}`
 }
 
-// Mientras no hay rival: G3 = ganador del Partido 3, P3 = perdedor del Partido 3.
+// Mientras no hay rival: 'Partido 3', en los dos cuadros (el A espera al
+// ganador de ese partido y el B al otro).
 export function textoOrigenCuadros(origen: string | null): string {
   const o = origen ? parsearOrigen(origen) : null
   if (!o) return origen ?? '—'
-  if (o.tipo === 'grupo') return `${o.puesto === 1 ? 'G' : 'P'}${numeroPartido(o.letra)}`
+  if (o.tipo === 'grupo') return `Partido ${numeroPartido(o.letra)}`
   if (o.tipo === 'ganador') return `Ganador ${o.codigo}`
   return textoOrigen(origen)
 }
