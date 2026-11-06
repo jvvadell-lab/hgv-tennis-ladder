@@ -332,10 +332,10 @@ describe('formato cuadros (SPEC §16)', () => {
     expect(etapaCuadros({ fase: 'final', orden: 2, grupoLetra: null }, true)).toBe('Cuadro B – Final')
     expect(TITULO_CUADRO).toEqual({ A: 'Cuadro A', B: 'Cuadro B' })
   })
-  it('mientras no hay rivales muestra G1…G8 y P1…P8', () => {
-    expect(textoOrigenCuadros('1A')).toBe('G1')
-    expect(textoOrigenCuadros('1H')).toBe('G8')
-    expect(textoOrigenCuadros('2H')).toBe('P8')
+  it('mientras no hay rivales muestra Partido N en los dos cuadros', () => {
+    expect(textoOrigenCuadros('1A')).toBe('Partido 1')
+    expect(textoOrigenCuadros('1H')).toBe('Partido 8')
+    expect(textoOrigenCuadros('2H')).toBe('Partido 8')
     expect(textoOrigenCuadros('G:C5')).toBe('Ganador C5')
   })
   it('la migración inserta la misma llave que generarLlaveCuadros', () => {
