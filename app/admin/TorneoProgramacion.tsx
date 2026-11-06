@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { fechaISOEnCaracas, formatearFechaHora, formatearFechaLarga, formatearHora } from '@/lib/tiempo'
-import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, type EstadoPartido, type Fase, textoOrigen } from '@/lib/torneo'
+import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, etapaCuadros, type EstadoPartido, type Fase, type FormatoLlave, textoOrigen, textoOrigenCuadros } from '@/lib/torneo'
 
 // Programación del torneo (SPEC §4), dentro de la pestaña Torneo del admin:
 // asistente (propone sin guardar), confirmación, asignación a mano con
@@ -16,6 +16,7 @@ type Partido = {
   esInfantil: boolean
   esMixto: boolean
   duracionMin: number
+  formatoLlave: FormatoLlave
   fase: Fase
   grupoLetra: string | null
   orden: number
@@ -55,9 +56,11 @@ const btn = (color: string, relleno = false): React.CSSProperties => ({
   border: `1px solid ${color}`, background: relleno ? color : 'white', color: relleno ? 'white' : color, whiteSpace: 'nowrap',
 })
 
-const etiqueta = (p: Partido) => (p.fase === 'grupo' ? `Grupo ${p.grupoLetra} · P${p.orden}` : `${ETIQUETA_FASE[p.fase]} ${PREFIJO[p.fase]}${p.orden}`)
-const rivales = (p: Partido) =>
-  `${p.nombre_a ?? (p.origen_a ? origenTexto(p.origen_a) : '—')} vs ${p.nombre_b ?? (p.origen_b ? origenTexto(p.origen_b) : '—')}`
+const etiqueta = (p: Partido) => p.formatoLlave === 'cuadros' ? etapaCuadros(p, true) : (p.fase === 'grupo' ? `Grupo ${p.grupoLetra} · P${p.orden}` : `${ETIQUETA_FASE[p.fase]} ${PREFIJO[p.fase]}${p.orden}`)
+const rivales = (p: Partido) => {
+  const origen = (o: string | null) => (!o ? '—' : p.formatoLlave === 'cuadros' ? textoOrigenCuadros(o) : origenTexto(o))
+  return `${p.nombre_a ?? origen(p.origen_a)} vs ${p.nombre_b ?? origen(p.origen_b)}`
+}
 const origenTexto = (o: string) => {
   if (/^2?P\d$/.test(o)) return textoOrigen(o)   // llave de 3 grupos (mejores primeros)
   const g = o.match(/^([1-9])([A-Z])$/)

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { crucesTodosContraTodos } from './torneo'
+import { crucesTodosContraTodos, generarLlaveCuadros } from './torneo'
 import { armarSorteoCategoria, planCategoria, type CategoriaParaSorteo } from './torneoSorteo'
 import {
   celdaDeTurno,
   dependenciasDe,
+  etiquetaPartido,
   proponerProgramacion,
   revisarHorario,
   turnosAdultos,
@@ -278,5 +279,44 @@ describe('proponerProgramacion', () => {
     const { horarios, sinHorario } = proponerProgramacion(ctx, new Map())
     expect(sinHorario).toEqual([])
     verificar(ctx, horarios)
+  })
+})
+
+describe('formato cuadros (SPEC §16)', () => {
+  const comun = { categoriaId: 'mx', categoriaNombre: 'Mixto con handicap', categoriaOrden: 4, esInfantil: false, duracionMin: 90, ronda: null, personas: [], cerrado: false, formatoLlave: 'cuadros' as const }
+  const juegos: PartidoProg[] = [...'ABCDEFGH'].map((letra) => ({ ...comun, id: `J${letra}`, fase: 'grupo', grupoLetra: letra, orden: 1, ronda: 1, origen_a: null, origen_b: null }))
+  const llave: PartidoProg[] = generarLlaveCuadros().map((l) => ({ ...comun, id: l.codigo, fase: l.fase, grupoLetra: null, orden: l.orden, origen_a: l.origen_a, origen_b: l.origen_b }))
+  const partidos = [...juegos, ...llave]
+  const ctx: ContextoProgramacion = { fechaInicio: '2026-11-06', fechaFin: '2026-12-11', partidos, franjas: [], ocupaciones: [], noDisponible: {} }
+  const por = (id: string) => partidos.find((p) => p.id === id)!
+
+  it('cada partido depende de los suyos, también en el cuadro B', () => {
+    expect(dependenciasDe(por('C5'), partidos).map((p) => p.id)).toEqual(['JA', 'JB'])
+    expect(dependenciasDe(por('C8'), partidos).map((p) => p.id)).toEqual(['JG', 'JH'])
+    expect(dependenciasDe(por('S3'), partidos).map((p) => p.id)).toEqual(['C5', 'C6'])
+    expect(dependenciasDe(por('F2'), partidos).map((p) => p.id)).toEqual(['S3', 'S4'])
+  })
+  it('rotula los conflictos con el juego o el cuadro', () => {
+    expect(etiquetaPartido(por('JC'))).toBe('Mixto con handicap · 1ª ronda · J3')
+    expect(etiquetaPartido(por('S3'))).toBe('Mixto con handicap · Cuadro B – Semifinal S3')
+  })
+  it('un partido de llave no va el mismo día que su origen', () => {
+    const h = { cancha: 'HGV1' as const, inicio: en('2026-11-27', '18:30') }
+    const horarios = new Map<string, Horario>([['JA', { cancha: 'HGV2', inicio: en('2026-11-27', '20:30') }], ['JB', { cancha: 'HGV2', inicio: en('2026-11-20', '18:30') }]])
+    expect(revisarHorario(ctx, horarios, por('C5'), h).errores.join()).toContain('1ª ronda · J1')
+  })
+  it('F1 es final de adultos; F2 no: puede ir antes del 11-dic', () => {
+    const conSemis = (a: string, b: string) => new Map<string, Horario>([[a, { cancha: 'HGV1', inicio: en('2026-12-02', '20:00') }], [b, { cancha: 'HGV2', inicio: en('2026-12-02', '20:30') }]])
+    const vie4 = { cancha: 'HGV1' as const, inicio: en('2026-12-04', '18:30') }
+    expect(revisarHorario(ctx, conSemis('S1', 'S2'), por('F1'), vie4).avisos.join()).toContain('finales')
+    expect(revisarHorario(ctx, conSemis('S3', 'S4'), por('F2'), vie4).avisos).toEqual([])
+    const vie11 = { cancha: 'HGV1' as const, inicio: en('2026-12-11', '18:30') }
+    expect(revisarHorario(ctx, conSemis('S3', 'S4'), por('F2'), vie11).avisos).toEqual([])
+  })
+  it('el asistente programa los 22 partidos, con F1 el 11-dic', () => {
+    const { horarios, sinHorario } = proponerProgramacion(ctx, new Map())
+    expect(sinHorario).toEqual([])
+    expect(horarios.size).toBe(22)
+    expect(fechaISOEnCaracas(new Date(horarios.get('F1')!.inicio))).toBe('2026-12-11')
   })
 })

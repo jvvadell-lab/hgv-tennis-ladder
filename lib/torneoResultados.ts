@@ -126,6 +126,29 @@ export function avanceGrupo(
   return { cambios, avisos: [...new Set(avisos)] }
 }
 
+// Formato cuadros (SPEC §16): cada juego de la 1ª ronda llena sus dos lugares
+// en cuanto se cierra, sin esperar a los demás: '1X' = el ganador (cuadro A) y
+// '2X' = el perdedor (cuadro B). No pasa por la tabla del grupo, que con un
+// doble WO daría un empate para el admin: ahí no hay ganador ni perdedor y el
+// lugar queda vacante (pasesPorVacante). `juegos` va por letra.
+export function avanceCuadros(juegos: Map<string, PartidoAvance>, llave: PartidoAvance[]): ResultadoAvance {
+  const cambios: CambioAvance[] = []
+  for (const p of llave) {
+    for (const lado of lados) {
+      const o = parsearOrigen(origenDe(p, lado) ?? '')
+      if (o?.tipo !== 'grupo') continue
+      const juego = juegos.get(o.letra)
+      if (!juego || !partidoCerrado(juego) || !juego.ganador_equipo_id) continue
+      const perdedor = juego.ganador_equipo_id === juego.equipo_a ? juego.equipo_b : juego.equipo_a
+      const equipo = o.puesto === 1 ? juego.ganador_equipo_id : perdedor
+      if (equipo && inscripcionDe(p, lado) !== equipo) {
+        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: equipo })
+      }
+    }
+  }
+  return { cambios, avisos: [] }
+}
+
 // Llave de 3 grupos (cuartos con 2 byes): cuando TODOS los grupos están
 // completos, ordena a los primeros (ordenarPrimeros, con el desempate del
 // admin si dos siguen iguales en todo) y llena 'P1'..'P3' con
@@ -193,13 +216,13 @@ export function avanceLlave(partido: PartidoAvance, llave: PartidoAvance[]): Res
 
 // Partidos de llave que no se pueden jugar porque un lado (o los dos)
 // viene de un doble WO ya cerrado: con un solo clasificado, pasa por WO;
-// sin ninguno, queda como doble WO. Solo mira partidos aún sin cerrar.
-export function pasesPorVacante(llave: PartidoAvance[]): CambioAvance[] {
+// sin ninguno, queda como doble WO. Solo mira partidos aún sin cerrar. En el
+// formato cuadros, `juegos` (por letra) agrega como origen los de la 1ª ronda.
+export function pasesPorVacante(llave: PartidoAvance[], juegos?: Map<string, PartidoAvance>): CambioAvance[] {
   const porCodigo = new Map(llave.map((p) => [codigoLlave(p), p]))
   const vacante = (p: PartidoAvance, lado: Lado) => {
     const o = parsearOrigen(origenDe(p, lado) ?? '')
-    if (o?.tipo !== 'ganador') return false
-    const origen = porCodigo.get(o.codigo)
+    const origen = o?.tipo === 'ganador' ? porCodigo.get(o.codigo) : o?.tipo === 'grupo' ? juegos?.get(o.letra) : null
     return !!origen && partidoCerrado(origen) && origen.estado === 'doble_wo'
   }
 

@@ -21,7 +21,7 @@ import {
   minutosDesdeMedianocheEnCaracas,
   sumarDiasEnCaracas,
 } from './tiempo'
-import { PREFIJO_FASE, parsearOrigen, type CanchaTorneo, type Fase } from './torneo'
+import { PREFIJO_FASE, cuadroDe, etapaCuadros, parsearOrigen, type CanchaTorneo, type Fase, type FormatoLlave } from './torneo'
 import { celdaDisponibilidad } from './torneoInscripcion'
 
 // ---------------------------------------------------------------------------
@@ -135,6 +135,7 @@ export type PartidoProg = {
   // vale el del torneo.
   fechaInicioCategoria?: string | null
   fechaFinCategoria?: string | null
+  formatoLlave?: FormatoLlave
 }
 
 export type Ocupacion = { cancha: string; inicio: number; fin: number; motivo: string; tipo: 'bloqueo' | 'reserva' | 'reto' }
@@ -158,7 +159,14 @@ export const codigoPartido = (p: Pick<PartidoProg, 'fase' | 'orden' | 'grupoLetr
   p.fase === 'grupo' ? `${p.grupoLetra}${p.orden}` : `${PREFIJO_FASE[p.fase]}${p.orden}`
 
 export const etiquetaPartido = (p: PartidoProg) =>
-  `${p.categoriaNombre} · ${p.fase === 'grupo' ? `Grupo ${p.grupoLetra}, partido ${p.orden}` : codigoPartido(p)}`
+  p.formatoLlave === 'cuadros'
+    ? `${p.categoriaNombre} · ${etapaCuadros(p, true)}`
+    : `${p.categoriaNombre} · ${p.fase === 'grupo' ? `Grupo ${p.grupoLetra}, partido ${p.orden}` : codigoPartido(p)}`
+
+// La final de consolación (F2) no es una de las finales de adultos: puede
+// jugarse antes o el mismo día, y no le quita turno a las del último día.
+const esFinalDeAdultos = (p: PartidoProg) =>
+  p.fase === 'final' && !(p.formatoLlave === 'cuadros' && cuadroDe(p) === 'B')
 
 // Partidos de los que depende uno de llave: '1A'/'2A' → todos los del grupo
 // A de su categoría; 'G:C1' → el C1.
@@ -261,7 +269,7 @@ export function revisarHorario(ctx: ContextoProgramacion, horarios: Map<string, 
 
   // Finales de adultos: el último día del torneo, y ese día solo finales.
   if (!p.esInfantil) {
-    if (p.fase === 'final' && dia(iniMs) !== ctx.fechaFin) avisos.push(`Las finales de adultos van el ${formatearFechaCortaISO(ctx.fechaFin)}`)
+    if (esFinalDeAdultos(p) && dia(iniMs) !== ctx.fechaFin) avisos.push(`Las finales de adultos van el ${formatearFechaCortaISO(ctx.fechaFin)}`)
     if (p.fase !== 'final' && dia(iniMs) === ctx.fechaFin) avisos.push(`El ${formatearFechaCortaISO(ctx.fechaFin)} es el día de las finales de adultos`)
   }
 

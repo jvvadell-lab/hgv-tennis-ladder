@@ -90,3 +90,18 @@ Para probar el flujo a mano, juega una etapa menos con el script y después:
 2. Entra como admin → Torneo → 🏆 Resultados → **Validar**.
 
 `jugar` se salta los partidos que ya tengan resultado validado.
+
+## Formato cuadro A / cuadro B
+
+Dos categorías de 16 duplas (Doble Masculino Sexta y Mixto con handicap), con la 1ª ronda armada como en producción (8 grupos de 2) y la llave creada por `torneo_crear_llave_cuadros`. Cada paso comprueba lo que espera y se detiene si algo no da.
+
+```bash
+npm run simular -- reset
+npm run simular -- cuadros-preparar
+npm run simular -- cuadros-jugar ronda1
+npm run simular -- cuadros-jugar cuartos
+npm run simular -- cuadros-jugar semis
+npm run simular -- cuadros-jugar final
+```
+
+El Masculino se juega normal, con un retiro en J3. El Mixto lleva los escenarios: WO en J2, doble WO en J3 y doble WO en J7 y J8.

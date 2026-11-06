@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { generarLlave, ordenarPrimeros } from './torneo'
+import { generarLlave, generarLlaveCuadros, ordenarPrimeros } from './torneo'
 import type { SetJugado } from './resultados'
-import { avanceGrupo, avanceLlave, avanceMejoresPrimeros, codigoLlave, evaluarReporte, pasesPorVacante, textoMarcador, type PartidoAvance } from './torneoResultados'
+import { avanceCuadros, avanceGrupo, avanceLlave, avanceMejoresPrimeros, codigoLlave, evaluarReporte, pasesPorVacante, textoMarcador, type PartidoAvance } from './torneoResultados'
 
 const set = (numero: number, a: number, b: number, extra: Partial<SetJugado> = {}): SetJugado => ({ numero, games_j1: a, games_j2: b, completo: true, ...extra })
 const stb = (a: number, b: number): SetJugado => ({ numero: 3, games_j1: a, games_j2: b, completo: true, es_super_tiebreak: true })
@@ -273,5 +273,64 @@ describe('avanceMejoresPrimeros (3 grupos)', () => {
     expect(sin.avisos.join()).toMatch(/desempate del admin/)
     const con = avanceMejoresPrimeros(grupos, parejos, llave, ['C', 'A', 'B'])
     expect(con.cambios.find((c: any) => c.partidoId === 'S1' && c.lado === 'a')).toMatchObject({ inscripcionId: 'c1' })
+  })
+})
+
+describe('formato cuadros (SPEC §16)', () => {
+  const llave: PartidoAvance[] = generarLlaveCuadros().map((l) => ({ ...base, id: l.codigo, fase: l.fase, grupo_id: null, orden: l.orden, origen_a: l.origen_a, origen_b: l.origen_b, equipo_a: null, equipo_b: null }))
+  const juego = (letra: string, extra: Partial<PartidoAvance>): [string, PartidoAvance] => [letra, {
+    ...base, id: `J${letra}`, grupo_id: letra, equipo_a: `${letra}1`, equipo_b: `${letra}2`, estado: 'jugado', validado: true, ganador_equipo_id: `${letra}1`, ...extra,
+  }]
+
+  it('llena el cuadro A con el ganador y el B con el perdedor en cuanto se cierra el juego', () => {
+    const { cambios, avisos } = avanceCuadros(new Map([juego('C', { ganador_equipo_id: 'C2' })]), llave)
+    expect(cambios).toEqual([
+      { tipo: 'asignar', partidoId: 'C2', lado: 'a', inscripcionId: 'C2' },
+      { tipo: 'asignar', partidoId: 'C6', lado: 'a', inscripcionId: 'C1' },
+    ])
+    expect(avisos).toEqual([])
+  })
+  it('no llena con un juego sin validar', () => {
+    expect(avanceCuadros(new Map([juego('A', { validado: false })]), llave).cambios).toEqual([])
+  })
+  it('un WO simple: el presente al A, el ausente al B', () => {
+    const { cambios } = avanceCuadros(new Map([juego('B', { estado: 'wo', wo_ausente_equipo_id: 'B1', ganador_equipo_id: 'B2' })]), llave)
+    expect(cambios).toContainEqual({ tipo: 'asignar', partidoId: 'C1', lado: 'b', inscripcionId: 'B2' })
+    expect(cambios).toContainEqual({ tipo: 'asignar', partidoId: 'C5', lado: 'b', inscripcionId: 'B1' })
+  })
+  it('es idempotente: lo ya asignado no se repite', () => {
+    const conA = llave.map((p) => (p.id === 'C1' ? { ...p, equipo_a: 'A1' } : p.id === 'C5' ? { ...p, equipo_a: 'A2' } : p))
+    expect(avanceCuadros(new Map([juego('A', {})]), conA).cambios).toEqual([])
+  })
+
+  const dobleWO = (letra: string) => juego(letra, { estado: 'doble_wo', ganador_equipo_id: null })
+
+  it('doble WO: no asigna a nadie ni pide desempate, y el rival pasa por WO en los dos cuadros', () => {
+    const juegos = new Map([dobleWO('A'), juego('B', {})])
+    const { cambios, avisos } = avanceCuadros(juegos, llave)
+    expect(avisos).toEqual([])
+    expect(cambios.map((c) => c.partidoId)).toEqual(['C1', 'C5'])   // solo los lugares del juego B
+    const conB = llave.map((p) => (p.id === 'C1' ? { ...p, equipo_b: 'B1' } : p.id === 'C5' ? { ...p, equipo_b: 'B2' } : p))
+    expect(pasesPorVacante(conB, juegos)).toEqual([
+      { tipo: 'pase', partidoId: 'C1', ganador: 'B1' },
+      { tipo: 'pase', partidoId: 'C5', ganador: 'B2' },
+    ])
+  })
+  it('doble WO: el pase espera a que se conozca al rival', () => {
+    expect(pasesPorVacante(llave, new Map([dobleWO('A')]))).toEqual([])
+  })
+  it('doble WO en los dos juegos de origen: el cuarto queda como doble WO', () => {
+    expect(pasesPorVacante(llave, new Map([dobleWO('G'), dobleWO('H')]))).toEqual([
+      { tipo: 'doble_wo', partidoId: 'C4' },
+      { tipo: 'doble_wo', partidoId: 'C8' },
+    ])
+  })
+  it('sin juegos (formato normal), los orígenes de grupo no son vacantes', () => {
+    expect(pasesPorVacante(llave)).toEqual([])
+  })
+  it('el ganador de C5 sigue por S3 y el de S4 por F2', () => {
+    const cerrado = (id: string) => ({ ...llave.find((p) => p.id === id)!, equipo_a: 'x', equipo_b: 'y', estado: 'jugado' as const, validado: true, ganador_equipo_id: 'x' })
+    expect(avanceLlave(cerrado('C5'), llave).cambios).toEqual([{ tipo: 'asignar', partidoId: 'S3', lado: 'a', inscripcionId: 'x' }])
+    expect(avanceLlave(cerrado('S4'), llave).cambios).toEqual([{ tipo: 'asignar', partidoId: 'F2', lado: 'b', inscripcionId: 'x' }])
   })
 })
