@@ -1,9 +1,10 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fechaISOEnCaracas, formatearFechaConAnio, formatearFechaCorta, formatearFechaLarga, formatearHora, instanteEnCaracas } from '@/lib/tiempo'
-import { CUADROS, ETIQUETA_ESTADO_TORNEO, ETIQUETA_FASE, PREFIJO_FASE, TITULO_CUADRO, cuadroDe, etapaCuadros, numeroPartido, type Cuadro, type EstadoTorneo, type Fase, type FormatoLlave, textoOrigen, textoOrigenCuadros } from '@/lib/torneo'
+import { CUADROS, ETIQUETA_ESTADO_TORNEO, ETIQUETA_FASE, PREFIJO_FASE, TITULO_CUADRO, cuadroDe, etapaCuadros, llaveDibujable, numeroPartido, type Cuadro, type EstadoTorneo, type Fase, type FormatoLlave, textoOrigen, textoOrigenCuadros } from '@/lib/torneo'
 import type { SetJugado } from '@/lib/resultados'
 import NavJugador from '@/app/components/NavJugador'
+import CuadroDibujado, { type PartidoTorneo } from './CuadroDibujado'
 
 // Vista pública del Torneo Navidad (SPEC §9): pestañas Adultos | Infantil y
 // una por categoría con la tabla de grupos en vivo, el calendario por día y
@@ -15,12 +16,7 @@ import NavJugador from '@/app/components/NavJugador'
 type Categoria = { id: string; nombre: string; modalidad: string; genero: string; es_infantil: boolean; orden: number; llave_desde: string; formato_llave: FormatoLlave; inscritas: number }
 type Fila = { equipo_id: string; posicion: number; pj: number; pg: number; pp: number; sets_favor: number; sets_contra: number; games_favor: number; games_contra: number; stb_puntos_favor: number; stb_puntos_contra: number; requiere_sorteo: boolean }
 type Grupo = { id: string; categoria_id: string; letra: string; tabla: Fila[] }
-type Partido = {
-  id: string; categoria_id: string; formato_llave: FormatoLlave; fase: Fase; grupo: string | null; orden: number
-  origen_a: string | null; origen_b: string | null; equipo_a: string | null; equipo_b: string | null
-  cancha: string | null; fecha_hora: string | null; estado: string; sets: SetJugado[] | null; tipo_resultado: string
-  ganador: string | null; wo_ausente: string | null; retirada: string | null; handicap: string | null
-}
+type Partido = PartidoTorneo
 type Datos = {
   torneo: { nombre: string; fecha_inicio: string; fecha_fin: string; estado: EstadoTorneo; sorteado: boolean; programacion_publicada: boolean } | null
   categorias: Categoria[]
@@ -69,6 +65,8 @@ export default function TorneoPublico() {
   const [error, setError] = useState('')
   const [seccion, setSeccion] = useState<'adultos' | 'infantil'>('adultos')
   const [vista, setVista] = useState<string>('calendario')
+  const [dibujo, setDibujo] = useState<string | null>(null)   // categoría con "Ver llave" abierto
+  const cerrarDibujo = useCallback(() => setDibujo(null), [])
 
   useEffect(() => {
     fetch('/api/publico/torneo', { cache: 'no-store' })
@@ -172,6 +170,29 @@ export default function TorneoPublico() {
                 </p>
               ) : (
                 <>
+                  {(() => {
+                    const delaCat = datos.partidos.filter((p) => p.categoria_id === categoria.id)
+                    const cuadros = categoria.formato_llave === 'cuadros'
+                    if (!llaveDibujable(cuadros ? delaCat.filter((p) => cuadroDe(p) === 'A') : delaCat)) return null
+                    return (
+                      <>
+                        <button onClick={() => setDibujo(categoria.id)} style={{ padding: '9px 16px', borderRadius: '6px', border: 'none', background: 'var(--color-court)', color: 'white', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}>
+                          🎾 Ver llave
+                        </button>
+                        {dibujo === categoria.id && (
+                          <CuadroDibujado
+                            categoria={categoria.nombre}
+                            partidos={delaCat}
+                            nombre={nombre}
+                            mias={mias}
+                            marcador={marcador}
+                            origen={cuadros ? textoOrigenCuadros : origenTexto}
+                            onCerrar={cerrarDibujo}
+                          />
+                        )}
+                      </>
+                    )
+                  })()}
                   {categoria.formato_llave === 'cuadros' ? (
                     <>
                       <PrimeraRonda partidos={datos.partidos.filter((p) => p.categoria_id === categoria.id && p.fase === 'grupo')} nombre={nombre} mias={mias} />

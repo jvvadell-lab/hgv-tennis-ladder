@@ -420,6 +420,25 @@ export function etapaCuadros(p: { fase: Fase; orden: number; grupoLetra: string 
   return `${TITULO_CUADRO[cuadroDe(p)!]} – ${ETIQUETA_FASE[p.fase]}${codigo}`
 }
 
+// Cabezas de serie, en las puntas del cuadro: arriba del Partido 1 y abajo del
+// Partido 8. Se reconocen por el lugar: el sorteo de este formato no guardó siembras.
+export function cabezasDeSerieCuadros(partidos: { fase: Fase; grupo: string | null; equipo_a: string | null; equipo_b: string | null }[]): Map<string, number> {
+  const juego = (letra: string) => partidos.find((p) => p.fase === 'grupo' && p.grupo === letra)
+  const semillas = new Map<string, number>()
+  const arriba = juego('A')?.equipo_a
+  const abajo = juego('H')?.equipo_b
+  if (arriba) semillas.set(arriba, 1)
+  if (abajo) semillas.set(abajo, 2)
+  return semillas
+}
+
+// La llave se puede dibujar si cada ronda tiene la mitad de partidos que la
+// anterior. No vale para la de 3 grupos, con byes (2 cuartos, 2 semis, 1 final).
+export function llaveDibujable(partidos: { fase: Fase }[]): boolean {
+  const n = (['cuartos', 'semis', 'final'] as const).map((f) => partidos.filter((p) => p.fase === f).length).filter(Boolean)
+  return n.length > 0 && n[n.length - 1] === 1 && n.every((v, i) => i === 0 || v * 2 === n[i - 1])
+}
+
 // Mientras no hay rival: 'Partido 3', en los dos cuadros (el A espera al
 // ganador de ese partido y el B al otro).
 export function textoOrigenCuadros(origen: string | null): string {
