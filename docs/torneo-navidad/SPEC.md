@@ -405,10 +405,10 @@ Decisión del 20-oct-2026: el horario escuela **no es fijo**. El profesor o el a
 
 ## 15. [CONFIRMAR] abiertos (al 23-oct-2026)
 
-1. Doble WO: ninguna suma; en llave, el rival pasa por WO — §6. En el formato cuadros (§16) se aplica igual desde la 1ª ronda: el doble WO deja vacantes sus dos lugares y el rival pasa por WO en cada cuadro.
+1. Doble WO: ninguna suma; en llave, el rival pasa por WO — §6. En el formato cuadros (§16) se aplica igual desde la primera ronda: el doble WO deja vacantes sus dos lugares y el rival pasa por WO en cada cuadro.
 2. Tabla del festival (Pelota Naranja): partidos ganados, después games — §14.1.
-3. Formato cuadros, WO simple en la 1ª ronda: el presente va al cuadro A y el ausente, como perdedor, al cuadro B. Si tampoco se presenta ahí, se marca WO en ese partido — §16.
-4. Formato cuadros, final de consolación (F2): no cuenta como final de adultos; puede jugarse antes del 11-dic o ese mismo día — §16.
+3. Formato cuadros, WO simple en la primera ronda: el presente va al cuadro A y el ausente, como perdedor, al cuadro B. Si tampoco se presenta ahí, se marca WO en ese partido — §16.
+4. Formato cuadros, final del cuadro B (F2): no cuenta como final de adultos; puede jugarse antes del 11-dic o ese mismo día — §16.
 Resueltos el 23-oct-2026: pago pendiente (§2.4), cierre manual por categoría con lista de espera (§2.3), grupos flexibles (§3), desempate de mejores primeros por el admin (§3) e invitaciones después del cierre programado con la categoría abierta (§2.3).
 
 Resueltos el 20-oct-2026: premiación (11-dic), triple empate, súper tie-break, retiro, Infantil/Juvenil separados, solo socios con invitados / wild card y categoría incompleta.
@@ -417,9 +417,9 @@ Resueltos el 20-oct-2026: premiación (11-dic), triple empate, súper tie-break,
 
 Lo usan **Doble Masculino Sexta** y **Mixto con handicap** (16 duplas cada una). Las demás categorías siguen con grupos y una llave (§3).
 
-- **1ª ronda:** 8 juegos, J1–J8. Se publicó como 8 grupos de 2 (letras A–H, un partido `grupo` por letra): J1 = grupo A … J8 = grupo H. Sin tabla de posiciones.
-- Los 8 ganadores pasan al **cuadro A** (principal) y los 8 perdedores al **cuadro B** (consolación). Cada cuadro juega cuartos, semis y final: 22 partidos por categoría.
-- **Campeón** de la categoría: el ganador de F1. F2 da el **campeón de consolación**.
+- **Primera ronda:** 8 partidos, Partido 1…8. Se publicó como 8 grupos de 2 (letras A–H, un partido `grupo` por letra): Partido 1 = grupo A … Partido 8 = grupo H. Sin tabla de posiciones.
+- Los 8 ganadores pasan al **cuadro A** y los 8 perdedores al **cuadro B**. Cada cuadro juega cuartos, semis y final: 22 partidos por categoría.
+- **Cada cuadro tiene campeón y subcampeón:** el ganador y el perdedor de su final (F1 en el A, F2 en el B).
 - Cabezas de serie en las puntas: grupo A y grupo H.
 
 | Cuadro | Cuartos | Semis | Final |
@@ -427,17 +427,17 @@ Lo usan **Doble Masculino Sexta** y **Mixto con handicap** (16 duplas cada una).
 | A | C1 = 1A-1B · C2 = 1C-1D · C3 = 1E-1F · C4 = 1G-1H | S1 = G:C1-G:C2 · S2 = G:C3-G:C4 | F1 = G:S1-G:S2 |
 | B | C5 = 2A-2B · C6 = 2C-2D · C7 = 2E-2F · C8 = 2G-2H | S3 = G:C5-G:C6 · S4 = G:C7-G:C8 | F2 = G:S3-G:S4 |
 
-En este formato '1X' es el **ganador** del juego X y '2X' el **perdedor**. Mientras no hay rivales se muestran como G1…G8 y P1…P8.
+En este formato '1X' es el **ganador** del partido de primera ronda X y '2X' el **perdedor**. Mientras no hay rivales se muestran como G1…G8 y P1…P8.
 
-**Modelo:** `torneo_categorias.formato_llave` ('normal' | 'cuadros'), único dato nuevo (migración `torneo_cuadros`). El cuadro de un partido no se guarda: sale de su código (`cuadroDe` en `lib/torneo.ts`), que `torneo_partidos_llave_unica` ya hace único. La marca va en la categoría porque también rotula J1–J8, y un jugador que solo carga sus partidos de la 1ª ronda no ve ninguna fila de llave. `torneo_crear_llave_cuadros(categoría)` marca la categoría e inserta los 14 partidos; es idempotente, no pisa una llave de otro formato y llena los lugares de los juegos ya validados.
+**Modelo:** `torneo_categorias.formato_llave` ('normal' | 'cuadros'), único dato nuevo (migración `torneo_cuadros`). El cuadro de un partido no se guarda: sale de su código (`cuadroDe` en `lib/torneo.ts`), que `torneo_partidos_llave_unica` ya hace único. La marca va en la categoría porque también rotula los Partidos 1…8, y un jugador que solo carga sus partidos de la primera ronda no ve ninguna fila de llave. `torneo_crear_llave_cuadros(categoría)` marca la categoría e inserta los 14 partidos; es idempotente, no pisa una llave de otro formato y llena los lugares de los partidos ya validados.
 
 **Avance** (`avanceCuadros`, `pasesPorVacante` en `lib/torneoResultados.ts`):
-- Cada juego llena sus dos lugares en cuanto se valida, sin esperar a los otros: un cuarto se completa con sus dos juegos de origen.
+- Cada partido de primera ronda llena sus dos lugares en cuanto se valida, sin esperar a los otros: un cuarto se completa con sus dos partidos de origen.
 - No pasa por la tabla del grupo (§7) ni por los desempates del admin.
 - **WO simple:** el presente va al cuadro A y el ausente al B. **[CONFIRMAR]**
 - **Retiro:** quien se retira es el perdedor y va al cuadro B.
-- **Doble WO** (§6): no hay ganador ni perdedor, y sus dos lugares quedan vacantes. El rival pasa por WO en cada cuadro en cuanto se conoce. Si los dos juegos de origen fueron doble WO, ese partido también queda como doble WO y el vacío sigue a la ronda siguiente.
+- **Doble WO** (§6): no hay ganador ni perdedor, y sus dos lugares quedan vacantes. El rival pasa por WO en cada cuadro en cuanto se conoce. Si los dos partidos de origen fueron doble WO, ese partido también queda como doble WO y el vacío sigue a la ronda siguiente.
 
-**Programación:** la misma de §4. El bloqueo dice «Torneo Navidad – Mixto con handicap – Cuadro B – Semifinal» o «… – 1ª ronda · J3». Las reglas de finales de adultos (§4) se aplican a F1; F2 puede ir antes del 11-dic o ese día. **[CONFIRMAR]**
+**Programación:** la misma de §4. El bloqueo dice «Torneo Navidad – Mixto con handicap – Cuadro B – Semifinal» o «… – Primera ronda · Partido 3». Las reglas de finales de adultos (§4) se aplican a F1; F2 puede ir antes del 11-dic o ese día. **[CONFIRMAR]**
 
-**Pantallas:** en /torneo, «1ª ronda» con J1–J8 y dos llaves, «Cuadro A · ganadores» y «Cuadro B · perdedores (consolación)». Mis partidos, Programación, Resultados y los avisos usan la misma etiqueta (`etapaCuadros`): «Mixto con handicap – Cuadro B – Semifinal».
+**Pantallas:** en /torneo, «Primera ronda» con los Partidos 1…8 y dos llaves, «Cuadro A» y «Cuadro B», cada una con su campeón y subcampeón. Mis partidos, Programación, Resultados y los avisos usan la misma etiqueta (`etapaCuadros`): «Mixto con handicap – Cuadro B – Semifinal».

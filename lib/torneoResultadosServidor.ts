@@ -334,7 +334,7 @@ export async function avanzarCategoria(db: SupabaseClient, categoriaId: string, 
     const llave = todos.filter((p) => p.fase !== 'grupo')
 
     const cambios: CambioAvance[] = []
-    // Formato cuadros: el juego de la 1ª ronda de cada letra (un partido por grupo).
+    // Formato cuadros: el partido de la primera ronda de cada letra (uno por grupo).
     const juegos = cuadros
       ? new Map((grupos || []).flatMap((g) => todos.filter((p) => p.grupo_id === g.id).map((p) => [g.letra, p] as [string, PartidoFila])))
       : undefined

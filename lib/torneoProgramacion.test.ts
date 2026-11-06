@@ -296,14 +296,14 @@ describe('formato cuadros (SPEC §16)', () => {
     expect(dependenciasDe(por('S3'), partidos).map((p) => p.id)).toEqual(['C5', 'C6'])
     expect(dependenciasDe(por('F2'), partidos).map((p) => p.id)).toEqual(['S3', 'S4'])
   })
-  it('rotula los conflictos con el juego o el cuadro', () => {
-    expect(etiquetaPartido(por('JC'))).toBe('Mixto con handicap · 1ª ronda · J3')
+  it('rotula los conflictos con el partido o el cuadro', () => {
+    expect(etiquetaPartido(por('JC'))).toBe('Mixto con handicap · Primera ronda · Partido 3')
     expect(etiquetaPartido(por('S3'))).toBe('Mixto con handicap · Cuadro B – Semifinal S3')
   })
   it('un partido de llave no va el mismo día que su origen', () => {
     const h = { cancha: 'HGV1' as const, inicio: en('2026-11-27', '18:30') }
     const horarios = new Map<string, Horario>([['JA', { cancha: 'HGV2', inicio: en('2026-11-27', '20:30') }], ['JB', { cancha: 'HGV2', inicio: en('2026-11-20', '18:30') }]])
-    expect(revisarHorario(ctx, horarios, por('C5'), h).errores.join()).toContain('1ª ronda · J1')
+    expect(revisarHorario(ctx, horarios, por('C5'), h).errores.join()).toContain('Primera ronda · Partido 1')
   })
   it('F1 es final de adultos; F2 no: puede ir antes del 11-dic', () => {
     const conSemis = (a: string, b: string) => new Map<string, Horario>([[a, { cancha: 'HGV1', inicio: en('2026-12-02', '20:00') }], [b, { cancha: 'HGV2', inicio: en('2026-12-02', '20:30') }]])

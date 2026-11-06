@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { SetJugado } from './resultados'
 import {
+  TITULO_CUADRO,
   crucesTodosContraTodos,
   cuadroDe,
   distribuirSerpentina,
@@ -323,12 +324,13 @@ describe('formato cuadros (SPEC §16)', () => {
       for (const o of [p.origen_a, p.origen_b]) expect(cuadroDe(por(o.slice(2)))).toBe(cuadroDe(p))
     }
   })
-  it('rotula la 1ª ronda y la llave', () => {
-    expect(etapaCuadros({ fase: 'grupo', orden: 1, grupoLetra: 'H' })).toBe('1ª ronda · J8')
+  it('rotula la primera ronda y la llave', () => {
+    expect(etapaCuadros({ fase: 'grupo', orden: 1, grupoLetra: 'H' })).toBe('Primera ronda · Partido 8')
     expect(etapaCuadros({ fase: 'semis', orden: 3, grupoLetra: null })).toBe('Cuadro B – Semifinal')
     expect(etapaCuadros({ fase: 'semis', orden: 3, grupoLetra: null }, true)).toBe('Cuadro B – Semifinal S3')
     expect(etapaCuadros({ fase: 'cuartos', orden: 4, grupoLetra: null }, true)).toBe('Cuadro A – Cuartos de final C4')
     expect(etapaCuadros({ fase: 'final', orden: 2, grupoLetra: null }, true)).toBe('Cuadro B – Final')
+    expect(TITULO_CUADRO).toEqual({ A: 'Cuadro A', B: 'Cuadro B' })
   })
   it('mientras no hay rivales muestra G1…G8 y P1…P8', () => {
     expect(textoOrigenCuadros('1A')).toBe('G1')
@@ -337,9 +339,11 @@ describe('formato cuadros (SPEC §16)', () => {
     expect(textoOrigenCuadros('G:C5')).toBe('Ganador C5')
   })
   it('la migración inserta la misma llave que generarLlaveCuadros', () => {
-    const sql = readFileSync('supabase/migrations/20261106030738_torneo_cuadros.sql', 'utf8')
     const filas = (bloque: string) => [...bloque.matchAll(/\('(cuartos|semis|final)', (\d), '([^']+)', '([^']+)'\)/g)].map((m) => `${m[1]}${m[2]}=${m[3]}/${m[4]}`)
     const esperado = llave.map((p) => `${p.fase}${p.orden}=${p.origen_a}/${p.origen_b}`)
-    expect(filas(sql)).toEqual([...esperado, ...esperado])   // el chequeo de llave ajena y el insert
+    for (const archivo of ['20261106030738_torneo_cuadros', '20261106032650_torneo_cuadros_nombres']) {
+      const sql = readFileSync(`supabase/migrations/${archivo}.sql`, 'utf8')
+      expect(filas(sql)).toEqual([...esperado, ...esperado])   // el chequeo de llave ajena y el insert
+    }
   })
 })
