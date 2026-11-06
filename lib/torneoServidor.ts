@@ -166,6 +166,12 @@ export function correoTorneo(nombre: string, cuerpo: string): string {
   `
 }
 
+// Correo que trae su propio saludo y firma (la programación oficial): solo
+// lleva el contenedor, sin "Hola…" ni el cierre de correoTorneo.
+export function correoTorneoPropio(cuerpo: string): string {
+  return `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">${cuerpo}</div>`
+}
+
 export function escaparHtml(texto: string): string {
   return texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -179,6 +185,8 @@ export async function notificarJugadores(
     tipo: string; mensaje: string; asunto: string; cuerpoHtml: (jugador: { id: string; nombre: string }) => string
     // Invitación a formar dupla: la campana muestra Aceptar / Rechazar.
     torneoInvitacionId?: string
+    // cuerpoHtml ya trae saludo y firma: no usa la plantilla de correoTorneo.
+    correoPropio?: boolean
   }
 ): Promise<void> {
   if (!jugadorIds.length) return
@@ -201,7 +209,7 @@ export async function notificarJugadores(
   }
   await Promise.all(
     (jugadores || []).filter((j) => j.email).map((j) =>
-      enviarCorreo(j.email, aviso.asunto, correoTorneo(j.nombre || '', aviso.cuerpoHtml({ id: j.id, nombre: j.nombre || '' }))).catch((err) =>
+      enviarCorreo(j.email, aviso.asunto, (aviso.correoPropio ? correoTorneoPropio(aviso.cuerpoHtml({ id: j.id, nombre: j.nombre || '' })) : correoTorneo(j.nombre || '', aviso.cuerpoHtml({ id: j.id, nombre: j.nombre || '' })))).catch((err) =>
         console.error(`[torneo] Falló el correo ${aviso.tipo} a ${j.email}:`, err.message)
       )
     )

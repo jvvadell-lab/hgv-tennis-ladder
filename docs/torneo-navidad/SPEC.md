@@ -207,7 +207,7 @@ Plantilla de turnos por día (hora Caracas, usar `lib/tiempo.ts`):
 - Regla: un jugador no puede tener dos partidos que se solapen ni dos partidos la misma noche (revisar ambos jugadores de cada inscripción, en todas las categorías).
 - Regla: un partido de llave no se puede programar antes que los partidos de los que depende.
 - Asistente de programación (admin): propone automáticamente llenar los turnos libres en orden de fase (grupos → cuartos → semis → final) respetando las reglas; el admin ajusta a mano. Las 4 finales van fijas el viernes 11-dic (último día del torneo).
-- Cambio de horario: el jugador lo solicita; el admin reprograma (reutilizar el patrón de `reagendar-reto` y `retos_historial_reagendado`).
+- Cambio de horario: los horarios publicados son oficiales y no se aceptan solicitudes de cambio. Solo la Comisión reprograma, por fuerza mayor (lluvia o indisponibilidad de canchas), y se avisa a los afectados.
 
 ### 4.1 Handicap del Mixto (aprobado 20-oct-2026)
 
