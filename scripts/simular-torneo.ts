@@ -4,7 +4,7 @@
 //   npm run simular -- preparar [N]    2N jugadoras inscritas una a una, N duplas (6–12, por defecto 12) por invitación o armadas por el admin, pagos y siembras
 //   npm run simular -- sortear         sorteo por bombos + asistente de programación (y la publica)
 //   npm run simular -- jugar <etapa>   grupos-j1 | grupos-j2 | grupos-j3 | cuartos | semis | final
-//   npm run simular -- cuadros-preparar          formato cuadro A / B: 2 categorías de 16 duplas, 1ª ronda como 8 grupos de 2, llave y programación
+//   npm run simular -- cuadros-preparar          formato cuadros: 2 categorías de 16 duplas, primera ronda como 8 grupos de 2, llave y programación
 //   npm run simular -- cuadros-jugar <etapa>     ronda1 | cuartos | semis | final, con comprobaciones en cada paso
 //   npm run simular -- estado          resumen de lo que hay
 //   npm run simular -- reset           borra todo lo que creó la simulación
@@ -478,7 +478,7 @@ function comprobar(condicion: unknown, texto: string) {
   console.log(`  ✓ ${texto}`)
 }
 
-// Arma lo mismo que hay en producción: las duplas, la 1ª ronda publicada como
+// Arma lo mismo que hay en producción: las duplas, la primera ronda publicada como
 // 8 grupos de 2 y, encima, la migración (torneo_crear_llave_cuadros). 32
 // caballeros, de los que 16 también juegan el Mixto, y 16 damas.
 async function cuadrosPreparar(db: Db) {
@@ -563,7 +563,7 @@ async function cuadrosPreparar(db: Db) {
   }
   await db.from('torneos').update({ estado: 'sorteado', sorteo_metodo: 'bombos', sorteo_publicado_por: admin, sorteo_publicado_at: momento }).eq('id', torneo.id)
 
-  // Asistente sobre todos los partidos (1ª ronda y las dos llaves) y publicación.
+  // Asistente sobre todos los partidos (primera ronda y las dos llaves) y publicación.
   const t2 = (await torneoVigente(db))!
   if (t2.nombre !== NOMBRE_TORNEO_SIM) throw new Error('El torneo vigente no es el de la simulación')
   const { ctx, horarios } = await datosProgramacion(db, t2)
@@ -575,14 +575,14 @@ async function cuadrosPreparar(db: Db) {
   if (!p.ok) throw new Error(p.error)
 
   const motivos = await motivosDeBloqueos(db, torneo.id)
-  for (const m of ['Mixto con handicap – 1ª ronda · J8', 'Mixto con handicap – Cuadro A – Cuartos de final', 'Mixto con handicap – Cuadro B – Semifinal', 'Doble Masculino Sexta – Cuadro B – Final']) {
+  for (const m of ['Mixto con handicap – Primera ronda · Partido 8', 'Mixto con handicap – Cuadro A – Cuartos de final', 'Mixto con handicap – Cuadro B – Semifinal', 'Doble Masculino Sexta – Cuadro B – Final']) {
     comprobar(motivos.has(`Torneo Navidad – ${m}`), `Bloqueo: "${m}"`)
   }
 
   // Cambio de horario (Admin → Torneo → Programación): un partido de llave de
   // cada cuadro que tenga un turno libre (el asistente deja el calendario denso).
   const { turnosAdultos, revisarHorario } = await import('../lib/torneoProgramacion')
-  const { cuadroDe } = await import('../lib/torneo')
+  const { TITULO_CUADRO, cuadroDe } = await import('../lib/torneo')
   for (const cuadro of ['A', 'B'] as const) {
     const t3 = (await torneoVigente(db))!
     const { ctx: c2, horarios: h2, partidos: lista } = await datosProgramacion(db, t3)
@@ -593,13 +593,13 @@ async function cuadrosPreparar(db: Db) {
         const libre = turnosAdultos(c2.fechaInicio, c2.fechaFin, q.duracionMin).find((tu) => tu.inicio !== h2.get(q.id)!.inicio && !revisarHorario(c2, resto, q, tu).errores.length)
         return libre ? [{ q, libre }] : []
       })
-    if (!opciones.length) throw new Error(`Cuadro ${cuadro}: ningún partido tiene un turno libre`)
+    if (!opciones.length) throw new Error(`${TITULO_CUADRO[cuadro]}: ningún partido tiene un turno libre`)
     const { q, libre } = opciones[0]
     const r = await guardarProgramacion(db, t3, [{ partidoId: q.id, cancha: libre.cancha, inicio: new Date(libre.inicio).toISOString() }], true, admin)
     if (!r.ok) throw new Error(`${r.error}: ${r.errores?.join(' · ')}`)
     const { data: fila } = await db.from('torneo_partidos').select('fecha_hora, bloqueos_cancha:bloqueo_id(inicio, cancha, motivo)').eq('id', q.id).single()
     const b = fila!.bloqueos_cancha as unknown as { inicio: string; cancha: string; motivo: string }
-    comprobar(new Date(b.inicio).getTime() === libre.inicio && b.cancha === libre.cancha && b.motivo.includes(`Cuadro ${cuadro}`), `Cambio de horario en el cuadro ${cuadro} (${q.fase} ${q.orden}): el bloqueo se movió ("${b.motivo}")`)
+    comprobar(new Date(b.inicio).getTime() === libre.inicio && b.cancha === libre.cancha && b.motivo.includes(TITULO_CUADRO[cuadro]), `Cambio de horario en ${TITULO_CUADRO[cuadro]} (${q.fase} ${q.orden}): el bloqueo se movió ("${b.motivo}")`)
   }
   console.log('\nSiguiente: npm run simular -- cuadros-jugar ronda1')
 }
@@ -611,8 +611,8 @@ async function motivosDeBloqueos(db: Db, torneoId: string) {
 }
 
 // Masculino: todo normal salvo un retiro. Mixto: los escenarios de WO.
-//   J2 WO · J3 doble WO (el rival del J4 pasa, en los dos cuadros) ·
-//   J7 y J8 doble WO (C4 y C8 quedan como doble WO: pasan los de S2 y S4).
+//   Partido 2 WO · Partido 3 doble WO (el rival del Partido 4 pasa, en los dos
+//   cuadros) · Partidos 7 y 8 doble WO (C4 y C8 quedan como doble WO: pasan los de S2 y S4).
 async function cuadrosJugar(db: Db, etapa: EtapaCuadros) {
   if (!ETAPAS_CUADROS.includes(etapa)) throw new Error(`Etapa no válida. Usa: ${ETAPAS_CUADROS.join(' | ')}`)
   const admin = await adminId(db)
@@ -646,17 +646,17 @@ async function cuadrosJugar(db: Db, etapa: EtapaCuadros) {
   const MX = 'Mixto con handicap', DM = 'Doble Masculino Sexta'
 
   if (etapa === 'ronda1') {
-    // Llenado temprano: cada cuarto se completa con sus dos juegos, sin esperar a los otros 6.
+    // Llenado temprano: cada cuarto se completa con sus dos partidos, sin esperar a los otros 6.
     const j1 = await juego(DM, 'A')
     await ganar(j1)
     let c1 = await buscar(DM, 'cuartos', 1), c5 = await buscar(DM, 'cuartos', 5)
     const j1f = await juego(DM, 'A')
     const perdedor1 = j1f.ganador_equipo_id === j1f.equipo_a ? j1f.equipo_b : j1f.equipo_a
-    comprobar(c1.equipo_a === j1f.ganador_equipo_id && !c1.equipo_b, 'Tras J1: el ganador está en C1 (cuadro A)')
-    comprobar(c5.equipo_a === perdedor1 && !c5.equipo_b, 'Tras J1: el perdedor está en C5 (cuadro B)')
+    comprobar(c1.equipo_a === j1f.ganador_equipo_id && !c1.equipo_b, 'Tras el Partido 1: el ganador está en C1 (cuadro A)')
+    comprobar(c5.equipo_a === perdedor1 && !c5.equipo_b, 'Tras el Partido 1: el perdedor está en C5 (cuadro B)')
     await ganar(await juego(DM, 'B'))
     c1 = await buscar(DM, 'cuartos', 1); c5 = await buscar(DM, 'cuartos', 5)
-    comprobar(c1.equipo_a && c1.equipo_b && c5.equipo_a && c5.equipo_b, 'Tras J1 y J2: C1 y C5 completos, con 6 juegos sin jugar')
+    comprobar(c1.equipo_a && c1.equipo_b && c5.equipo_a && c5.equipo_b, 'Tras los Partidos 1 y 2: C1 y C5 completos, con 6 partidos sin jugar')
     await ganar(await juego(DM, 'C'), { retiro: true })
     for (const l of 'DEFGH') await ganar(await juego(DM, l))
 
@@ -664,18 +664,18 @@ async function cuadrosJugar(db: Db, etapa: EtapaCuadros) {
     const j2 = await juego(MX, 'B')
     await wo(j2, j2.equipo_a!)
     c1 = await buscar(MX, 'cuartos', 1); c5 = await buscar(MX, 'cuartos', 5)
-    comprobar(c1.equipo_b === j2.equipo_b && c5.equipo_b === j2.equipo_a, 'WO en J2: el presente al cuadro A y el ausente al B')
+    comprobar(c1.equipo_b === j2.equipo_b && c5.equipo_b === j2.equipo_a, 'WO en el Partido 2: el presente al cuadro A y el ausente al B')
     await wo(await juego(MX, 'C'), 'ambos')
     await ganar(await juego(MX, 'D'))
     const c2 = await buscar(MX, 'cuartos', 2), c6 = await buscar(MX, 'cuartos', 6)
-    comprobar(c2.estado === 'wo' && c2.validado && c2.ganador_equipo_id === c2.equipo_b && !c2.equipo_a, 'Doble WO en J3: G4 pasa por WO en C2')
-    comprobar(c6.estado === 'wo' && c6.validado && c6.ganador_equipo_id === c6.equipo_b && !c6.equipo_a, 'Doble WO en J3: P4 pasa por WO en C6')
+    comprobar(c2.estado === 'wo' && c2.validado && c2.ganador_equipo_id === c2.equipo_b && !c2.equipo_a, 'Doble WO en el Partido 3: G4 pasa por WO en C2')
+    comprobar(c6.estado === 'wo' && c6.validado && c6.ganador_equipo_id === c6.equipo_b && !c6.equipo_a, 'Doble WO en el Partido 3: P4 pasa por WO en C6')
     comprobar((await buscar(MX, 'semis', 1)).equipo_b === c2.ganador_equipo_id, 'El pase de C2 ya está en S1')
     for (const l of 'EF') await ganar(await juego(MX, l))
     await wo(await juego(MX, 'G'), 'ambos')
     await wo(await juego(MX, 'H'), 'ambos')
     const c4 = await buscar(MX, 'cuartos', 4), c8 = await buscar(MX, 'cuartos', 8)
-    comprobar(c4.estado === 'doble_wo' && c8.estado === 'doble_wo', 'Doble WO en J7 y J8: C4 y C8 quedan como doble WO')
+    comprobar(c4.estado === 'doble_wo' && c8.estado === 'doble_wo', 'Doble WO en los Partidos 7 y 8: C4 y C8 quedan como doble WO')
     comprobar(!(await desempatesPendientes(db, torneo.id)).length, 'Ningún desempate pendiente: un doble WO no pide decisión del admin')
   } else {
     for (const cat of [DM, MX]) {
@@ -693,8 +693,10 @@ async function cuadrosJugar(db: Db, etapa: EtapaCuadros) {
       const delaCat = (await lista()).filter((p) => p.categoria_nombre === cat)
       comprobar(delaCat.length === 22 && delaCat.every((p) => p.validado), `${cat}: los 22 partidos cerrados`)
       const f1 = delaCat.find((p) => p.fase === 'final' && p.orden === 1)!, f2 = delaCat.find((p) => p.fase === 'final' && p.orden === 2)!
-      comprobar(cuadroDe(f1) === 'A' && cuadroDe(f2) === 'B' && f1.ganador_equipo_id && f2.ganador_equipo_id, `${cat}: campeón = F1 y campeón de consolación = F2`)
-      console.log(`    🏆 ${f1.ganador_equipo_id === f1.equipo_a ? f1.nombre_a : f1.nombre_b} · consolación: ${f2.ganador_equipo_id === f2.equipo_a ? f2.nombre_a : f2.nombre_b}`)
+      comprobar(cuadroDe(f1) === 'A' && cuadroDe(f2) === 'B' && f1.ganador_equipo_id && f2.ganador_equipo_id, `${cat}: F1 y F2 dan campeón y subcampeón de cada cuadro`)
+      const campeon = (f: typeof f1) => (f.ganador_equipo_id === f.equipo_a ? f.nombre_a : f.nombre_b)
+      const subcampeon = (f: typeof f1) => (f.ganador_equipo_id === f.equipo_a ? f.nombre_b : f.nombre_a)
+      console.log(`    🏆 Cuadro A: ${campeon(f1)} (sub: ${subcampeon(f1)}) · Cuadro B: ${campeon(f2)} (sub: ${subcampeon(f2)})`)
     }
     const { data: avisos } = await db.from('notificaciones').select('mensaje').like('mensaje', '%Cuadro B%').limit(2)
     comprobar(avisos?.length, `Aviso con cuadro: "${avisos?.[0]?.mensaje}"`)

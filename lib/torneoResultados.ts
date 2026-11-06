@@ -126,9 +126,9 @@ export function avanceGrupo(
   return { cambios, avisos: [...new Set(avisos)] }
 }
 
-// Formato cuadros (SPEC §16): cada juego de la 1ª ronda llena sus dos lugares
-// en cuanto se cierra, sin esperar a los demás: '1X' = el ganador (cuadro A) y
-// '2X' = el perdedor (cuadro B). No pasa por la tabla del grupo, que con un
+// Formato cuadros (SPEC §16): cada partido de la primera ronda llena sus dos
+// lugares en cuanto se cierra, sin esperar a los demás: '1X' = el ganador
+// (cuadro A) y '2X' = el perdedor (cuadro B). No pasa por la tabla del grupo, que con un
 // doble WO daría un empate para el admin: ahí no hay ganador ni perdedor y el
 // lugar queda vacante (pasesPorVacante). `juegos` va por letra.
 export function avanceCuadros(juegos: Map<string, PartidoAvance>, llave: PartidoAvance[]): ResultadoAvance {
@@ -217,7 +217,7 @@ export function avanceLlave(partido: PartidoAvance, llave: PartidoAvance[]): Res
 // Partidos de llave que no se pueden jugar porque un lado (o los dos)
 // viene de un doble WO ya cerrado: con un solo clasificado, pasa por WO;
 // sin ninguno, queda como doble WO. Solo mira partidos aún sin cerrar. En el
-// formato cuadros, `juegos` (por letra) agrega como origen los de la 1ª ronda.
+// formato cuadros, `juegos` (por letra) agrega como origen los de la primera ronda.
 export function pasesPorVacante(llave: PartidoAvance[], juegos?: Map<string, PartidoAvance>): CambioAvance[] {
   const porCodigo = new Map(llave.map((p) => [codigoLlave(p), p]))
   const vacante = (p: PartidoAvance, lado: Lado) => {

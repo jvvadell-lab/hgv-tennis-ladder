@@ -163,7 +163,7 @@ export const etiquetaPartido = (p: PartidoProg) =>
     ? `${p.categoriaNombre} · ${etapaCuadros(p, true)}`
     : `${p.categoriaNombre} · ${p.fase === 'grupo' ? `Grupo ${p.grupoLetra}, partido ${p.orden}` : codigoPartido(p)}`
 
-// La final de consolación (F2) no es una de las finales de adultos: puede
+// La final del cuadro B (F2) no es una de las finales de adultos: puede
 // jugarse antes o el mismo día, y no le quita turno a las del último día.
 const esFinalDeAdultos = (p: PartidoProg) =>
   p.fase === 'final' && !(p.formatoLlave === 'cuadros' && cuadroDe(p) === 'B')

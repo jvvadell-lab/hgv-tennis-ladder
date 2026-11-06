@@ -93,7 +93,7 @@ Para probar el flujo a mano, juega una etapa menos con el script y después:
 
 ## Formato cuadro A / cuadro B
 
-Dos categorías de 16 duplas (Doble Masculino Sexta y Mixto con handicap), con la 1ª ronda armada como en producción (8 grupos de 2) y la llave creada por `torneo_crear_llave_cuadros`. Cada paso comprueba lo que espera y se detiene si algo no da.
+Dos categorías de 16 duplas (Doble Masculino Sexta y Mixto con handicap), con la primera ronda armada como en producción (8 grupos de 2) y la llave creada por `torneo_crear_llave_cuadros`. Cada paso comprueba lo que espera y se detiene si algo no da.
 
 ```bash
 npm run simular -- reset
@@ -104,4 +104,4 @@ npm run simular -- cuadros-jugar semis
 npm run simular -- cuadros-jugar final
 ```
 
-El Masculino se juega normal, con un retiro en J3. El Mixto lleva los escenarios: WO en J2, doble WO en J3 y doble WO en J7 y J8.
+El Masculino se juega normal, con un retiro en el Partido 3. El Mixto lleva los escenarios: WO en el Partido 2, doble WO en el Partido 3 y doble WO en los Partidos 7 y 8.
