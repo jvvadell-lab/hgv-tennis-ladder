@@ -3,19 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const enviarCorreo = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('@/lib/email', () => ({ enviarCorreo }))
 
-import { avisarProgramacion, textosAvisoProgramacion, type PartidoDetalle } from './torneoProgramacionServidor'
+import { avisarProgramacion, separarCambios, textosAvisoProgramacion, type PartidoDetalle } from './torneoProgramacionServidor'
 import type { Horario } from './torneoProgramacion'
 
 const TORNEO = 'Torneo Navidad HGV 2026'
 const lineas = ['Mixto con handicap – Primera ronda · Partido 1: A vs B — viernes, HGV1', 'Quinta · Grupo A: C vs D — lunes, HGV2']
 
 describe('aviso de programación oficial', () => {
-  const t = textosAvisoProgramacion(TORNEO, lineas, false)
+  const t = textosAvisoProgramacion(TORNEO, lineas, 'oficial')
 
   it('asunto y mensaje de la app', () => {
     expect(t.asunto).toBe('🎾 Programación oficial — Torneo Navidad HGV 2026')
     expect(t.mensaje).toBe(`📅 Programación oficial del ${TORNEO}: 2 partidos. ${lineas[0]}… Horarios oficiales: no se aceptan cambios.`)
-    expect(textosAvisoProgramacion(TORNEO, lineas.slice(0, 1), false).mensaje).toBe(`📅 Programación oficial del ${TORNEO}: 1 partido. ${lineas[0]}. Horarios oficiales: no se aceptan cambios.`)
+    expect(textosAvisoProgramacion(TORNEO, lineas.slice(0, 1), 'oficial').mensaje).toBe(`📅 Programación oficial del ${TORNEO}: 1 partido. ${lineas[0]}. Horarios oficiales: no se aceptan cambios.`)
   })
   it('el cuerpo va en el orden pedido', () => {
     const orden = [
@@ -38,19 +38,36 @@ describe('aviso de programación oficial', () => {
   })
   it('ya no pide avisar al admin', () => {
     expect(t.cuerpoHtml).not.toMatch(/avísale al admin/i)
-    expect(textosAvisoProgramacion(TORNEO, lineas, true).cuerpoHtml).not.toMatch(/avísale al admin/i)
+    expect(textosAvisoProgramacion(TORNEO, lineas, 'reprogramado').cuerpoHtml).not.toMatch(/avísale al admin/i)
   })
   it('escapa los nombres', () => {
-    expect(textosAvisoProgramacion('A & B', ['<x>'], false).cuerpoHtml).toContain('A &amp; B')
-    expect(textosAvisoProgramacion('A', ['<x>'], false).cuerpoHtml).toContain('&lt;x&gt;')
+    expect(textosAvisoProgramacion('A & B', ['<x>'], 'oficial').cuerpoHtml).toContain('A &amp; B')
+    expect(textosAvisoProgramacion('A', ['<x>'], 'oficial').cuerpoHtml).toContain('&lt;x&gt;')
   })
 })
 
 describe('aviso de reprogramación', () => {
   it('asunto y texto', () => {
-    const t = textosAvisoProgramacion(TORNEO, lineas, true)
+    const t = textosAvisoProgramacion(TORNEO, lineas, 'reprogramado')
     expect(t.asunto).toBe('📅 Reprogramación — Torneo Navidad HGV 2026')
     expect(t.cuerpoHtml).toContain('La Comisión ha reprogramado tu partido por causa de fuerza mayor:')
+  })
+})
+
+describe('primer horario de un partido', () => {
+  it('no habla de reprogramación ni de fuerza mayor', () => {
+    const t = textosAvisoProgramacion(TORNEO, lineas.slice(0, 1), 'programado')
+    expect(t.asunto).toBe('🎾 Partido programado — Torneo Navidad HGV 2026')
+    expect(t.mensaje).toBe(`📅 Partido programado en el ${TORNEO}: ${lineas[0]}`)
+    expect(t.cuerpoHtml).toContain('La Comisión ha programado tu próximo partido:')
+    expect(`${t.asunto} ${t.mensaje} ${t.cuerpoHtml}`).not.toMatch(/reprogram|fuerza mayor|cambio/i)
+  })
+  it('en plural si son varios', () => {
+    expect(textosAvisoProgramacion(TORNEO, lineas, 'programado').cuerpoHtml).toContain('tus próximos partidos:')
+  })
+  it('solo es reprogramación si el partido ya tenía horario', () => {
+    const antes = new Map<string, Horario>([['c1', { cancha: 'HGV1', inicio: 1 }]])
+    expect(separarCambios(['c1', 'c2'], antes)).toEqual({ programados: ['c2'], reprogramados: ['c1'] })
   })
 })
 
@@ -66,14 +83,14 @@ describe('correo que llega al jugador', () => {
   const html = () => (enviarCorreo.mock.calls[0] as unknown as string[])[2]
 
   it('la programación oficial no repite saludo ni firma de la plantilla', async () => {
-    await avisarProgramacion(db, TORNEO, [partido], horarios, { cambio: false })
+    await avisarProgramacion(db, TORNEO, [partido], horarios, 'oficial')
     expect(html()).toContain('Estimado/a jugador/a:')
     expect(html()).not.toContain('Hola Ana')
     expect(html()).not.toContain('HGV Tennis Club')
     expect(html()).not.toContain('estado de tu inscripción')
   })
   it('la reprogramación conserva la plantilla', async () => {
-    await avisarProgramacion(db, TORNEO, [partido], horarios, { cambio: true })
+    await avisarProgramacion(db, TORNEO, [partido], horarios, 'reprogramado')
     expect(html()).toContain('Hola Ana')
     expect(html()).toContain('La Comisión ha reprogramado tu partido')
   })

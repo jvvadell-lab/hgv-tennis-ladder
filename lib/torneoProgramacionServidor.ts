@@ -180,11 +180,27 @@ const NORMAS_PROGRAMACION = [
   'Para disputar tu primer partido, tu inscripción debe estar pagada y validada.',
 ]
 
-// Textos del aviso a un jugador: la programación oficial (al publicar) o una
-// reprogramación (cambio = true). `lineas` son sus partidos.
-export function textosAvisoProgramacion(torneoNombre: string, lineas: string[], cambio: boolean) {
+// 'oficial' = al publicar · 'programado' = un partido recibe su primer horario
+// después de publicar (cuartos, semis…) · 'reprogramado' = se mueve o se quita
+// un horario que ya existía.
+export type TipoAvisoProgramacion = 'oficial' | 'programado' | 'reprogramado'
+
+// Textos del aviso a un jugador. `lineas` son sus partidos.
+export function textosAvisoProgramacion(torneoNombre: string, lineas: string[], tipo: TipoAvisoProgramacion) {
   const lista = `<ul>${lineas.map((l) => `<li>${escaparHtml(l)}</li>`).join('')}</ul>`
-  if (cambio) {
+  if (tipo === 'programado') {
+    return {
+      mensaje: `📅 Partido programado en el ${torneoNombre}: ${lineas.join(' · ')}`,
+      asunto: `🎾 Partido programado — ${torneoNombre}`,
+      correoPropio: false,
+      cuerpoHtml: `
+        <p>La Comisión ha programado ${lineas.length === 1 ? 'tu próximo partido' : 'tus próximos partidos'}:</p>
+        ${lista}
+        <p>Tolerancia de 15 minutos: pasado ese tiempo se declara WO a favor del rival.</p>
+      `,
+    }
+  }
+  if (tipo === 'reprogramado') {
     return {
       mensaje: `📅 Cambio de horario en el ${torneoNombre}: ${lineas.join(' · ')}`,
       asunto: `📅 Reprogramación — ${torneoNombre}`,
@@ -213,15 +229,22 @@ export function textosAvisoProgramacion(torneoNombre: string, lineas: string[], 
   }
 }
 
-// Avisa a cada jugador o representante (campana + correo) de sus partidos
-// con horario: la programación oficial al publicar, o una reprogramación si
-// opciones.cambio (después de publicar, solo los partidos que se movieron).
+// Después de publicar, un partido sin horario previo recibe su primer horario:
+// eso no es una reprogramación. `antes` es la programación antes de guardar.
+export function separarCambios(cambiados: string[], antes: Map<string, Horario>) {
+  return {
+    programados: cambiados.filter((id) => !antes.has(id)),
+    reprogramados: cambiados.filter((id) => antes.has(id)),
+  }
+}
+
+// Avisa a cada jugador o representante (campana + correo) de sus partidos.
 export async function avisarProgramacion(
   db: SupabaseClient,
   torneoNombre: string,
   partidos: PartidoDetalle[],
   horarios: Map<string, Horario>,
-  opciones: { cambio: boolean },
+  tipo: TipoAvisoProgramacion,
 ): Promise<void> {
   const porPersona = new Map<string, string[]>()
   for (const p of partidos) {
@@ -233,7 +256,7 @@ export async function avisarProgramacion(
     for (const id of p.avisar) porPersona.set(id, [...(porPersona.get(id) || []), linea])
   }
   for (const [id, lineas] of porPersona) {
-    const { cuerpoHtml, ...aviso } = textosAvisoProgramacion(torneoNombre, lineas, opciones.cambio)
+    const { cuerpoHtml, ...aviso } = textosAvisoProgramacion(torneoNombre, lineas, tipo)
     await notificarJugadores(db, [id], { tipo: 'torneo_programacion', ...aviso, cuerpoHtml: () => cuerpoHtml })
   }
 }
@@ -316,7 +339,9 @@ export async function guardarProgramacion(
 
   if (torneo.programacion_publicada_at) {
     try {
-      await avisarProgramacion(db, torneo.nombre, cambiados.map((id) => porId.get(id)!), nuevos, { cambio: true })
+      const { programados, reprogramados } = separarCambios(cambiados, horarios)
+      await avisarProgramacion(db, torneo.nombre, programados.map((id) => porId.get(id)!), nuevos, 'programado')
+      await avisarProgramacion(db, torneo.nombre, reprogramados.map((id) => porId.get(id)!), nuevos, 'reprogramado')
     } catch (err: any) {
       console.error('[torneo] No se pudo avisar el cambio de horario:', err.message)
     }
@@ -351,7 +376,7 @@ export async function publicarProgramacion(
   if (!data?.length) return { ok: false, status: 400, error: 'La programación ya estaba publicada' }
 
   try {
-    await avisarProgramacion(db, torneo.nombre, partidos.filter((p) => p.avisar.length && !p.cerrado), horarios, { cambio: false })
+    await avisarProgramacion(db, torneo.nombre, partidos.filter((p) => p.avisar.length && !p.cerrado), horarios, 'oficial')
   } catch (err: any) {
     console.error('[torneo] No se pudo avisar la programación:', err.message)
   }
