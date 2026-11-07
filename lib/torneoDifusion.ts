@@ -204,6 +204,23 @@ export const MEDIDAS_PIEZA: Record<FormatoPieza, { ancho: number; alto: number; 
 export const ALTO_FILA = 150
 export const ALTO_DIA = 60
 
+// La Historia de un día con pocos partidos usa filas grandes para no dejar
+// media pieza vacía. Next/og no ajusta el texto solo: el tamaño de los nombres
+// se calcula con el nombre más largo, para que ninguno se corte.
+export const MAX_FILAS_GRANDES = 4
+const ANCHO_NOMBRES_GRANDES = 938
+const LETRA_NOMBRE = 0.52   // ancho medio de una letra, en proporción a su tamaño
+const LETRA_NOTA = 0.41     // la nota va a 3/4 del tamaño del nombre
+const PREFIJO_VS = 1.375
+
+export function fuenteNombresGrande(filas: FilaDifusion[], minimo = 32, maximo = 46): number {
+  const cabe = ({ texto, nota }: LadoFila) => nota
+    ? (ANCHO_NOMBRES_GRANDES - 14) / (PREFIJO_VS + texto.length * LETRA_NOMBRE + nota.length * LETRA_NOTA)
+    : ANCHO_NOMBRES_GRANDES / (PREFIJO_VS + texto.length * LETRA_NOMBRE)
+  const tamano = Math.min(maximo, ...filas.flatMap((f) => [cabe(f.a), cabe(f.b)]))
+  return Math.max(minimo, Math.floor(tamano))
+}
+
 // Reparte los días en páginas sin pasar del alto. Un encabezado de día nunca
 // queda solo al final; si un día se parte, repite su encabezado en la página
 // siguiente. Siempre hay al menos una página, aunque no haya partidos.

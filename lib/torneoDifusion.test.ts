@@ -1,8 +1,8 @@
 import { readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  ALTO_DIA, ALTO_FILA, agruparPorDia, esFechaISO, filaDe, fechaCorta, paginarDias, paginasDePieza, partidosDeLaSemana, partidosDelDia,
-  porValidarEntre, semanaDe, sumarDias, textoSugerido, tipoPorDefecto, tituloDia, tituloSemana, type DiaDifusion, type PartidoDifusion,
+  ALTO_DIA, ALTO_FILA, agruparPorDia, esFechaISO, filaDe, fechaCorta, fuenteNombresGrande, paginarDias, paginasDePieza, partidosDeLaSemana, partidosDelDia,
+  porValidarEntre, semanaDe, sumarDias, textoSugerido, tipoPorDefecto, tituloDia, tituloSemana, type DiaDifusion, type FilaDifusion, type PartidoDifusion,
 } from './torneoDifusion'
 
 const base: PartidoDifusion = {
@@ -170,6 +170,28 @@ describe('paginarDias', () => {
   it('un encabezado no queda solo al final de la página', () => {
     const p = paginarDias([dia('x', 2), dia('y', 1)], ALTO_DIA * 2 + ALTO_FILA * 2, true)
     expect(p.map((pag) => pag.map((d) => d.fecha))).toEqual([['x'], ['y']])
+  })
+})
+
+describe('fuenteNombresGrande', () => {
+  const fila = (texto: string, nota: string | null = null) => ({
+    a: { texto, conocido: true, ganador: false, nota },
+    b: { texto: 'Ana', conocido: true, ganador: false, nota: null },
+  }) as FilaDifusion
+
+  it('usa el máximo con nombres cortos', () => {
+    expect(fuenteNombresGrande([fila('Luis Lopez')])).toBe(46)
+  })
+  it('baja para que quepa el nombre más largo de la pieza', () => {
+    const larga = 'Javier Jesús Rodriguez Peña / Romina Román'
+    expect(fuenteNombresGrande([fila('Luis Lopez'), fila(larga)])).toBe(40)
+  })
+  it('cuenta la nota del cuadro', () => {
+    const texto = 'Carlos Olaizola / Sandra Madrigal'
+    expect(fuenteNombresGrande([fila(texto, 'W.O. → Cuadro A')])).toBeLessThan(fuenteNombresGrande([fila(texto)]))
+  })
+  it('nunca baja del tamaño de las filas normales', () => {
+    expect(fuenteNombresGrande([fila('x'.repeat(120))])).toBe(32)
   })
 })
 
