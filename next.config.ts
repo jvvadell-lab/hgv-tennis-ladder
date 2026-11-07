@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     "/api/publico/torneo/pieza": [
       "./assets/fuentes/*.ttf",
       "./public/logo-hgv-escudo.png",
+      "./public/logo-copa-navidad.png",
       "./public/logo-comision-tenis.png",
       "./public/patrocinantes/png/*.png",
     ],

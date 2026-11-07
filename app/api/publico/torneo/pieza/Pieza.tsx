@@ -23,6 +23,7 @@ type Props = {
   pagina: number
   paginas: number
   logoHgv: string
+  logoCopa: string
   logoComision: string
   patrocinantes: LogoPieza[]
 }
@@ -77,29 +78,29 @@ function Logo({ p, ancho, alto }: { p: LogoPieza; ancho: number; alto: number })
   )
 }
 
-export default function Pieza({ formato, encabezado, detalle, dias, conEncabezadoDia, pagina, paginas, logoHgv, logoComision, patrocinantes }: Props) {
+export default function Pieza({ formato, encabezado, detalle, dias, conEncabezadoDia, pagina, paginas, logoHgv, logoCopa, logoComision, patrocinantes }: Props) {
   const historia = formato === 'historia'
-  const logo = historia ? 118 : 96
+  const logo = historia ? 104 : 84
+  const copa = historia ? 140 : 96
   const vacio = !dias.length
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: AZUL_MARINO, fontFamily: 'Inter', color: BLANCO }}>
       <div style={{ display: 'flex', height: 12, background: DORADO, flexShrink: 0 }} />
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: historia ? '56px 48px 0' : '30px 48px 0', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+      {/* Los tres logos como en el flyer: la Copa al centro y más grande. */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: historia ? '28px 48px 0' : '16px 48px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoHgv} width={Math.round(logo * 0.64)} height={logo} style={{ objectFit: 'contain' }} alt="" />
-          <div style={{ display: 'flex', width: 2, height: logo - 26, background: AZUL, margin: '0 22px' }} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoCopa} width={copa} height={copa} style={{ objectFit: 'contain', margin: '0 44px' }} alt="" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoComision} width={logo} height={logo} style={{ objectFit: 'contain' }} alt="" />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-          <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 700, fontSize: 34, letterSpacing: 4, color: DORADO }}>COMISIÓN DE TENIS</div>
-          <div style={{ display: 'flex', fontSize: 25, fontWeight: 500, marginTop: 4 }}>Hermandad Gallega de Valencia</div>
-        </div>
+        <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 700, fontSize: 24, letterSpacing: 3, color: TENUE, marginTop: 6, lineHeight: 1.1 }}>COMISIÓN DE TENIS · HERMANDAD GALLEGA DE VALENCIA</div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: historia ? '44px 48px 30px' : '20px 48px 18px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: historia ? '18px 48px 26px' : '12px 48px 12px', flexShrink: 0 }}>
         <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: encabezado.length > 20 ? 84 : historia ? 92 : 76, lineHeight: 1, textAlign: 'center', whiteSpace: 'nowrap' }}>{encabezado}</div>
         <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
           <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: historia ? 76 : 62, lineHeight: 1, color: DORADO }}>{detalle}</div>

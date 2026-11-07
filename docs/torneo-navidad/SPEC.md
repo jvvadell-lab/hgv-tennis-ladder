@@ -456,7 +456,7 @@ Para que la Comisión publique sin diseñar a mano: el lunes, la «Programación
 - **Lados sin rival:** en el cuadro A, «Ganador Partido 1»; en el B, «Partido 1». En las demás categorías, `textoOrigen`.
 
 **Imágenes:** `GET /api/publico/torneo/pieza?tipo=dia|semana&fecha=YYYY-MM-DD&formato=historia|post&pagina=N`, con `ImageResponse` de `next/og`. Historia 1080×1920 y Post 1080×1350.
-- Estilo del flyer de la inauguración, con el escudo azul de la Hermandad (`public/logo-hgv-escudo.png`) y el de la Comisión. Barlow Condensed e Inter en `assets/fuentes/` (`.ttf`: `next/og` no acepta woff2).
+- Estilo del flyer de la inauguración, con tres logos arriba: el escudo azul de la Hermandad (`public/logo-hgv-escudo.png`), el de la Copa Navidad al centro (`public/logo-copa-navidad.png`) y el de la Comisión. Barlow Condensed e Inter en `assets/fuentes/` (`.ttf`: `next/og` no acepta woff2).
 - Sin emojis en la imagen: `next/og` los bajaría de internet en cada pieza.
 - Si las filas no caben, pagina y marca «1/2». En la semana, agrupa por día y repite el encabezado si un día se parte (`paginarDias`).
 - Patrocinantes activos por `orden`, con fondo oscuro si `fondo = 'oscuro'`. `next/og` no dibuja `.webp`: los del repo tienen su PNG en `public/patrocinantes/png/` (`npx tsx scripts/patrocinantes-png.ts`; un test exige que estén todos). Un logo subido a Storage sale si es PNG o JPG; si es WebP, sale su nombre en texto.

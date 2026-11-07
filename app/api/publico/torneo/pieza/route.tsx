@@ -49,11 +49,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 })
     }
 
-    const [partidos, patrocinantes, fonts, logoHgv, logoComision] = await Promise.all([
+    const [partidos, patrocinantes, fonts, logoHgv, logoCopa, logoComision] = await Promise.all([
       cargarPartidosDifusion(supabaseServer()),
       cargarPatrocinantes(),
       fuentes(),
       leer('public', 'logo-hgv-escudo.png'),
+      leer('public', 'logo-copa-navidad.png'),
       leer('public', 'logo-comision-tenis.png'),
     ])
     const paginas = paginasDePieza(partidos, tipo, fecha, formato)
@@ -74,6 +75,7 @@ export async function GET(request: Request) {
         pagina={pagina}
         paginas={paginas.length}
         logoHgv={comoDataUrl(logoHgv)}
+        logoCopa={comoDataUrl(logoCopa)}
         logoComision={comoDataUrl(logoComision)}
         patrocinantes={patrocinantes}
       />,
