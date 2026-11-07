@@ -442,3 +442,26 @@ En este formato '1X' es el **ganador** del partido de primera ronda X y '2X' el 
 **Programación:** la misma de §4. El bloqueo dice «Torneo Navidad – Mixto con handicap – Cuadro B – Semifinal» o «… – Primera ronda · Partido 3». Las reglas de finales de adultos (§4) se aplican a F1; F2 puede ir antes del 11-dic o ese día. **[CONFIRMAR]**
 
 **Pantallas:** en /torneo, «Primera ronda» con los Partidos 1…8 y dos llaves, «Cuadro A» y «Cuadro B», cada una con su campeón y subcampeón. El botón «🎾 Ver llave» abre el cuadro dibujado: primera ronda a la izquierda y cuadros A y B a la derecha, hasta el campeón (en el teléfono, un panel a la vez). Lleva [1] y [2] en las puntas, reconocidos por su lugar: arriba del Partido 1 y abajo del Partido 8. También está en las categorías normales, con su llave, salvo la de 3 grupos con byes. Mis partidos, Programación, Resultados y los avisos usan la misma etiqueta (`etapaCuadros`): «Mixto con handicap – Cuadro B – Semifinal».
+
+## 18. Zona 📣 Difusión y «Hoy en la Copa» (7-nov-2026)
+
+Para que la Comisión publique sin diseñar a mano: el lunes, la «Programación de la semana»; cada mañana, «Hoy en la Copa»; en la noche, la misma pieza del día con los resultados. Todo sale de los horarios publicados y los resultados validados. Instagram directo queda para una fase posterior: por ahora se descarga o se comparte.
+
+**Lógica** (`lib/torneoDifusion.ts`): `partidosDelDia` y `partidosDeLaSemana`, en hora de Caracas, ordenados por hora y cancha (HGV1 antes que HGV2).
+- **Semana:** lunes a viernes. El sábado y el domingo dan la semana siguiente, que es la que se publica ese fin de semana.
+- **Programado o reportado sin validar:** «A vs B». Solo cuenta lo validado.
+- **Jugado:** ganador resaltado y marcador por sets desde su lado, como se publica en tenis (`6-4 3-6 10-8`). El súper tie-break va como un set más. Retiro: marcador + «ret.».
+- **WO:** «W.O.» del lado presente. **Doble WO:** «Doble W.O.».
+- **Formato cuadros:** en la primera ronda, «→ Cuadro A» al ganador y «→ Cuadro B» al otro, también en WO simple.
+- **Lados sin rival:** en el cuadro A, «Ganador Partido 1»; en el B, «Partido 1». En las demás categorías, `textoOrigen`.
+
+**Imágenes:** `GET /api/publico/torneo/pieza?tipo=dia|semana&fecha=YYYY-MM-DD&formato=historia|post&pagina=N`, con `ImageResponse` de `next/og`. Historia 1080×1920 y Post 1080×1350.
+- Estilo del flyer de la inauguración. Barlow Condensed e Inter en `assets/fuentes/` (`.ttf`: `next/og` no acepta woff2).
+- Sin emojis en la imagen: `next/og` los bajaría de internet en cada pieza.
+- Si las filas no caben, pagina y marca «1/2». En la semana, agrupa por día y repite el encabezado si un día se parte (`paginarDias`).
+- Patrocinantes activos por `orden`, con fondo oscuro si `fondo = 'oscuro'`. `next/og` no dibuja `.webp`: los del repo tienen su PNG en `public/patrocinantes/png/` (`npx tsx scripts/patrocinantes-png.ts`; un test exige que estén todos). Un logo subido a Storage sale si es PNG o JPG; si es WebP, sale su nombre en texto.
+- Caché `s-maxage=60`. Solo datos públicos: `lib/torneoDifusionServidor.ts` aplica las reglas de `/api/publico/torneo`.
+
+**Admin → Torneo → 📣 Difusión** (`TorneoDifusion.tsx`): Semana o Día, fecha (hoy; los lunes abre en la semana) y formato. Vista previa de cada página, ⬇️ Descargar, 📤 Compartir (Web Share API; si el navegador no lo soporta, descarga) y texto sugerido para copiar. Avisa si hay resultados por validar en ese rango, con enlace a Resultados.
+
+**`/torneo/hoy`:** la pieza del día en HTML, con `?fecha=` y flechas al día anterior y al siguiente. Enlazada desde /torneo. Pensada para la bio de Instagram y el grupo de WhatsApp.
