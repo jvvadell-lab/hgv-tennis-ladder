@@ -28,6 +28,7 @@ import { GestionCategoria, ResumenTorneo, type EquipoAdmin, type EsperaAdmin, ty
 import { avisoAntesDeCerrar } from '@/lib/torneoCierre'
 import TorneoProgramacion from './TorneoProgramacion'
 import TorneoResultados from './TorneoResultados'
+import TorneoDifusion from './TorneoDifusion'
 import InvitacionInauguracionAdmin from './InvitacionInauguracionAdmin'
 import HorarioAcademia from '@/app/components/HorarioAcademia'
 import { formatearEur, textoTarifas } from '@/lib/torneoPrecios'
@@ -165,7 +166,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
   const [verRetiradas, setVerRetiradas] = useState(false)
   // Sube con cada carga: el resumen vuelve a pedir sus contadores.
   const [version, setVersion] = useState(0)
-  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'programacion' | 'resultados' | 'academia' | 'invitacion'>('inscripciones')
+  const [vista, setVista] = useState<'inscripciones' | 'sorteo' | 'programacion' | 'resultados' | 'difusion' | 'academia' | 'invitacion'>('inscripciones')
 
   const cargar = async () => {
     try {
@@ -290,7 +291,7 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
 
       {esAdminCompleto && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #ddd', overflowX: 'auto' }}>
-          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['programacion', '📅 Programación'], ['resultados', '🏆 Resultados'], ['academia', '🧒 Horario academia'], ['invitacion', '💌 Invitación inauguración']] as const).map(([id, etiqueta]) => (
+          {([['inscripciones', '📝 Inscripciones'], ['sorteo', '🎲 Sorteo'], ['programacion', '📅 Programación'], ['resultados', '🏆 Resultados'], ['difusion', '📣 Difusión'], ['academia', '🧒 Horario academia'], ['invitacion', '💌 Invitación inauguración']] as const).map(([id, etiqueta]) => (
             <button
               key={id}
               onClick={() => setVista(id)}
@@ -329,6 +330,8 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       {vista === 'programacion' && esAdminCompleto && <TorneoProgramacion />}
 
       {vista === 'resultados' && esAdminCompleto && <TorneoResultados />}
+
+      {vista === 'difusion' && esAdminCompleto && <TorneoDifusion onIrAResultados={() => setVista('resultados')} />}
 
       {vista === 'invitacion' && esAdminCompleto && <InvitacionInauguracionAdmin />}
 

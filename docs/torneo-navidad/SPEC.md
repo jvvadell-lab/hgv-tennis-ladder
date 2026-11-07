@@ -453,3 +453,26 @@ Una foto por partido, como en la escalera. **Modelo:** `torneo_partidos.foto_url
 - **Subida:** el navegador comprime con `comprimirImagen` (1600 px) y manda el archivo al servidor, que valida todo lo anterior y recién entonces lo sube con el service role a `fotos-partidos/torneo/`. A diferencia de la escalera, no sube desde el navegador: el bucket es público, y la foto de un menor sin autorización no debe llegar a él. Máximo 4 MB; JPG, PNG o WebP.
 - **Cambiar o quitar** borra también el archivo anterior del bucket, para que su URL pública deje de abrir.
 - **Dónde se ve:** en la ficha del partido en /torneo (miniatura que abre la foto) y en /galeria, con filtro y etiqueta «Copa Navidad», categoría, etapa, duplas y marcador. Lo público solo muestra fotos de partidos validados y jugados, y deja de mostrar la de un partido cuyo menor perdió la autorización (`fotoPublica` en `lib/torneoFotos.ts`). Esa regla es de las pantallas: el archivo sigue en el bucket hasta que el admin lo quite.
+
+## 18. Zona 📣 Difusión y «Hoy en la Copa» (7-nov-2026)
+
+Para que la Comisión publique sin diseñar a mano: el lunes, la «Programación de la semana»; cada mañana, «Hoy en la Copa»; en la noche, la misma pieza del día con los resultados. Todo sale de los horarios publicados y los resultados validados. Instagram directo queda para una fase posterior: por ahora se descarga o se comparte.
+
+**Lógica** (`lib/torneoDifusion.ts`): `partidosDelDia` y `partidosDeLaSemana`, en hora de Caracas, ordenados por hora y cancha (HGV1 antes que HGV2).
+- **Semana:** lunes a viernes. El sábado y el domingo dan la semana siguiente, que es la que se publica ese fin de semana.
+- **Programado o reportado sin validar:** «A vs B». Solo cuenta lo validado.
+- **Jugado:** ganador resaltado y marcador por sets desde su lado, como se publica en tenis (`6-4 3-6 10-8`). El súper tie-break va como un set más. Retiro: marcador + «ret.».
+- **WO:** «W.O.» del lado presente. **Doble WO:** «Doble W.O.».
+- **Formato cuadros:** en la primera ronda, «→ Cuadro A» al ganador y «→ Cuadro B» al otro, también en WO simple.
+- **Lados sin rival:** en el cuadro A, «Ganador Partido 1»; en el B, «Partido 1». En las demás categorías, `textoOrigen`.
+
+**Imágenes:** `GET /api/publico/torneo/pieza?tipo=dia|semana&fecha=YYYY-MM-DD&formato=historia|post&pagina=N`, con `ImageResponse` de `next/og`. Historia 1080×1920 y Post 1080×1350.
+- Estilo del flyer de la inauguración, con tres logos arriba: el escudo azul de la Hermandad (`public/logo-hgv-escudo.png`), el de la Copa Navidad al centro (`public/logo-copa-navidad.png`) y el de la Comisión. La Historia de un día con hasta 4 partidos usa filas grandes, con los nombres al tamaño que permite el más largo. Barlow Condensed e Inter en `assets/fuentes/` (`.ttf`: `next/og` no acepta woff2).
+- Sin emojis en la imagen: `next/og` los bajaría de internet en cada pieza.
+- Si las filas no caben, pagina y marca «1/2». En la semana, agrupa por día y repite el encabezado si un día se parte (`paginarDias`).
+- Patrocinantes activos por `orden`, con fondo oscuro si `fondo = 'oscuro'`. `next/og` no dibuja `.webp`: los del repo tienen su PNG en `public/patrocinantes/png/` (`npx tsx scripts/patrocinantes-png.ts`; un test exige que estén todos). Un logo subido a Storage sale si es PNG o JPG; si es WebP, sale su nombre en texto.
+- Caché `s-maxage=60`. Solo datos públicos: `lib/torneoDifusionServidor.ts` aplica las reglas de `/api/publico/torneo`.
+
+**Admin → Torneo → 📣 Difusión** (`TorneoDifusion.tsx`): Semana o Día, fecha (hoy; los lunes abre en la semana) y formato. Vista previa de cada página, ⬇️ Descargar, 📤 Compartir (Web Share API; si el navegador no lo soporta, descarga) y texto sugerido para copiar. Avisa si hay resultados por validar en ese rango, con enlace a Resultados.
+
+**`/torneo/hoy`:** la pieza del día en HTML, con `?fecha=` y flechas al día anterior y al siguiente. Enlazada desde /torneo. Pensada para la bio de Instagram y el grupo de WhatsApp.
