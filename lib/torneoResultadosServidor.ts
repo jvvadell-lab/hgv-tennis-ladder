@@ -30,9 +30,10 @@ import {
 import { escaparHtml, notificarJugadores } from '@/lib/torneoServidor'
 import { competidoresPorId, pagosPendientes, personasDe } from '@/lib/torneoEquiposServidor'
 import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
+import { equiposSinAutorizacionImagen } from '@/lib/torneoFotosServidor'
 
 export const COLUMNAS_PARTIDO =
-  'id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, equipo_a, equipo_b, cancha, fecha_hora, estado, sets, tipo_resultado, retirada_equipo_id, ganador_equipo_id, wo_ausente_equipo_id, validado, reportado_por, reportado_at'
+  'id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, equipo_a, equipo_b, cancha, fecha_hora, estado, sets, tipo_resultado, retirada_equipo_id, ganador_equipo_id, wo_ausente_equipo_id, validado, reportado_por, reportado_at, foto_url'
 
 export type PartidoFila = PartidoAvance & {
   categoria_id: string
@@ -40,6 +41,7 @@ export type PartidoFila = PartidoAvance & {
   fecha_hora: string | null
   reportado_por: string | null
   reportado_at: string | null
+  foto_url: string | null
 }
 
 type Resultado<T = object> = ({ ok: true } & T) | { ok: false; error: string; status: number }
@@ -475,6 +477,7 @@ export async function listarPartidos(db: SupabaseClient, torneoId: string, soloI
   const equipos = [...(await competidoresPorId(db, inscripcionIds)).values()]
   const nombres = await nombresInscripciones(db, equipos)
   const sinPago = await pagosPendientes(db, equipos)
+  const sinAutorizacion = await equiposSinAutorizacionImagen(db, inscripcionIds)
 
   const ordenFase: Record<Fase, number> = { grupo: 0, cuartos: 1, semis: 2, final: 3 }
   return ((partidos || []) as unknown as PartidoFila[])
@@ -487,6 +490,7 @@ export async function listarPartidos(db: SupabaseClient, torneoId: string, soloI
       nombre_a: p.equipo_a ? nombres.get(p.equipo_a) ?? null : null,
       nombre_b: p.equipo_b ? nombres.get(p.equipo_b) ?? null : null,
       pago_pendiente: [...(p.equipo_a ? sinPago.get(p.equipo_a) ?? [] : []), ...(p.equipo_b ? sinPago.get(p.equipo_b) ?? [] : [])],
+      falta_autorizacion_imagen: [p.equipo_a, p.equipo_b].some((id) => !!id && sinAutorizacion.has(id)),
     }))
     .sort((x, y) =>
       x.categoria_orden - y.categoria_orden ||

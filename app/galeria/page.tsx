@@ -29,6 +29,58 @@ function nombreCancha(f: FotoGaleria) {
   return c
 }
 
+// Foto de un partido del torneo (/api/publico/torneo/fotos).
+type FotoCopa = {
+  id: string
+  foto_url: string
+  fecha: string
+  categoria: string
+  etapa: string
+  nombre_a: string
+  nombre_b: string
+  marcador: string | null
+  cancha: string | null
+}
+
+// Lo que pinta la galería, venga de la escalera o del torneo.
+type Item = {
+  id: string
+  foto_url: string
+  orden: string
+  copa: boolean
+  titulo: string
+  subtitulo: string | null
+  marcador: string | null
+  fecha: string
+  lugar: string | null
+}
+type Filtro = 'todas' | 'escalera' | 'copa'
+const FILTROS: [Filtro, string][] = [['todas', 'Todas'], ['escalera', 'Escalera'], ['copa', '🎄 Copa Navidad']]
+
+const deEscalera = (f: FotoGaleria): Item => ({
+  id: f.id,
+  foto_url: f.foto_url,
+  orden: f.created_at,
+  copa: false,
+  titulo: `${f.retos?.retador?.nombre} vs ${f.retos?.retado?.nombre}`,
+  subtitulo: null,
+  marcador: textoMarcador(f),
+  fecha: f.retos?.fecha_propuesta ?? f.created_at,
+  lugar: nombreCancha(f),
+})
+
+const deCopa = (f: FotoCopa): Item => ({
+  id: f.id,
+  foto_url: f.foto_url,
+  orden: f.fecha,
+  copa: true,
+  titulo: `${f.nombre_a} vs ${f.nombre_b}`,
+  subtitulo: `${f.categoria} · ${f.etapa}`,
+  marcador: f.marcador,
+  fecha: f.fecha,
+  lugar: f.cancha === 'HGV1' ? 'HGV 1' : f.cancha === 'HGV2' ? 'HGV 2' : f.cancha,
+})
+
 // El marcador ya viene listo desde el lado del retador (ej: "6-4, 6-3" o,
 // si hubo walkover, "No presentado"/"W.O.") — solo lo mostramos tal cual.
 function textoMarcador(f: FotoGaleria) {
@@ -38,21 +90,31 @@ function textoMarcador(f: FotoGaleria) {
 }
 
 export default function GaleriaPage() {
-  const [fotos, setFotos] = useState<FotoGaleria[]>([])
+  const [fotos, setFotos] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
-  const [fotoSeleccionada, setFotoSeleccionada] = useState<FotoGaleria | null>(null)
+  const [filtro, setFiltro] = useState<Filtro>('todas')
+  const [fotoSeleccionada, setFotoSeleccionada] = useState<Item | null>(null)
 
   useEffect(() => {
-    supabase
+    const escalera = supabase
       .from('resultados')
       .select('id, foto_url, created_at, marcador_retador, marcador_retado, no_presentado, retos:reto_id(cancha, nombre_cancha_foranea, fecha_propuesta, retador:retador_id(nombre), retado:retado_id(nombre))')
       .not('foto_url', 'is', null)
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setFotos((data as any) || [])
-        setLoading(false)
-      })
+      .then(({ data }) => ((data as any as FotoGaleria[]) || []).map(deEscalera))
+    // Si falla el torneo, la galería de la escalera se ve igual.
+    const copa = fetch('/api/publico/torneo/fotos')
+      .then((r) => (r.ok ? r.json() : { fotos: [] }))
+      .then((d) => ((d.fotos as FotoCopa[]) || []).map(deCopa))
+      .catch(() => [] as Item[])
+    Promise.all([escalera, copa]).then(([a, b]) => {
+      setFotos([...a, ...b].sort((x, y) => new Date(y.orden).getTime() - new Date(x.orden).getTime()))
+      setLoading(false)
+    })
   }, [])
+
+  const visibles = fotos.filter((f) => filtro === 'todas' || f.copa === (filtro === 'copa'))
+  const hayCopa = fotos.some((f) => f.copa)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -89,15 +151,28 @@ export default function GaleriaPage() {
             textTransform: 'uppercase',
             marginTop: '10px',
           }}>
-            Momentos de la escalera HGV
+            Momentos de la escalera y la Copa Navidad HGV
           </p>
         </div>
+
+        {hayCopa && (
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '20px' }}>
+            {FILTROS.map(([id, texto]) => (
+              <button key={id} onClick={() => setFiltro(id)} style={{
+                padding: '7px 14px', borderRadius: '999px', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
+                border: '1px solid var(--color-ball)',
+                background: filtro === id ? 'var(--color-ball)' : 'transparent',
+                color: filtro === id ? 'var(--color-ink)' : 'var(--color-chalk)',
+              }}>{texto}</button>
+            ))}
+          </div>
+        )}
 
         {loading ? (
           <p style={{ color: 'var(--color-chalk)', textAlign: 'center' }} className="loading-row"><span className="spinner spinner-chalk" /> Cargando fotos…</p>
         ) : fotos.length === 0 ? (
           <div style={{ background: 'var(--color-chalk)', borderRadius: '4px', borderTop: '3px solid var(--color-ball)', padding: '40px', textAlign: 'center', color: 'var(--color-line)' }}>
-            Todavía no hay fotos cargadas. ¡Sube la primera al registrar el resultado de un partido en la escalera!
+            Todavía no hay fotos cargadas. ¡Sube la primera al registrar el resultado de un partido!
           </div>
         ) : (
           <div style={{
@@ -105,7 +180,7 @@ export default function GaleriaPage() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
             gap: '16px',
           }}>
-            {fotos.map((f) => (
+            {visibles.map((f) => (
               <div
                 key={f.id}
                 onClick={() => setFotoSeleccionada(f)}
@@ -124,16 +199,26 @@ export default function GaleriaPage() {
                   style={{ width: '100%', height: '200px', objectFit: 'cover', display: 'block' }}
                 />
                 <div style={{ padding: '12px 14px' }}>
+                  {f.copa && (
+                    <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 5px 0' }}>
+                      🎄 Copa Navidad
+                    </p>
+                  )}
                   <p style={{ color: 'var(--color-chalk)', fontSize: '14px', margin: 0, fontWeight: 600 }}>
-                    {f.retos?.retador?.nombre} vs {f.retos?.retado?.nombre}
+                    {f.titulo}
                   </p>
-                  {textoMarcador(f) && (
+                  {f.subtitulo && (
+                    <p style={{ color: 'var(--color-chalk)', fontSize: '12px', margin: '4px 0 0 0', opacity: 0.85 }}>
+                      {f.subtitulo}
+                    </p>
+                  )}
+                  {f.marcador && (
                     <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-chalk)', fontSize: '12px', margin: '4px 0 0 0', opacity: 0.85 }}>
-                      {textoMarcador(f)}
+                      {f.marcador}
                     </p>
                   )}
                   <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-ball)', fontSize: '11px', margin: '5px 0 0 0' }}>
-                    {formatearFechaConAnio(f.created_at)}
+                    {formatearFechaConAnio(f.orden)}
                   </p>
                 </div>
               </div>
@@ -192,21 +277,24 @@ export default function GaleriaPage() {
               fontFamily: 'var(--font-display)', fontWeight: 900,
               color: 'var(--color-chalk)', fontSize: '22px', margin: 0,
             }}>
-              {fotoSeleccionada.retos?.retador?.nombre} vs {fotoSeleccionada.retos?.retado?.nombre}
+              {fotoSeleccionada.titulo}
             </p>
-            {textoMarcador(fotoSeleccionada) && (
+            {fotoSeleccionada.subtitulo && (
+              <p style={{ color: 'var(--color-chalk)', fontSize: '14px', margin: '6px 0 0 0' }}>
+                {fotoSeleccionada.subtitulo}
+              </p>
+            )}
+            {fotoSeleccionada.marcador && (
               <p style={{
                 fontFamily: 'var(--font-mono)', color: 'var(--color-ball)',
                 fontSize: '16px', fontWeight: 700, margin: '8px 0 0 0',
               }}>
-                {textoMarcador(fotoSeleccionada)}
+                {fotoSeleccionada.marcador}
               </p>
             )}
             <p style={{ fontFamily: 'var(--font-mono)', color: 'rgba(247,243,234,0.7)', fontSize: '13px', margin: '10px 0 0 0' }}>
-              {fotoSeleccionada.retos?.fecha_propuesta
-                ? formatearFechaLarga(fotoSeleccionada.retos.fecha_propuesta, { conAnio: true })
-                : formatearFechaLarga(fotoSeleccionada.created_at, { conAnio: true })}
-              {nombreCancha(fotoSeleccionada) && ` · Cancha ${nombreCancha(fotoSeleccionada)}`}
+              {formatearFechaLarga(fotoSeleccionada.fecha, { conAnio: true })}
+              {fotoSeleccionada.lugar && ` · Cancha ${fotoSeleccionada.lugar}`}
             </p>
           </div>
         </div>
