@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
+import BotonFotoPartido, { subirFotoPartido } from '@/app/components/BotonFotoPartido'
 import FormMarcadorTorneo from '@/app/components/FormMarcadorTorneo'
 import { formatearFechaHora } from '@/lib/tiempo'
 import { ETIQUETA_FASE, PREFIJO_FASE, etapaCuadros, type EstadoPartido, type Fase, type FormatoLlave, textoOrigen, textoOrigenCuadros } from '@/lib/torneo'
 import type { SetJugado, TipoResultado } from '@/lib/resultados'
+import { TEXTO_FALTA_AUTORIZACION, aceptaFoto } from '@/lib/torneoFotos'
 import { textoMarcador } from '@/lib/torneoResultados'
 import NavJugador, { BotonPanelAdmin } from '@/app/components/NavJugador'
 import type { MontoFijado } from '@/lib/torneoPrecios'
@@ -35,6 +37,8 @@ type Partido = {
   ganador_equipo_id: string | null
   validado: boolean
   reportado_at: string | null
+  foto_url: string | null
+  falta_autorizacion_imagen: boolean
 }
 
 type Datos = {
@@ -43,6 +47,8 @@ type Datos = {
   partidos: Partido[]
   inscripciones: { id: string; categoria_nombre: string; menor: string | null; monto: MontoFijado }[]
 }
+
+const RUTA_FOTO = '/api/jugador/torneo/foto'
 
 const tarjeta: React.CSSProperties = { background: 'white', border: '1px solid rgba(15,27,38,0.12)', borderRadius: '6px', padding: '14px 16px', marginBottom: '12px' }
 const tituloSeccion: React.CSSProperties = { fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--color-ink)', fontSize: '19px', margin: '24px 0 12px 0' }
@@ -67,6 +73,7 @@ export default function MisPartidos() {
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
   const [reportando, setReportando] = useState<string | null>(null)
+  const [fotoAlReportar, setFotoAlReportar] = useState<File | null>(null)
 
   const cargar = async () => {
     const res = await fetch('/api/jugador/torneo/partidos', { cache: 'no-store' })
@@ -123,6 +130,11 @@ export default function MisPartidos() {
     if (!res.ok) throw new Error(data.error || 'No se pudo reportar')
     setReportando(null)
     setOk('Resultado reportado. Queda por validar por el admin.')
+    // El resultado ya quedó: si la foto falla, se puede volver a subir desde la tarjeta.
+    if (fotoAlReportar) {
+      await subirFotoPartido(RUTA_FOTO, p.id, fotoAlReportar).catch((err) => setError(`El resultado quedó reportado, pero la foto no se subió: ${err.message}`))
+      setFotoAlReportar(null)
+    }
     await cargar()
   }
 
@@ -138,6 +150,27 @@ export default function MisPartidos() {
       ))}
     </div>
   )
+
+  // Función y no componente: se define en cada render, y el botón guarda estado.
+  const foto = (p: Partido) => aceptaFoto(p) ? (
+    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+      {p.foto_url && (
+        <a href={p.foto_url} target="_blank" rel="noreferrer">
+          <img src={p.foto_url} alt="Foto del partido" loading="lazy" style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '4px', display: 'block' }} />
+        </a>
+      )}
+      <BotonFotoPartido
+        ruta={RUTA_FOTO}
+        partidoId={p.id}
+        textoAgregar="📷 Agregar foto"
+        textoCambiar="📷 Cambiar foto"
+        tieneFoto={!!p.foto_url}
+        faltaAutorizacion={p.falta_autorizacion_imagen}
+        onSubida={async () => { setError(''); setOk('Foto guardada.'); await cargar() }}
+        onError={setError}
+      />
+    </div>
+  ) : null
 
   const Horario = ({ p }: { p: Partido }) => (
     <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
@@ -190,6 +223,15 @@ export default function MisPartidos() {
                 <Horario p={p} />
                 {p.reportado_at && <div style={{ fontSize: '13px', marginTop: '6px' }}>Reportado: <strong>{textoMarcador(p)}</strong></div>}
                 {reportando === p.id ? (
+                  <>
+                  {p.falta_autorizacion_imagen ? (
+                    <p style={{ fontSize: '12px', color: '#8a5a00', margin: '10px 0 0 0' }}>{TEXTO_FALTA_AUTORIZACION}</p>
+                  ) : !p.foto_url && (
+                    <label style={{ display: 'block', fontSize: '13px', marginTop: '10px' }}>
+                      📷 Foto del partido (opcional)
+                      <input type="file" accept="image/*" onChange={(e) => setFotoAlReportar(e.target.files?.[0] ?? null)} style={{ display: 'block', marginTop: '4px', fontSize: '13px' }} />
+                    </label>
+                  )}
                   <FormMarcadorTorneo
                     nombreA={p.nombre_a ?? 'A'}
                     nombreB={p.nombre_b ?? 'B'}
@@ -197,13 +239,15 @@ export default function MisPartidos() {
                     inscripcionB={p.equipo_b!}
                     textoBoton="Reportar resultado"
                     onEnviar={(d) => reportar(p, d)}
-                    onCancelar={() => setReportando(null)}
+                    onCancelar={() => { setFotoAlReportar(null); setReportando(null) }}
                   />
+                  </>
                 ) : (
-                  <button onClick={() => { setOk(''); setReportando(p.id) }} style={{ marginTop: '10px', padding: '8px 14px', border: '1px solid var(--color-court)', background: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 700, fontSize: '13px' }}>
+                  <button onClick={() => { setOk(''); setFotoAlReportar(null); setReportando(p.id) }} style={{ marginTop: '10px', padding: '8px 14px', border: '1px solid var(--color-court)', background: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 700, fontSize: '13px' }}>
                     {p.reportado_at ? 'Corregir el reporte' : '📝 Reportar resultado'}
                   </button>
                 )}
+                {reportando !== p.id && foto(p)}
               </div>
             ))}
 
@@ -227,6 +271,7 @@ export default function MisPartidos() {
                 </div>
                 <Rivales p={p} />
                 <div style={{ fontSize: '13px', marginTop: '6px' }}><strong>{textoMarcador(p)}</strong></div>
+                {foto(p)}
               </div>
             ))}
           </>

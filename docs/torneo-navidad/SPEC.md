@@ -443,6 +443,17 @@ En este formato '1X' es el **ganador** del partido de primera ronda X y '2X' el 
 
 **Pantallas:** en /torneo, «Primera ronda» con los Partidos 1…8 y dos llaves, «Cuadro A» y «Cuadro B», cada una con su campeón y subcampeón. El botón «🎾 Ver llave» abre el cuadro dibujado: primera ronda a la izquierda y cuadros A y B a la derecha, hasta el campeón (en el teléfono, un panel a la vez). Lleva [1] y [2] en las puntas, reconocidos por su lugar: arriba del Partido 1 y abajo del Partido 8. También está en las categorías normales, con su llave, salvo la de 3 grupos con byes. Mis partidos, Programación, Resultados y los avisos usan la misma etiqueta (`etapaCuadros`): «Mixto con handicap – Cuadro B – Semifinal».
 
+## 17. Fotos de los partidos (7-nov-2026)
+
+Una foto por partido, como en la escalera. **Modelo:** `torneo_partidos.foto_url`, `foto_subida_por`, `foto_subida_rol` ('jugador' | 'admin') y `foto_subida_at` (migración `torneo_partidos_foto`). Las cuatro van juntas: un check impide una foto sin autor.
+
+- **Quién:** un jugador del partido o el representante del menor, desde Mis partidos (al reportar o después, aunque ya esté validado): «📷 Agregar foto» / «📷 Cambiar foto». El admin, desde Resultados, en cualquier partido jugado: «📷 Agregar» / «📷 Cambiar» / «Quitar».
+- **Cuándo:** solo con `estado = 'jugado'`, que es lo que deja reportar o cargar el resultado. Sin foto en WO ni en doble WO.
+- **Menores:** si en el partido hay un menor sin `autorizacion_imagen`, no se sube foto, tampoco el admin. El botón sale deshabilitado con «Falta la autorización de uso de imagen del representante».
+- **Subida:** el navegador comprime con `comprimirImagen` (1600 px) y manda el archivo al servidor, que valida todo lo anterior y recién entonces lo sube con el service role a `fotos-partidos/torneo/`. A diferencia de la escalera, no sube desde el navegador: el bucket es público, y la foto de un menor sin autorización no debe llegar a él. Máximo 4 MB; JPG, PNG o WebP.
+- **Cambiar o quitar** borra también el archivo anterior del bucket, para que su URL pública deje de abrir.
+- **Dónde se ve:** en la ficha del partido en /torneo (miniatura que abre la foto) y en /galeria, con filtro y etiqueta «Copa Navidad», categoría, etapa, duplas y marcador. Lo público solo muestra fotos de partidos validados y jugados, y deja de mostrar la de un partido cuyo menor perdió la autorización (`fotoPublica` en `lib/torneoFotos.ts`). Esa regla es de las pantallas: el archivo sigue en el bucket hasta que el admin lo quite.
+
 ## 18. Zona 📣 Difusión y «Hoy en la Copa» (7-nov-2026)
 
 Para que la Comisión publique sin diseñar a mano: el lunes, la «Programación de la semana»; cada mañana, «Hoy en la Copa»; en la noche, la misma pieza del día con los resultados. Todo sale de los horarios publicados y los resultados validados. Instagram directo queda para una fase posterior: por ahora se descarga o se comparte.

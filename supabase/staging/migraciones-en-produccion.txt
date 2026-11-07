@@ -52,3 +52,4 @@ manual allow_usada_estado_reservas_cancha
 20261024034209 torneo_navidad_fechas
 20261024034239 torneo_cierre_y_lista_espera
 20261028164247 torneo_precios_inscripcion
+20261107163409 torneo_partidos_foto
