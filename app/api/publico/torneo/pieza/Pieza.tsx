@@ -88,7 +88,7 @@ export default function Pieza({ formato, encabezado, detalle, dias, conEncabezad
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: historia ? '56px 48px 0' : '30px 48px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={logoHgv} width={logo} height={logo} style={{ objectFit: 'contain' }} alt="" />
+          <img src={logoHgv} width={Math.round(logo * 0.64)} height={logo} style={{ objectFit: 'contain' }} alt="" />
           <div style={{ display: 'flex', width: 2, height: logo - 26, background: AZUL, margin: '0 22px' }} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoComision} width={logo} height={logo} style={{ objectFit: 'contain' }} alt="" />

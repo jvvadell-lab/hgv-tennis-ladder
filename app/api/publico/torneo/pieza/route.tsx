@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       cargarPartidosDifusion(supabaseServer()),
       cargarPatrocinantes(),
       fuentes(),
-      leer('public', 'logo-hgv.png'),
+      leer('public', 'logo-hgv-escudo.png'),
       leer('public', 'logo-comision-tenis.png'),
     ])
     const paginas = paginasDePieza(partidos, tipo, fecha, formato)

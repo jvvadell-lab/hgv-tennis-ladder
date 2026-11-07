@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     // Las piezas de difusión leen del disco sus fuentes y logos.
     "/api/publico/torneo/pieza": [
       "./assets/fuentes/*.ttf",
-      "./public/logo-hgv.png",
+      "./public/logo-hgv-escudo.png",
       "./public/logo-comision-tenis.png",
       "./public/patrocinantes/png/*.png",
     ],
