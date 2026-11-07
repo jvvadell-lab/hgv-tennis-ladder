@@ -12,7 +12,7 @@ export type PartidoTorneo = {
   id: string; categoria_id: string; formato_llave: FormatoLlave; fase: Fase; grupo: string | null; orden: number
   origen_a: string | null; origen_b: string | null; equipo_a: string | null; equipo_b: string | null
   cancha: string | null; fecha_hora: string | null; estado: string; sets: SetJugado[] | null; tipo_resultado: string
-  ganador: string | null; wo_ausente: string | null; retirada: string | null; handicap: string | null
+  ganador: string | null; wo_ausente: string | null; retirada: string | null; handicap: string | null; foto_url: string | null
 }
 
 type Comun = {

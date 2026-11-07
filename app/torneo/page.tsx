@@ -313,6 +313,12 @@ function Ficha({ p, nombre, mias, encabezado }: { p: Partido; nombre: (id: strin
       {p.handicap && (
         <div style={{ fontSize: '11px', color: '#8a5a00', padding: '3px 8px', background: '#fff8e1' }}>Handicap 15-0 por game: {nombre(p.handicap)}</div>
       )}
+      {p.foto_url && (
+        <a href={p.foto_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #eee', padding: '5px 8px', color: 'var(--color-ink)', fontSize: '12px', fontWeight: 700, textDecoration: 'none' }}>
+          <img src={p.foto_url} alt="Foto del partido" loading="lazy" style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '4px', display: 'block' }} />
+          📷 Ver foto
+        </a>
+      )}
     </div>
   )
 }

@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import BotonFotoPartido from '@/app/components/BotonFotoPartido'
 import FormMarcadorTorneo from '@/app/components/FormMarcadorTorneo'
 import { formatearFechaHora } from '@/lib/tiempo'
 import { ETIQUETA_ESTADO_PARTIDO, ETIQUETA_FASE, PREFIJO_FASE, etapaCuadros, type EstadoPartido, type Fase, type FormatoLlave } from '@/lib/torneo'
 import type { SetJugado, TipoResultado } from '@/lib/resultados'
+import { aceptaFoto } from '@/lib/torneoFotos'
 import { textoMarcador } from '@/lib/torneoResultados'
 
 // Resultados del torneo (SPEC §5, §6 y §8), dentro de la pestaña Torneo del
@@ -34,6 +36,8 @@ type Partido = {
   ganador_equipo_id: string | null
   validado: boolean
   reportado_at: string | null
+  foto_url: string | null
+  falta_autorizacion_imagen: boolean
 }
 
 type Filtro = 'por_validar' | 'por_jugar' | 'cerrados' | 'todos'
@@ -93,6 +97,21 @@ export default function TorneoResultados() {
       throw err
     } finally {
       setOcupado(null)
+    }
+  }
+
+  const quitarFoto = async (p: Partido) => {
+    if (!confirm(`¿Quitar la foto de ${p.nombre_a} vs ${p.nombre_b}? El resultado no cambia.`)) return
+    setMensaje('')
+    setError('')
+    try {
+      const res = await fetch('/api/admin/torneo/resultados/foto', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ partidoId: p.id }) })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo quitar la foto')
+      setMensaje('Foto quitada')
+      await cargar()
+    } catch (err: any) {
+      setError(err.message)
     }
   }
 
@@ -189,6 +208,27 @@ export default function TorneoResultados() {
                   )}
                 </span>
               </div>
+              {aceptaFoto(p) && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '6px' }}>
+                  {p.foto_url && (
+                    <a href={p.foto_url} target="_blank" rel="noreferrer">
+                      <img src={p.foto_url} alt="Foto del partido" loading="lazy" style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '4px', display: 'block' }} />
+                    </a>
+                  )}
+                  <BotonFotoPartido
+                    ruta="/api/admin/torneo/resultados/foto"
+                    partidoId={p.id}
+                    textoAgregar="📷 Agregar"
+                    textoCambiar="📷 Cambiar"
+                    tieneFoto={!!p.foto_url}
+                    faltaAutorizacion={p.falta_autorizacion_imagen}
+                    onSubida={async () => { setError(''); setMensaje('Foto guardada'); await cargar() }}
+                    onError={setError}
+                    estilo={{ ...btn('var(--color-court)'), display: 'inline-block' }}
+                  />
+                  {p.foto_url && <button onClick={() => quitarFoto(p)} style={btn('#c0392b')}>Quitar</button>}
+                </div>
+              )}
               {cargando === p.id && conRivales && (
                 <FormMarcadorTorneo
                   nombreA={p.nombre_a ?? 'A'}

@@ -5,13 +5,15 @@ import { torneoVigente } from '@/lib/torneoServidor'
 import { competidoresDeCategorias, competidoresPorId, personasDe } from '@/lib/torneoEquiposServidor'
 import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 import { ordenarGrupo, type PartidoParaTabla } from '@/lib/torneo'
+import { fotoPublica } from '@/lib/torneoFotos'
+import { equiposSinAutorizacionImagen } from '@/lib/torneoFotosServidor'
 
 // Vista pública del torneo (/torneo, SPEC §9): categorías, grupos con su
 // tabla en vivo, partidos (calendario y llave) y nombres públicos.
 //  * De los menores solo sale menor_nombre_publico ("Sofía M."); nunca su
 //    ficha ni datos del representante.
 //  * Fecha, hora y cancha solo cuando la programación está publicada.
-//  * Marcador y ganador solo de partidos validados.
+//  * Marcador, ganador y foto solo de partidos validados.
 //  * `mias`: equipos del usuario con sesión (los suyos y los de sus
 //    representados), para resaltarlos.
 export async function GET() {
@@ -33,7 +35,7 @@ export async function GET() {
       competidoresDeCategorias(db, categoriaIds),
       db.from('torneo_grupos').select('id, categoria_id, letra, torneo_grupo_miembros(equipo_id, desempate_manual)').in('categoria_id', categoriaIds).order('letra'),
       db.from('torneo_partidos')
-        .select('id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, equipo_a, equipo_b, cancha, fecha_hora, estado, sets, tipo_resultado, retirada_equipo_id, ganador_equipo_id, wo_ausente_equipo_id, validado, handicap_equipo_id')
+        .select('id, categoria_id, fase, grupo_id, orden, origen_a, origen_b, equipo_a, equipo_b, cancha, fecha_hora, estado, sets, tipo_resultado, retirada_equipo_id, ganador_equipo_id, wo_ausente_equipo_id, validado, handicap_equipo_id, foto_url')
         .in('categoria_id', categoriaIds),
     ])
     if (errG) throw errG
@@ -54,6 +56,9 @@ export async function GET() {
         .filter((e) => personasDe(e).includes(session.id))
         .map((e) => e.id)
     }
+
+    const conFoto = (partidos || []).filter((p) => p.foto_url)
+    const sinAutorizacion = await equiposSinAutorizacionImagen(db, conFoto.flatMap((p) => [p.equipo_a, p.equipo_b]).filter(Boolean) as string[])
 
     const letraDe = new Map((grupos || []).map((g) => [g.id, g.letra]))
     const formatoDe = new Map((categorias || []).map((c) => [c.id, c.formato_llave ?? 'normal']))
@@ -77,6 +82,7 @@ export async function GET() {
       wo_ausente: p.validado ? p.wo_ausente_equipo_id : null,
       retirada: p.validado && p.tipo_resultado === 'retiro' ? p.retirada_equipo_id : null,
       handicap: p.handicap_equipo_id,
+      foto_url: fotoPublica(p, sinAutorizacion.has(p.equipo_a) || sinAutorizacion.has(p.equipo_b)),
     }))
 
     const gruposPublicos = (grupos || []).map((g) => {
