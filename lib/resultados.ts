@@ -45,12 +45,37 @@ function margenTiebreakValido(minimo: number, ganador: number, perdedor: number)
   return perdedor === ganador - 2
 }
 
+// ¿Este set se definió (o se está definiendo) por tie-break? Sí con 6-6
+// (forma original del formulario) y también con el marcador final 7-6 / 6-7,
+// que es como lo escribe casi todo el mundo. Los formularios usan esto para
+// mostrar las casillas del tie-break del set.
+export function pideTiebreak(golesRetador: string, golesRetado: string): boolean {
+  const a = parseInt(golesRetador, 10)
+  const b = parseInt(golesRetado, 10)
+  return (a === 6 && b === 6) || (a === 7 && b === 6) || (a === 6 && b === 7)
+}
+
+// Un set cargado como 7-6 / 6-7 se evalúa igual que 6-6 + su tie-break. Si
+// el tie-break cargado lo gana el lado que tiene 6 games, el marcador es
+// contradictorio → null (el set queda incompleto y el formulario lo rechaza).
+function normalizarSetConTiebreak(c: CampoSet): CampoSet | null {
+  const gr = parseInt(c.golesRetador, 10)
+  const gd = parseInt(c.golesRetado, 10)
+  if (!((gr === 7 && gd === 6) || (gr === 6 && gd === 7))) return c
+  const tbr = parseInt(c.tbRetador || '', 10)
+  const tbd = parseInt(c.tbRetado || '', 10)
+  if (!isNaN(tbr) && !isNaN(tbd) && tbr !== tbd && (tbr > tbd) !== (gr > gd)) return null
+  return { ...c, golesRetador: '6', golesRetado: '6' }
+}
+
 // Evalúa un set a partir de los inputs de texto del formulario: si llega a
 // 6-6 hace falta su propio tie-break (a 7, con margen de 2) para estar
 // completo; cualquier otro marcador con números distintos ya está completo.
 // Con esSuperTiebreak=true, evalúa en cambio el Super Tiebreak (a 10, mismo
 // margen) — se usa así para el campo `st` de construirSets.
-export function evaluarSet(c: CampoSet, esSuperTiebreak = false): { completo: boolean; ganadorEsRetador: boolean | null } {
+export function evaluarSet(campo: CampoSet, esSuperTiebreak = false): { completo: boolean; ganadorEsRetador: boolean | null } {
+  const c = esSuperTiebreak ? campo : normalizarSetConTiebreak(campo)
+  if (!c) return { completo: false, ganadorEsRetador: null }
   const gr = parseInt(c.golesRetador, 10)
   const gd = parseInt(c.golesRetado, 10)
   if (isNaN(gr) || isNaN(gd)) return { completo: false, ganadorEsRetador: null }
@@ -84,7 +109,13 @@ export function evaluarSet(c: CampoSet, esSuperTiebreak = false): { completo: bo
 // tie-break), el set se guarda honesto como 6-6 sin decidir —
 // tiebreak_retador/tiebreak_retado quedan igual, para que el marcador
 // pueda mostrar algo como "6-6(3-2) RET" en vez de un "7-6" contradictorio.
-export function filaDesdeCampoSet(numero: number, c: CampoSet, esSuperTiebreak = false): SetJugado | null {
+export function filaDesdeCampoSet(numero: number, campo: CampoSet, esSuperTiebreak = false): SetJugado | null {
+  const normal = esSuperTiebreak ? campo : normalizarSetConTiebreak(campo)
+  if (!normal) {
+    // 7-6 con un tie-break ganado por el otro lado: se guarda tal cual, sin decidir.
+    return { numero, games_j1: parseInt(campo.golesRetador, 10), games_j2: parseInt(campo.golesRetado, 10), completo: false }
+  }
+  const c = normal
   const gr = parseInt(c.golesRetador, 10)
   const gd = parseInt(c.golesRetado, 10)
   if (isNaN(gr) && isNaN(gd)) return null
@@ -238,7 +269,7 @@ export function construirSets(args: {
   if (!args.retiro) {
     const e2 = evaluarSet(args.set2)
     if (!e1.completo || !e2.completo) {
-      return { error: 'Completa los 2 sets (y los tie-breaks que hagan falta) con marcadores válidos' }
+      return { error: 'Completa los 2 sets con marcadores válidos. Si un set terminó 7-6, carga también su tie-break (a 7, por 2 de diferencia)' }
     }
     const fila2 = filaDesdeCampoSet(2, args.set2)!
     const setsRetador = (e1.ganadorEsRetador ? 1 : 0) + (e2.ganadorEsRetador ? 1 : 0)

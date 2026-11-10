@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { construirSets, type CampoSet } from '@/lib/resultados'
+import { construirSets, pideTiebreak, type CampoSet } from '@/lib/resultados'
 
 // Formulario del marcador de un partido de torneo (2 sets + Super Tiebreak
 // si quedan 1-1, tie-break en 6-6, retiro). Arma `sets` con construirSets
@@ -50,7 +50,7 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
       <td style={{ paddingRight: '10px', fontSize: '13px', fontWeight: 600 }}>{titulo}</td>
       <td><input inputMode="numeric" aria-label={`${titulo} ${nombreA}`} value={c.golesRetador} onChange={(e) => set({ ...c, golesRetador: e.target.value })} style={num} /></td>
       <td><input inputMode="numeric" aria-label={`${titulo} ${nombreB}`} value={c.golesRetado} onChange={(e) => set({ ...c, golesRetado: e.target.value })} style={num} /></td>
-      {conTb && c.golesRetador === '6' && c.golesRetado === '6' && (
+      {conTb && pideTiebreak(c.golesRetador, c.golesRetado) && (
         <td style={{ fontSize: '12px', paddingLeft: '8px' }}>
           TB <input inputMode="numeric" aria-label={`Tie-break ${titulo} ${nombreA}`} value={c.tbRetador} onChange={(e) => set({ ...c, tbRetador: e.target.value })} style={{ ...num, width: '40px' }} />
           {' '}<input inputMode="numeric" aria-label={`Tie-break ${titulo} ${nombreB}`} value={c.tbRetado} onChange={(e) => set({ ...c, tbRetado: e.target.value })} style={{ ...num, width: '40px' }} />
@@ -75,7 +75,7 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
           {fila('Super TB', st, setSt, false)}
         </tbody>
       </table>
-      <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 8px 0' }}>El Super Tiebreak (a 10) solo si quedan 1 set a 1. Si un set llega a 6-6, carga también su tie-break.</p>
+      <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 8px 0' }}>El Super Tiebreak (a 10) solo si quedan 1 set a 1. Si un set termina 7-6, carga también su tie-break (ej. 7-6 con TB 7-4).</p>
       <label style={{ fontSize: '13px', display: 'flex', gap: '6px', alignItems: 'center' }}>
         <input type="checkbox" checked={retiro} onChange={(e) => setRetiro(e.target.checked)} /> Hubo un retiro (carga lo jugado hasta ese momento)
       </label>

@@ -11,7 +11,7 @@ import PagosTorneo from './PagosTorneo'
 import TodosLosRecibos from './TodosLosRecibos'
 import { cargarJugadoresActivosAdmin, contarJugadoresActivosAdmin } from '@/lib/jugadoresActivosAdmin'
 import TasaBcv from '@/app/components/TasaBcv'
-import { evaluarSet, construirSets, generarMarcadores, calcularGanador } from '@/lib/resultados'
+import { evaluarSet, construirSets, pideTiebreak, generarMarcadores, calcularGanador } from '@/lib/resultados'
 import {
   hoyEnCaracas, instanteEnCaracas, sumarDiasEnCaracas, fechaISOEnCaracas,
   finDelDiaEnCaracas, formatearFechaCorta, minutosDesdeMedianocheEnCaracas,
@@ -3933,7 +3933,7 @@ export default function AdminPage() {
                           ) : (
                           <>
                           <p style={{ fontSize: '12px', color: '#6b6b6b', margin: '0 0 8px 0' }}>
-                            Juegos ganados por set. Si un set queda 6-6, se pide su tie-break. Si el partido queda 1-1 en sets, se pide el Super Tiebreak.
+                            Juegos ganados por set. Si un set termina 7-6 (o queda 6-6), se pide su tie-break. Si el partido queda 1-1 en sets, se pide el Super Tiebreak.
                           </p>
 
                           <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
@@ -3942,7 +3942,7 @@ export default function AdminPage() {
                             <input type="number" min="0" placeholder={reto.retado?.nombre} value={set1RetadoD} onChange={(e) => setSet1RetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
                           </div>
 
-                          {parseInt(set1RetadorD, 10) === 6 && parseInt(set1RetadoD, 10) === 6 && (
+                          {pideTiebreak(set1RetadorD, set1RetadoD) && (
                             <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
                               <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 1</span>
                               <input type="number" min="0" placeholder={reto.retador?.nombre} value={set1TbRetadorD} onChange={(e) => setSet1TbRetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
@@ -3956,7 +3956,7 @@ export default function AdminPage() {
                             <input type="number" min="0" placeholder={reto.retado?.nombre} value={set2RetadoD} onChange={(e) => setSet2RetadoD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />
                           </div>
 
-                          {parseInt(set2RetadorD, 10) === 6 && parseInt(set2RetadoD, 10) === 6 && (
+                          {pideTiebreak(set2RetadorD, set2RetadoD) && (
                             <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px', maxWidth: '420px' }}>
                               <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 2</span>
                               <input type="number" min="0" placeholder={reto.retador?.nombre} value={set2TbRetadorD} onChange={(e) => setSet2TbRetadorD(e.target.value)} style={{ padding: '7px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '13px' }} />

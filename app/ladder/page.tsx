@@ -10,7 +10,7 @@ import type { TorneoPortada } from '@/app/components/BannerTorneo'
 import type { PatrocinantePublico } from '@/lib/patrocinantes'
 import { comprimirImagen } from '@/lib/comprimirImagen'
 import { buildRetoWhatsAppLink } from '@/lib/whatsapp'
-import { evaluarSet, construirSets, generarMarcadores, calcularGanador, type CampoSet } from '@/lib/resultados'
+import { evaluarSet, construirSets, pideTiebreak, generarMarcadores, calcularGanador, type CampoSet } from '@/lib/resultados'
 import {
   hoyEnCaracas, fechaISOEnCaracas, instanteEnCaracas, finDelDiaEnCaracas, diaDeLaSemanaEnCaracas,
   sumarDiasEnCaracas, formatearHora, formatearFechaCorta, formatearFechaHora, yaPaso,
@@ -2395,7 +2395,7 @@ export default function LadderPage() {
                           {modoNoPresentado === null && (
                             <>
                               <p style={{ fontSize: '12px', color: '#5c5c5c', margin: '0 0 8px 0' }}>
-                                Juegos ganados por set (2 sets). Si un set queda 6-6, se pide el tie-break de ESE set. Si el partido queda 1 set a 1, se pide el Super Tiebreak para desempatar.
+                                Juegos ganados por set (2 sets). Si un set termina 7-6 (o queda 6-6), se pide el tie-break de ESE set. Si el partido queda 1 set a 1, se pide el Super Tiebreak para desempatar.
                               </p>
 
                               <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
@@ -2404,7 +2404,7 @@ export default function LadderPage() {
                                 <input type="number" min="0" placeholder={r.retado?.nombre} value={set1Retado} onChange={(e) => setSet1Retado(e.target.value)} style={inputPequeno} />
                               </div>
 
-                              {parseInt(set1Retador, 10) === 6 && parseInt(set1Retado, 10) === 6 && (
+                              {pideTiebreak(set1Retador, set1Retado) && (
                                 <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                                   <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 1</span>
                                   <input type="number" min="0" placeholder={r.retador?.nombre} value={set1TbRetador} onChange={(e) => setSet1TbRetador(e.target.value)} style={inputPequeno} />
@@ -2418,7 +2418,7 @@ export default function LadderPage() {
                                 <input type="number" min="0" placeholder={r.retado?.nombre} value={set2Retado} onChange={(e) => setSet2Retado(e.target.value)} style={inputPequeno} />
                               </div>
 
-                              {parseInt(set2Retador, 10) === 6 && parseInt(set2Retado, 10) === 6 && (
+                              {pideTiebreak(set2Retador, set2Retado) && (
                                 <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
                                   <span style={{ fontSize: '12px', color: '#e67e22', fontWeight: 'bold' }}>TB Set 2</span>
                                   <input type="number" min="0" placeholder={r.retador?.nombre} value={set2TbRetador} onChange={(e) => setSet2TbRetador(e.target.value)} style={inputPequeno} />
