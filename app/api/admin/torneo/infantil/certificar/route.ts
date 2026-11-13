@@ -4,14 +4,14 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { ahora } from '@/lib/tiempo'
 import { avisarInscripcionConfirmada, recalcularInscripcion } from '@/lib/torneoServidor'
 import { categoriasInfantiles } from '@/lib/torneoInfantilServidor'
-import { edadAdmitida, edadAlCorte, generoAdmitido } from '@/lib/torneoInfantil'
+import { generoAdmitido } from '@/lib/torneoInfantil'
 import { categoriaAntesDelSorteo, mensajeErrorBaseInscripcion } from '@/lib/torneoInscripcion'
 import type { Torneo } from '@/lib/torneo'
 
 // Certifica (o quita la certificación de) la categoría de un menor, después
 // de revisar su fecha de nacimiento — el equivalente a categoria_torneo de
 // los adultos. Con categoriaId distinto, además lo pasa a esa otra
-// categoría infantil (que tiene que corresponderle por edad y género).
+// categoría infantil (de su género; la edad solo recomienda).
 // Solo antes del sorteo. Después recalcula la inscripción.
 export async function POST(request: Request) {
   try {
@@ -46,9 +46,9 @@ export async function POST(request: Request) {
       const destino = (await categoriasInfantiles(db, torneo.id)).find((c) => c.id === categoriaId)
       if (!destino) return NextResponse.json({ error: 'Esa categoría infantil no es de este torneo' }, { status: 400 })
       if (!categoriaAntesDelSorteo(torneo.estado, destino)) return NextResponse.json({ error: `${destino.nombre} ya fue sorteada` }, { status: 400 })
-      const edad = edadAlCorte(menor.fecha_nacimiento, torneo)
-      if (!edadAdmitida(destino, edad) || !generoAdmitido(destino.genero, menor.genero)) {
-        return NextResponse.json({ error: `${destino.nombre} no le corresponde a ${menor.nombre} (${edad} años al corte)` }, { status: 400 })
+      // La edad solo recomienda; el género sí se respeta.
+      if (!generoAdmitido(destino.genero, menor.genero)) {
+        return NextResponse.json({ error: destino.genero === 'damas' ? `${destino.nombre} es solo para niñas` : `${destino.nombre} es solo para niños` }, { status: 400 })
       }
       cambios.categoria_id = destino.id
     }

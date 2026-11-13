@@ -61,6 +61,13 @@ export function edadAdmitida(c: Pick<CategoriaInfantil, 'edad_min' | 'edad_max'>
   return c.edad_min !== null && c.edad_max !== null && edad >= c.edad_min && edad <= c.edad_max
 }
 
+// Categorías infantiles que puede elegir: todas las de su género. La edad
+// solo recomienda (categoriaSugerida); elegir otra se permite y el admin la
+// revisa al certificar.
+export function categoriasElegibles<C extends Pick<CategoriaInfantil, 'genero'>>(genero: string, categorias: C[]): C[] {
+  return categorias.filter((c) => generoAdmitido(c.genero, genero))
+}
+
 // Categorías infantiles que le corresponden por edad y género, en el orden recibido.
 export function categoriasParaMenor<C extends CategoriaInfantil>(edad: number, genero: string, categorias: C[]): C[] {
   return categorias.filter((c) => edadAdmitida(c, edad) && generoAdmitido(c.genero, genero))
@@ -166,10 +173,7 @@ export function validarInscripcionMenor(d: DatosInscripcionMenor): { ok: false; 
   if (!d.porAdmin && !categoriaAbierta(d.estadoTorneo, categoria)) return { ok: false, error: ERROR_CATEGORIA_CERRADA }
   if (!d.autorizacionParticipacion) return { ok: false, error: 'La autorización de participación del representante es obligatoria' }
 
-  const edad = edadEnFecha(menor.fecha_nacimiento, d.fechaCorte)
-  if (!edadAdmitida(categoria, edad)) {
-    return { ok: false, error: `${menor.nombre} tendrá ${edad} años al ${d.fechaCorte.split('-').reverse().join('/')} y ${categoria.nombre} es de ${categoria.edad_min} a ${categoria.edad_max} años` }
-  }
+  // La edad no bloquea: la categoría por edad es solo la recomendada.
   if (!generoAdmitido(categoria.genero, menor.genero)) {
     return { ok: false, error: categoria.genero === 'damas' ? `${categoria.nombre} es solo para niñas` : `${categoria.nombre} es solo para niños` }
   }

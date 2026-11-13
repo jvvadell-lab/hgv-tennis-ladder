@@ -3,6 +3,7 @@ import { edadEnFecha, formatearHora, instanteEnCaracas } from './tiempo'
 import {
   HORARIO_ESCUELA,
   categoriaSugerida,
+  categoriasElegibles,
   categoriasParaMenor,
   edadAlCorte,
   estadoInscripcionMenorCalculado,
@@ -77,7 +78,13 @@ describe('edad → categoría', () => {
     expect(ids(categoriasParaMenor(11, 'caballeros', [naranja, verdeNinos, verdeNinas]))).toEqual(['ver-m'])
   })
 
-  it('empate de distancia → la de menor edad mínima', () => {
+  it('elegibles: todas las de su género, sin importar la edad', () => {
+    const verdeNinos = { ...verde, id: 'ver-m', genero: 'caballeros' as const }
+    const verdeNinas = { ...verde, id: 'ver-f', genero: 'damas' as const }
+    expect(ids(categoriasElegibles('damas', [naranja, verdeNinos, verdeNinas]))).toEqual(['nar', 'ver-f'])
+  })
+
+    it('empate de distancia → la de menor edad mínima', () => {
     const a = { id: 'a', nombre: 'A', genero: 'abierto' as const, edad_min: 8, edad_max: 12 }
     const b = { id: 'b', nombre: 'B', genero: 'abierto' as const, edad_min: 9, edad_max: 11 }
     expect(categoriaSugerida(10, 'caballeros', [b, a])?.id).toBe('a')
@@ -119,8 +126,9 @@ describe('validarInscripcionMenor', () => {
     expect(error({ categoria: cerrada, estadoTorneo: 'borrador', porAdmin: true })).toBeNull()
   })
   it('autorización de participación obligatoria', () => expect(error({ autorizacionParticipacion: false })).toMatch(/autorización/))
-  it('edad fuera de rango', () => {
-    expect(error({ menor: { ...datos().menor, fecha_nacimiento: '2014-06-01' } })).toMatch(/12 años.*9 a 11/)
+  it('la edad solo recomienda: puede elegir una categoría fuera de su rango', () => {
+    expect(error({ menor: { ...datos().menor, fecha_nacimiento: '2014-06-01' } })).toBeNull()
+    expect(error({ menor: { ...datos().menor, fecha_nacimiento: '2020-06-01' } })).toBeNull()
   })
   it('categoría de adultos', () => expect(error({ categoria: { ...verde, cupo: 16, es_infantil: false, inscripciones_abiertas: true } })).toMatch(/no es una categoría infantil/))
   it('género', () => {

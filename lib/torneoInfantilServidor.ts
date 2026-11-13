@@ -37,7 +37,7 @@ type MenorParaInscribir = MenorConRepresentante & { genero: string; fecha_nacimi
 // Valida e inscribe a un menor en una categoría infantil. Antes de insertar
 // guarda las autorizaciones de esta inscripción (la de participación es
 // obligatoria y se vuelve a pedir en cada inscripción; la de imagen queda
-// como se marcó ahora). El trigger torneo_inscripciones_validar repite edad,
+// como se marcó ahora). El trigger torneo_inscripciones_validar repite
 // género, duplicado, máximo 2 y cupo como red de seguridad.
 export async function inscribirMenor(
   db: SupabaseClient,

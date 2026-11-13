@@ -19,7 +19,8 @@ import {
   ETIQUETA_GENERO_MENOR,
   ETIQUETA_PARENTESCO,
   PARENTESCOS,
-  categoriasParaMenor,
+  categoriaSugerida,
+  categoriasElegibles,
   edadAlCorte,
   type Parentesco,
 } from '@/lib/torneoInfantil'
@@ -931,13 +932,19 @@ function FichaMenorAdmin({ ins, menor, categoria, categorias, editable, ocupado,
   onPago: (pagoId: string, validar: boolean) => void
 }) {
   const rep = menor.representante
-  const otras = categoriasParaMenor(menor.edad_al_corte, menor.genero, categorias.filter((c) => c.es_infantil))
+  const otras = categoriasElegibles(menor.genero, categorias.filter((c) => c.es_infantil))
     .filter((c) => c.id !== categoria.id)
+  const recomendada = categoriaSugerida(menor.edad_al_corte, menor.genero, categorias.filter((c) => c.es_infantil))
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', fontSize: '12px', background: 'white', padding: '10px', borderRadius: '6px' }}>
       <div>
         <div style={{ fontWeight: 'bold' }}>{ETIQUETA_GENERO_MENOR[menor.genero] || menor.genero} · {menor.edad_al_corte} años al corte</div>
         <div style={{ color: '#777' }}>Nació el {fechaCorta(menor.fecha_nacimiento)}{menor.numero_accion ? ` · acción ${menor.numero_accion}` : ''}</div>
+        {recomendada?.id !== categoria.id && (
+          <div style={{ color: '#b26a00', fontWeight: 'bold', marginTop: '4px' }}>
+            ⚠️ Eligió otra categoría: la recomendada por edad es {recomendada ? recomendada.nombre : 'ninguna'}
+          </div>
+        )}
         <div style={{ marginTop: '6px' }}>
           {menor.autorizacion_imagen
             ? <span style={{ color: '#1e6b34', fontWeight: 'bold' }}>📷 Autoriza uso de imagen</span>
@@ -1036,7 +1043,8 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
   const campo = (k: keyof typeof vacio) => ({ value: f[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value }) })
 
   const edad = /^\d{4}-\d{2}-\d{2}$/.test(f.fecha_nacimiento) ? edadAlCorte(f.fecha_nacimiento, torneo) : null
-  const posibles = edad !== null && f.genero ? categoriasParaMenor(edad, f.genero, categorias) : []
+  const posibles = f.genero ? categoriasElegibles(f.genero, categorias) : []
+  const recomendada = edad !== null && f.genero ? categoriaSugerida(edad, f.genero, categorias) : null
 
   if (!abierto) {
     return <button onClick={() => setAbierto(true)} style={{ ...boton('var(--color-court)', true), padding: '10px 16px', fontSize: '13px' }}>🧒 Inscribir a un menor</button>
@@ -1099,8 +1107,8 @@ function FormMenorAdmin({ torneo, categorias, jugadores, fechaCorte, ocupado, on
           Categoría {edad !== null && <span style={{ color: '#666' }}>({edad} años al {fechaCorta(fechaCorte)})</span>}
         </div>
         <select required value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)} style={{ ...campoAdmin, maxWidth: '360px' }}>
-          <option value="">{posibles.length ? 'Elige…' : 'Completa fecha de nacimiento y género'}</option>
-          {posibles.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          <option value="">{posibles.length ? 'Elige…' : 'Indica si es niño o niña'}</option>
+          {posibles.map((c) => <option key={c.id} value={c.id}>{c.nombre}{recomendada?.id === c.id ? ' (recomendada)' : ''}</option>)}
         </select>
       </div>
 
