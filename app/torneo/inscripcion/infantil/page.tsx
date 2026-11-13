@@ -10,7 +10,7 @@ import {
   ETIQUETA_PARENTESCO,
   PARENTESCOS,
   categoriaSugerida,
-  categoriasParaMenor,
+  categoriasElegibles,
   edadAlCorte,
 } from '@/lib/torneoInfantil'
 import { categoriaAbierta } from '@/lib/torneoInscripcion'
@@ -401,7 +401,7 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
   const menor = datos.representados.find((r) => r.id === menorId)
   const edad = menor ? edadAlCorte(menor.fecha_nacimiento, torneo) : null
   const vivas = (menor?.inscripciones || []).filter((i) => i.estado !== 'retirada')
-  const posibles = useMemo(() => (menor && edad !== null ? categoriasParaMenor(edad, menor.genero, categorias) : []), [menor, edad, categorias])
+  const posibles = useMemo(() => (menor ? categoriasElegibles(menor.genero, categorias) : []), [menor, categorias])
   const sugerida = menor && edad !== null ? categoriaSugerida(edad, menor.genero, categorias) : null
 
   // Al cambiar de niño, preselecciona la sugerida (si sigue disponible).
@@ -445,7 +445,7 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
           {menor && edad !== null && (
             <p style={{ fontSize: '13px', color: '#555', margin: '6px 0 0 0' }}>
               Tendrá <strong>{edad} años</strong> al {fecha(datos.fechaCorte!)}.
-              {sugerida ? <> Categoría sugerida: <strong>{sugerida.nombre}</strong>.</> : ' No hay categorías para su edad en este torneo.'}
+              {sugerida ? <> Categoría recomendada: <strong>{sugerida.nombre}</strong>. Si lo prefieres, puedes elegir otra.</> : ' No hay una categoría recomendada para su edad; puedes elegir la que prefieras.'}
             </p>
           )}
         </div>
@@ -464,7 +464,7 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
                     : cerrada
                       ? 'Inscripciones próximamente'
                       : !posibles.some((p) => p.id === c.id)
-                      ? `de ${c.edad_min} a ${c.edad_max} años${c.genero !== 'abierto' ? `, ${ETIQUETA_GENERO_CATEGORIA_INFANTIL[c.genero].toLowerCase()}` : ''}`
+                      ? `solo ${ETIQUETA_GENERO_CATEGORIA_INFANTIL[c.genero].toLowerCase()}`
                       : c.ocupados >= c.cupo ? 'sin cupo' : null
                   const sel = categoriaId === c.id
                   return (
@@ -475,7 +475,7 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
                       <input type="radio" name="categoria" disabled={!!motivo} checked={sel} onChange={() => setCategoriaId(c.id)} />
                       <span style={{ flex: 1 }}>
                         <strong style={{ fontSize: '14px' }}>{c.nombre}</strong>
-                        {sugerida?.id === c.id && <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--color-court)' }}>SUGERIDA</span>}
+                        {sugerida?.id === c.id && <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--color-court)' }}>RECOMENDADA</span>}
                         <span style={{ display: 'block', fontSize: '12px', color: '#666' }}>
                           {c.edad_min}–{c.edad_max} años · {ETIQUETA_GENERO_CATEGORIA_INFANTIL[c.genero] || c.genero}{!cerrada && ` · ${c.cupo - c.ocupados} de ${c.cupo} cupos`}
                           {motivo && ` · ${motivo}`}
@@ -486,6 +486,12 @@ function FormInscribir({ datos, onCambio }: { datos: Datos; onCambio: () => Prom
                 })}
               </div>
             </div>
+
+            {categoriaId && sugerida && categoriaId !== sugerida.id && (
+              <Aviso tipo="info">
+                Elegiste una categoría distinta a la recomendada para su edad ({sugerida.nombre}). Se permite; el admin la revisará al certificar la categoría.
+              </Aviso>
+            )}
 
             <div style={{ ...tarjeta, background: '#fffdf5' }}>
               <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '14px' }}>
