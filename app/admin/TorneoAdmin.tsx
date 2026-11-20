@@ -159,6 +159,9 @@ const boton = (color: string, relleno = false): React.CSSProperties => ({
 
 export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: boolean }) {
   const [datos, setDatos] = useState<Datos | null>(null)
+  const [preinscripciones, setPreinscripciones] = useState<{ id: string; categoria_id: string; nombre_menor: string; nombre_representante: string | null; telefono_representante: string | null; estado: string }[]>([])
+  const [errorPreinscripciones, setErrorPreinscripciones] = useState('')
+
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [mensaje, setMensaje] = useState('')
@@ -175,6 +178,15 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar el torneo')
       setDatos(data)
+      try {
+        const resp = await fetch('/api/admin/torneo/preinscripciones-provisionales', { cache: 'no-store' })
+        if (!resp.ok) throw new Error('No se pudieron cargar las preinscripciones')
+        const provisional = await resp.json()
+        setPreinscripciones(provisional.preinscripciones || [])
+        setErrorPreinscripciones('')
+      } catch {
+        setErrorPreinscripciones('No se pudieron cargar las preinscripciones provisionales')
+      }
       setVersion((v) => v + 1)
       setError('')
     } catch (err: any) {
@@ -343,6 +355,21 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
       )}
 
       {vista === 'inscripciones' && <>
+      {preinscripciones.length > 0 && (
+        <section style={{ border: '1px solid #e3c77b', background: '#fff9e8', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 8px' }}>Preinscripciones administrativas ({preinscripciones.filter(p => categoriaSel === 'todas' || p.categoria_id === categoriaSel).length})</h3>
+          <p style={{ fontSize: 13, margin: '0 0 12px' }}>Registros provisionales: faltan datos y formalización. No son inscripciones confirmadas ni participan automáticamente en sorteos o programación.</p>
+          {preinscripciones.filter(p => categoriaSel === 'todas' || p.categoria_id === categoriaSel).map(p => (
+            <div key={p.id} style={{ padding: '9px 0', borderTop: '1px solid #eadba9', fontSize: 13 }}>
+              <strong>{p.nombre_menor}</strong>
+              <span> · {categorias.find(c => c.id === p.categoria_id)?.nombre || 'Categoría pendiente'}</span>
+              <div style={{ color: '#68572b' }}>Representante: {p.nombre_representante || 'Pendiente'} · Teléfono: {p.telefono_representante || 'Pendiente'} · Pendiente de documentación</div>
+            </div>
+          ))}
+        </section>
+      )}
+      {errorPreinscripciones && <p role="alert" style={{ color: '#842029' }}>{errorPreinscripciones}</p>}
+
       {/* Fijos arriba al hacer scroll: el resultado de una acción hecha más
           abajo (p. ej. armar una dupla) se ve sin volver al inicio. */}
       {mensaje && <p role="status" style={{ position: 'sticky', top: '10px', zIndex: 20, background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)' }}>{mensaje}</p>}
