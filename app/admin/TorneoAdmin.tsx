@@ -157,6 +157,35 @@ const boton = (color: string, relleno = false): React.CSSProperties => ({
   border: `1px solid ${color}`, background: relleno ? color : 'white', color: relleno ? 'white' : color, whiteSpace: 'nowrap',
 })
 
+function mensajeWhatsAppPreinscripcion(nombre: string, categoria: string, representante: string) {
+  return `🎾 *COPA NAVIDAD HGV 2026* 🎄
+
+Estimado(a) ${representante}, reciba un cordial saludo.
+
+Le informamos que *${nombre}* se encuentra *PREINSCRITO(A)* en la categoría *${categoria}*.
+
+Para completar el registro y preparar sus credenciales de acceso, agradecemos enviarnos:
+• Nombre completo del niño(a)
+• Fecha de nacimiento
+• Nombre completo del representante
+• Correo electrónico del representante
+• Número de acción del club (si aplica)
+
+💳 *Inscripción: 15 € por participante*, pagaderos en bolívares a la tasa oficial BCV del euro del día del pago.
+
+📲 *Pago Móvil*
+Banco: BNC
+Titular: Yelitza Contreras
+Cédula: V-19.523.642
+Teléfono: 0412-7628281
+
+Una vez realizado el pago, por favor remita el número de referencia indicando el nombre del participante.
+
+La preinscripción es provisional y estará sujeta a completar los datos requeridos y a la validación del pago. Posteriormente le enviaremos las instrucciones de acceso.
+
+*Comisión de Tenis — Hermandad Gallega de Valencia*`
+}
+
 export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: boolean }) {
   const [datos, setDatos] = useState<Datos | null>(null)
   const [preinscripciones, setPreinscripciones] = useState<{ id: string; categoria_id: string; nombre_menor: string; nombre_representante: string | null; telefono_representante: string | null; estado: string }[]>([])
@@ -364,6 +393,17 @@ export default function TorneoAdmin({ esAdminCompleto }: { esAdminCompleto: bool
               <strong>{p.nombre_menor}</strong>
               <span> · {categorias.find(c => c.id === p.categoria_id)?.nombre || 'Categoría pendiente'}</span>
               <div style={{ color: '#68572b' }}>Representante: {p.nombre_representante || 'Pendiente'} · Teléfono: {p.telefono_representante || 'Pendiente'} · Pendiente de documentación</div>
+              {p.telefono_representante && /^0?4\d{9}$/.test(p.telefono_representante.replace(/\D/g, '')) ? (
+                <a
+                  href={`https://wa.me/58${p.telefono_representante.replace(/\D/g, '').replace(/^0/, '')}?text=${encodeURIComponent(mensajeWhatsAppPreinscripcion(p.nombre_menor, categorias.find(c => c.id === p.categoria_id)?.nombre || 'Infantil', p.nombre_representante || 'representante'))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'inline-block', marginTop: 7, padding: '7px 12px', borderRadius: 6, background: '#168a51', color: 'white', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}
+                >
+                  Abrir WhatsApp del representante ↗
+                </a>
+              ) : <span style={{ color: '#842029', display: 'block' }}>Revisar teléfono antes de contactar</span>}
+              <div style={{ fontSize: 11, color: '#68572b', marginTop: 4 }}>El mensaje se abre para revisión; no se envía automáticamente.</div>
             </div>
           ))}
         </section>
