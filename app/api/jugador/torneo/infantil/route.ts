@@ -46,6 +46,19 @@ export async function GET() {
     const ocupados: Record<string, number> = {}
     for (const i of inscripciones || []) ocupados[i.categoria_id] = (ocupados[i.categoria_id] || 0) + 1
 
+    // Incluir las reservas administrativas en la disponibilidad visible.
+    const { data: reservas, error: errReservas } = await db
+      .from('torneo_preinscripciones_admin')
+      .select('categoria_id')
+      .in('categoria_id', categoriaIds)
+      .eq('estado', 'pendiente_documentacion')
+      .is('inscripcion_id', null)
+      .ilike('observaciones', '%Cupo reservado administrativamente%')
+    if (errReservas) throw errReservas
+    for (const reserva of reservas || []) {
+      ocupados[reserva.categoria_id] = (ocupados[reserva.categoria_id] || 0) + 1
+    }
+
     const misMenorIds = new Set((menores || []).map((m) => m.id))
     const mias = (inscripciones || []).filter((i) => i.menor_id && misMenorIds.has(i.menor_id))
 
