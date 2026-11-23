@@ -61,6 +61,17 @@ export async function inscribirMenor(
     .neq('estado', 'retirada')
   if (errVivas) throw errVivas
 
+  // Las reservas administrativas pendientes también ocupan cupo.
+  // No se consideran inscripciones definitivas ni autorizaciones de los padres.
+  const { data: reservas, error: errReservas } = await db
+    .from('torneo_preinscripciones_admin')
+    .select('id')
+    .eq('categoria_id', categoria.id)
+    .eq('estado', 'pendiente_documentacion')
+    .is('inscripcion_id', null)
+    .ilike('observaciones', '%Cupo reservado administrativamente%')
+  if (errReservas) throw errReservas
+
   const validacion = validarInscripcionMenor({
     estadoTorneo: p.torneo.estado,
     soloSocios: p.torneo.solo_socios,
@@ -68,7 +79,7 @@ export async function inscribirMenor(
     categoria,
     menor: p.menor,
     autorizacionParticipacion: p.autorizacionParticipacion,
-    ocupados: (vivas || []).filter((i) => i.categoria_id === categoria.id).length,
+    ocupados: (vivas || []).filter((i) => i.categoria_id === categoria.id).length + (reservas || []).length,
     categoriasDelMenor: [...new Set((vivas || []).filter((i) => i.menor_id === p.menor.id).map((i) => i.categoria_id))],
     porAdmin: 'adminId' in p.inscritaPor,
   })
