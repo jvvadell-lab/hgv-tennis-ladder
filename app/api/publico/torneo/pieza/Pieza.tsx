@@ -123,14 +123,14 @@ export default function Pieza({ infantil, formato, encabezado, detalle, dias, co
         </div>
         <div style={{display:'flex',fontSize:42,marginTop:12}}>{detalle}{paginas>1 ? ' · '+pagina+'/'+paginas : ''}</div>
       </div>
-      <div style={{display:'flex',flexDirection:'column',flexGrow:1,padding:'0 30px',justifyContent:'center'}}>
+      <div style={{display:'flex',flexDirection:'column',flexGrow:1,padding:'12px 30px',justifyContent:'flex-start'}}>
         {vacio && <div style={{display:'flex',fontSize:36}}>Sin partidos programados</div>}
         {dias.map(d=><div key={d.fecha} style={{display:'flex',flexDirection:'column'}}>
           {conEncabezadoDia && <div style={{display:'flex',fontSize:30,fontWeight:700}}>{fechaEncabezado(d.fecha)}</div>}
-          {d.filas.map(f=><div key={f.id} style={{display:'flex',alignItems:'center',background:'#E5EAF0',borderRadius:22,marginBottom:10,minHeight:100}}>
+          {d.filas.map(f=><div key={f.id} style={{display:'flex',alignItems:'center',background:'#E5EAF0',borderRadius:22,marginBottom:10,minHeight:historia?125:100}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'center',textAlign:'center',width:240,alignSelf:'stretch',padding:10,background:f.categoria.includes('Naranja')?'#D95A00':f.categoria.includes('Verde')?'#238345':'#073575',color:'white',fontFamily:TITULOS,fontSize:30,fontWeight:800,borderRadius:22}}>{f.categoria.toUpperCase()}</div>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',width:155,fontWeight:700,fontSize:29}}>{f.hora}<div style={{display:'flex',background:'#FFDA00',borderRadius:18,padding:'2px 12px'}}>{f.cancha}</div></div>
-            <div style={{display:'flex',flex:1,alignItems:'center',justifyContent:'space-between',padding:10,fontFamily:TITULOS,fontSize:30,fontWeight:800}}>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',width:155,flexShrink:0,fontWeight:700,fontSize:25}}>{f.hora.replace(/^(\d{2}):(\d{2})$/, (_,h,m)=>`${Number(h)%12||12}:${m} ${Number(h)>=12?'PM':'AM'}`)}<div style={{display:'flex',background:'#FFDA00',borderRadius:18,padding:'2px 12px',whiteSpace:'nowrap'}}>{f.cancha.replace('Cancha ','HGV')}</div></div>
+            <div style={{display:'flex',flex:1,alignItems:'center',justifyContent:'space-between',padding:10,fontFamily:'Inter',fontSize:26,fontWeight:700}}>
               <div style={{display:'flex',width:200,textAlign:'center',justifyContent:'center'}}>{f.a.texto}</div><div style={{display:'flex',background:'#FFDA00',borderRadius:30,padding:8,fontSize:25}}>{f.marcador || 'VS'}</div><div style={{display:'flex',width:200,textAlign:'center',justifyContent:'center'}}>{f.b.texto}</div>
             </div>
           </div>)}
