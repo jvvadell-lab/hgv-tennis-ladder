@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 })
     }
 
-    const partidos = await cargarPartidosDifusion(supabaseServer())
+    const partidos = await cargarPartidosDifusion(supabaseServer(), q.get('segmento') ?? 'todos', q.get('categoria') ?? '')
     const filas = tipo === 'dia' ? partidosDelDia(partidos, fecha) : partidosDeLaSemana(partidos, fecha)
     const { lunes, viernes } = semanaDe(fecha)
     return NextResponse.json({
