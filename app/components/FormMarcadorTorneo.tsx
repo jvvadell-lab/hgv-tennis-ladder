@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { validarSetInfantil } from '@/lib/torneoResultados'
-import { construirSets, pideTiebreak, type CampoSet } from '@/lib/resultados'
+import { construirSets, pideTiebreak, type CampoSet, type SetJugado } from '@/lib/resultados'
 
 // Formulario del marcador de un partido de torneo (2 sets + Super Tiebreak
 // si quedan 1-1, tie-break en 6-6, retiro). Arma `sets` con construirSets
@@ -34,7 +34,7 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const r = limiteInfantil ? (() => {
+    const r: { error: string } | { sets: SetJugado[] } = limiteInfantil ? ((): { error: string } | { sets: SetJugado[] } => {
       const a = Number(set1.golesRetador), b = Number(set1.golesRetado)
       if (!set1.golesRetador.trim() || !set1.golesRetado.trim()) return { error: 'Introduce ambos games' }
       const tb = Math.max(a,b) === limiteInfantil+1 && Math.min(a,b) === limiteInfantil
