@@ -117,7 +117,10 @@ export default function Pieza({ infantil, formato, encabezado, detalle, dias, co
         <img src={logoCopa} width={140} height={140} style={{objectFit:'contain'}}/>
       </div>
       <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'22px 20px',fontFamily:TITULOS,fontWeight:800}}>
-        <div style={{display:'flex',background:'#073575',color:'#FFDA00',borderRadius:24,padding:'8px 36px',fontSize:64}}>{encabezado}</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:20}}>
+          <svg width="130" height="124" viewBox="0 0 130 124"><circle cx="70" cy="77" r="43" fill="#D9ED19" stroke="#A7BC10" strokeWidth="3"/><path d="M37 51 Q78 67 49 114 M101 48 Q75 80 111 97" fill="none" stroke="#FFFFFF" strokeWidth="5"/><path d="M24 53 Q25 12 68 8 Q91 4 109 46 L87 51 Q73 27 58 35 L47 58 Z" fill="#D71030"/><path d="M24 54 Q65 38 109 46 L113 61 Q68 52 29 69 Z" fill="#FFFFFF"/><circle cx="23" cy="66" r="13" fill="#FFFFFF"/></svg>
+          <div style={{display:'flex',background:'#073575',color:'#FFDA00',borderRadius:24,padding:'8px 36px',fontSize:encabezado.length>20?48:64}}>{encabezado}</div>
+        </div>
         <div style={{display:'flex',fontSize:42,marginTop:12}}>{detalle}{paginas>1 ? ' · '+pagina+'/'+paginas : ''}</div>
       </div>
       <div style={{display:'flex',flexDirection:'column',flexGrow:1,padding:'0 30px',justifyContent:'center'}}>
@@ -133,7 +136,8 @@ export default function Pieza({ infantil, formato, encabezado, detalle, dias, co
           </div>)}
         </div>)}
       </div>
-      <div style={{display:'flex',justifyContent:'center',textAlign:'center',background:'#073575',color:'white',padding:'24px 30px',fontSize:36,fontFamily:TITULOS,fontWeight:800,borderTop:'8px solid #FFDA00'}}>¡Acompáñanos y apoya el talento de nuestros niños!</div>
+      <div style={{display:'flex',justifyContent:'center',textAlign:'center',background:'#073575',color:'white',padding:'12px 20px',fontSize:32,fontFamily:TITULOS,fontWeight:800,borderTop:'8px solid #FFDA00'}}>¡Acompáñanos y apoya el talento de nuestros niños!</div>
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',background:'white',padding:'4px 12px 8px'}}><div style={{display:'flex',fontFamily:TITULOS,fontWeight:700,fontSize:20,letterSpacing:4}}>PATROCINAN</div><div style={{display:'flex',flexWrap:'wrap',justifyContent:'center'}}>{patrocinantes.map(p=><Logo key={p.nombre} p={p} ancho={100} alto={48}/>)}</div></div>
     </div>
   )
   return (
