@@ -39,7 +39,7 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
       if (!set1.golesRetador.trim() || !set1.golesRetado.trim()) return { error: 'Introduce ambos games' }
       const tb = Math.max(a,b) === limiteInfantil+1 && Math.min(a,b) === limiteInfantil
       const sets = [{ numero: 1, games_j1: a, games_j2: b, completo: tb || (Math.max(a,b) === limiteInfantil && Math.min(a,b) < limiteInfantil), ...(tb ? { tiebreak_retador: Number(set1.tbRetador), tiebreak_retado: Number(set1.tbRetado) } : {}) }]
-      if (tb && (!set1.tbRetador.trim() || !set1.tbRetado.trim())) return { error: 'Introduce ambos puntos del tie-break' }
+      if (tb && (!set1.tbRetador?.trim() || !set1.tbRetado?.trim())) return { error: 'Introduce ambos puntos del tie-break' }
       const error = validarSetInfantil(sets, limiteInfantil, retiro)
       return error ? { error } : { sets }
     })() : construirSets({ set1, set2, st, retiro })
