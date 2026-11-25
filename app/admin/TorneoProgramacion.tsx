@@ -81,6 +81,7 @@ export default function TorneoProgramacion() {
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [propuesta, setPropuesta] = useState<Propuesta | null>(null)
   const [categoria, setCategoria] = useState('todas')
+  const [segmento, setSegmento] = useState<'todos' | 'infantil' | 'adultos'>('todos')
   const [eleccion, setEleccion] = useState<Record<string, string>>({})
   const [intercambio, setIntercambio] = useState<string | null>(null)   // primer partido elegido
 
@@ -132,8 +133,9 @@ export default function TorneoProgramacion() {
     return <div style={tarjeta}><p style={{ margin: 0 }}>La programación se arma después de publicar el sorteo.</p></div>
   }
 
-  const categorias = [...new Map(partidos.map((p) => [p.categoriaId, { id: p.categoriaId, nombre: p.categoriaNombre, orden: p.categoriaOrden }])).values()].sort((a, b) => a.orden - b.orden)
-  const visibles = partidos
+  const segmentoPartidos = partidos.filter(p => segmento === 'todos' || p.esInfantil === (segmento === 'infantil'))
+  const categorias = [...new Map(segmentoPartidos.map((p) => [p.categoriaId, { id: p.categoriaId, nombre: p.categoriaNombre, orden: p.categoriaOrden }])).values()].sort((a, b) => a.orden - b.orden)
+  const visibles = segmentoPartidos
     .filter((p) => categoria === 'todas' || p.categoriaId === categoria)
     .sort((a, b) => a.categoriaOrden - b.categoriaOrden || RANGO_FASE[a.fase] - RANGO_FASE[b.fase] || (a.grupoLetra ?? '').localeCompare(b.grupoLetra ?? '') || a.orden - b.orden)
   const conHorario = partidos.filter((p) => p.inicio).length
@@ -143,7 +145,7 @@ export default function TorneoProgramacion() {
   const turnoDe = (p: Partido) => `${formatearFechaHora(p.inicio!)} · ${p.cancha}`
 
   const intercambiar = (a: Partido, b: Partido) => {
-    const aviso = torneo.programacion_publicada_at ? '\n\nSe enviará el correo de Reprogramación a los jugadores de los dos partidos.' : ''
+    const aviso = torneo.programacion_publicada_at && (!a.esInfantil || !b.esInfantil) ? '\n\nSe enviará el correo de Reprogramación a los jugadores de los dos partidos.' : ''
     if (!confirm(`¿Intercambiar estos partidos?\n\n${a.categoriaNombre} · ${etiqueta(a)} → ${turnoDe(b)}\n${b.categoriaNombre} · ${etiqueta(b)} → ${turnoDe(a)}${aviso}`)) return
     ejecutar('intercambio', async () => {
       if (await guardar(asignacionesIntercambio(a, b), 'Partidos intercambiados')) setIntercambio(null)
@@ -157,7 +159,7 @@ export default function TorneoProgramacion() {
         <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#555' }}>
           {conHorario}/{partidos.length} partidos con horario{conConflicto ? <> · <strong style={{ color: '#c0392b' }}>{conConflicto} con conflictos</strong></> : null}
           {torneo.programacion_publicada_at
-            ? <> · <strong>Publicada</strong> el {formatearFechaHora(torneo.programacion_publicada_at)}{torneo.programacion_publicada_por_nombre ? ` por ${torneo.programacion_publicada_por_nombre}` : ''}. Cada cambio de horario avisa a los afectados.</>
+            ? <> · <strong>Publicada</strong> el {formatearFechaHora(torneo.programacion_publicada_at)}{torneo.programacion_publicada_por_nombre ? ` por ${torneo.programacion_publicada_por_nombre}` : ''}. Los cambios de adultos avisan a los afectados; los avisos infantiles están pausados.</>
             : ' · Sin publicar: los jugadores todavía no reciben avisos.'}
         </p>
         <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#666' }}>
@@ -168,7 +170,8 @@ export default function TorneoProgramacion() {
           <button disabled={ocupado === 'asistente'} onClick={() => ejecutar('asistente', async () => {
             const { res, data } = await post('asistente')
             if (!res.ok) throw new Error(data.error || 'No se pudo proponer')
-            setPropuesta(data)
+            const ids = new Set(segmentoPartidos.filter(p => !p.inicio).map(p => p.id))
+            setPropuesta({ asignaciones: data.asignaciones.filter((a: Propuesta['asignaciones'][number]) => ids.has(a.partidoId)), sinHorario: data.sinHorario.filter((s: Propuesta['sinHorario'][number]) => ids.has(s.partidoId)) })
           })} style={btn('var(--color-court)', true)}>
             {ocupado === 'asistente' ? 'Pensando…' : '🤖 Asistente: proponer horarios'}
           </button>
@@ -189,6 +192,9 @@ export default function TorneoProgramacion() {
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+        {(['todos', 'infantil', 'adultos'] as const).map(s => <button key={s} onClick={() => { setSegmento(s); setCategoria('todas'); setPropuesta(null); setIntercambio(null) }} style={btn('var(--color-ink)', segmento === s)}>{s === 'todos' ? 'Todos' : s === 'infantil' ? 'Copa infantil' : 'Adultos'}</button>)}
+      </div>
       {mensaje && <p style={{ background: '#dff5e3', color: '#1e6b34', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{mensaje}</p>}
       {error && (
         <div style={{ background: '#f8d7da', color: '#842029', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', marginBottom: '12px' }}>
@@ -302,7 +308,7 @@ export default function TorneoProgramacion() {
                     {p.inicio && !intercambio && (
                       <button onClick={() => { setMensaje(''); setError(''); setDetalle(null); setIntercambio(p.id) }} style={btn('var(--color-court)')}>⇄ Intercambiar</button>
                     )}
-                    {p.inicio && elegido1 && elegido1.id !== p.id && (
+                    {p.inicio && elegido1 && elegido1.id !== p.id && elegido1.esInfantil === p.esInfantil && (
                       <button disabled={ocupado === 'intercambio'} onClick={() => intercambiar(elegido1, p)} style={btn('var(--color-court)', true)}>
                         {ocupado === 'intercambio' ? 'Intercambiando…' : '⇄ Intercambiar con este'}
                       </button>
