@@ -140,7 +140,16 @@ export default function TorneoProgramacion() {
     .sort((a, b) => a.categoriaOrden - b.categoriaOrden || RANGO_FASE[a.fase] - RANGO_FASE[b.fase] || (a.grupoLetra ?? '').localeCompare(b.grupoLetra ?? '') || a.orden - b.orden)
   const conHorario = partidos.filter((p) => p.inicio).length
   const conConflicto = partidos.filter((p) => p.errores.length || p.avisos.length).length
-  const opcionesDe = (p: Partido) => (p.esInfantil ? turnos.infantiles[p.duracionMin] || [] : turnos.adultos)
+  const opcionesDe = (p: Partido) => {
+    const base = p.esInfantil ? turnos.infantiles[p.duracionMin] || [] : turnos.adultos
+    const opciones = base.filter(t => {
+      const inicio = Date.parse(t.inicio)
+      const fin = inicio + p.duracionMin * 60000
+      return !partidos.some(q => q.id !== p.id && q.cancha === t.cancha && q.inicio && inicio < Date.parse(q.inicio) + q.duracionMin * 60000 && Date.parse(q.inicio) < fin)
+    })
+    if (p.cancha && p.inicio && !opciones.some(t => t.cancha === p.cancha && Date.parse(t.inicio) === Date.parse(p.inicio!))) opciones.push({ cancha: p.cancha, inicio: p.inicio })
+    return opciones
+  }
   const elegido1 = intercambio ? porId.get(intercambio) ?? null : null
   const turnoDe = (p: Partido) => `${formatearFechaHora(p.inicio!)} · ${p.cancha}`
 
@@ -276,7 +285,7 @@ export default function TorneoProgramacion() {
       <div style={tarjeta}>
         {visibles.map((p, idx) => {
           const opciones = opcionesDe(p)
-          const elegido = eleccion[p.id] ?? ''
+          const elegido = opciones.some(t => `${t.cancha}|${t.inicio}` === eleccion[p.id]) ? eleccion[p.id] : ''
           return (
             <div key={p.id} style={{
               borderTop: idx ? '1px solid #e5e5e5' : 'none', padding: '10px 0',
@@ -297,7 +306,7 @@ export default function TorneoProgramacion() {
                 {!p.cerrado && (
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <select value={elegido} onChange={(e) => setEleccion({ ...eleccion, [p.id]: e.target.value })} style={{ padding: '5px', fontSize: '12px', borderRadius: '6px', border: '1px solid #ccc', maxWidth: '260px' }}>
-                      <option value="">{opciones.length ? 'Elegir turno…' : p.esInfantil ? 'Sin franjas de la academia' : 'Sin turnos'}</option>
+                      <option value="">{opciones.length ? 'Elegir turno…' : 'Sin turnos disponibles'}</option>
                       {opciones.map((t) => <option key={`${t.cancha}|${t.inicio}`} value={`${t.cancha}|${t.inicio}`}>{turnoTexto(t)}</option>)}
                     </select>
                     <button disabled={!elegido || ocupado === p.id} onClick={() => ejecutar(p.id, async () => {
