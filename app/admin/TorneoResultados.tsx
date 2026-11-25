@@ -18,6 +18,7 @@ type Partido = {
   id: string
   categoria_id: string
   categoria_nombre: string
+  limite_infantil?: number
   formato_llave: FormatoLlave
   fase: Fase
   grupo_letra: string | null
@@ -231,6 +232,7 @@ export default function TorneoResultados() {
               )}
               {cargando === p.id && conRivales && (
                 <FormMarcadorTorneo
+                  limiteInfantil={p.limite_infantil}
                   nombreA={p.nombre_a ?? 'A'}
                   nombreB={p.nombre_b ?? 'B'}
                   inscripcionA={p.equipo_a!}
