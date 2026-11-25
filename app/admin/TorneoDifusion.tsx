@@ -16,6 +16,8 @@ const boton = (activo: boolean): React.CSSProperties => ({
 const accion: React.CSSProperties = { padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-court)', background: 'white', color: 'var(--color-ink)', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }
 
 export default function TorneoDifusion({ onIrAResultados }: { onIrAResultados: () => void }) {
+  const [segmento, setSegmento] = useState('todos')
+  const [categoria, setCategoria] = useState('')
   const [fecha, setFecha] = useState(hoyEnCaracas)
   const [tipo, setTipo] = useState<TipoPieza>(() => tipoPorDefecto(hoyEnCaracas()))
   const [formato, setFormato] = useState<FormatoPieza>('historia')
@@ -23,7 +25,7 @@ export default function TorneoDifusion({ onIrAResultados }: { onIrAResultados: (
   const [error, setError] = useState('')
   const [copiado, setCopiado] = useState(false)
 
-  const consulta = `tipo=${tipo}&fecha=${fecha}&formato=${formato}`
+  const consulta = `tipo=${tipo}&fecha=${fecha}&formato=${formato}&segmento=${segmento}&categoria=${encodeURIComponent(categoria)}`
 
   useEffect(() => {
     if (!fecha) return
@@ -87,6 +89,10 @@ export default function TorneoDifusion({ onIrAResultados }: { onIrAResultados: (
   return (
     <div>
       <div style={tarjeta}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: 12 }}>
+          {['todos','adultos','infantil'].map(s => <button key={s} style={boton(segmento === s)} onClick={() => { setSegmento(s); setCategoria('') }}>{s === 'infantil' ? 'Infantil' : s === 'adultos' ? 'Adultos' : 'Todos'}</button>)}
+          {segmento === 'infantil' && <select value={categoria} onChange={e => setCategoria(e.target.value)}><option value="">Todas las infantiles</option>{['Pelota Naranja Niñas','Pelota Naranja Niños','Pelota Verde Niñas','Pelota Verde Intermedio','Pelota Verde Niños','12 años Niñas','12 años Niños'].map(c => <option key={c}>{c}</option>)}</select>}
+        </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
           {([['semana', 'Semana'], ['dia', 'Día']] as const).map(([id, texto]) => <button key={id} onClick={() => setTipo(id)} style={boton(tipo === id)}>{texto}</button>)}
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={{ padding: '6px', fontSize: '13px', borderRadius: '6px', border: '1px solid #ccc' }} />
