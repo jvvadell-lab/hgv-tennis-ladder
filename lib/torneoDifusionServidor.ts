@@ -8,13 +8,13 @@ import { nombresInscripciones } from '@/lib/torneoSorteoServidor'
 import { torneoVigente } from '@/lib/torneoServidor'
 import type { PartidoDifusion } from '@/lib/torneoDifusion'
 
-export async function cargarPartidosDifusion(db: SupabaseClient): Promise<PartidoDifusion[]> {
+export async function cargarPartidosDifusion(db: SupabaseClient, segmento = 'todos', categoria = ''): Promise<PartidoDifusion[]> {
   const torneo = await torneoVigente(db)
   if (!torneo?.programacion_publicada_at) return []
 
-  const { data: categorias, error: errC } = await db.from('torneo_categorias').select('id, nombre, formato_llave').eq('torneo_id', torneo.id)
+  const { data: categorias, error: errC } = await db.from('torneo_categorias').select('id, nombre, formato_llave, es_infantil').eq('torneo_id', torneo.id)
   if (errC) throw errC
-  const categoriaDe = new Map((categorias || []).map((c) => [c.id, c]))
+  const categoriaDe = new Map((categorias || []).filter(c => (segmento === 'todos' || (segmento === 'infantil' ? c.es_infantil : !c.es_infantil)) && (!categoria || c.nombre === categoria)).map((c) => [c.id, c]))
   const ids = [...categoriaDe.keys()]
   if (!ids.length) return []
 
