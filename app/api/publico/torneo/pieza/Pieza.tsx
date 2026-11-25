@@ -15,6 +15,7 @@ const TITULOS = 'Barlow Condensed'
 export type LogoPieza = { nombre: string; src: string | null; fondo: 'claro' | 'oscuro' }
 
 type Props = {
+  infantil?: boolean
   formato: FormatoPieza
   encabezado: string          // HOY EN LA COPA | PROGRAMACIÓN DE LA SEMANA
   detalle: string             // VIE 6 NOV | 9 AL 13 NOV
@@ -100,7 +101,7 @@ function Logo({ p, ancho, alto }: { p: LogoPieza; ancho: number; alto: number })
   )
 }
 
-export default function Pieza({ formato, encabezado, detalle, dias, conEncabezadoDia, pagina, paginas, logoHgv, logoCopa, logoComision, patrocinantes }: Props) {
+export default function Pieza({ infantil, formato, encabezado, detalle, dias, conEncabezadoDia, pagina, paginas, logoHgv, logoCopa, logoComision, patrocinantes }: Props) {
   const historia = formato === 'historia'
   const logo = historia ? 104 : 84
   const copa = historia ? 140 : 96
@@ -108,6 +109,33 @@ export default function Pieza({ formato, encabezado, detalle, dias, conEncabezad
   const filas = dias.flatMap((d) => d.filas)
   const grande = historia && !conEncabezadoDia && !vacio && filas.length <= MAX_FILAS_GRANDES
   const fuente = grande ? fuenteNombresGrande(filas) : 32
+  if (infantil) return (
+    <div style={{display:'flex',flexDirection:'column',width:'100%',height:'100%',background:'#F5F7FA',fontFamily:'Inter',color:'#082453'}}>
+      <div style={{display:'flex',background:'#073575',padding:'24px 32px',alignItems:'center',justifyContent:'space-between',borderBottom:'10px solid #FFDA00'}}>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',color:'white'}}><img src={logoComision} width={130} height={100} style={{objectFit:'contain'}}/><div style={{display:'flex',fontSize:20}}>COMISIÓN DE TENIS</div></div>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',color:'white',fontFamily:TITULOS,fontWeight:800,fontSize:60}}><div style={{display:'flex'}}>COPA NAVIDAD <span style={{color:'#FFDA00',marginLeft:12}}>2026</span></div><div style={{display:'flex',background:'#D71030',padding:'6px 20px',fontSize:30,borderRadius:10}}>NIÑOS Y JUVENILES</div></div>
+        <img src={logoCopa} width={140} height={140} style={{objectFit:'contain'}}/>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'22px 20px',fontFamily:TITULOS,fontWeight:800}}>
+        <div style={{display:'flex',background:'#073575',color:'#FFDA00',borderRadius:24,padding:'8px 36px',fontSize:64}}>{encabezado}</div>
+        <div style={{display:'flex',fontSize:42,marginTop:12}}>{detalle}{paginas>1 ? ' · '+pagina+'/'+paginas : ''}</div>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',flexGrow:1,padding:'0 30px',justifyContent:'center'}}>
+        {vacio && <div style={{display:'flex',fontSize:36}}>Sin partidos programados</div>}
+        {dias.map(d=><div key={d.fecha} style={{display:'flex',flexDirection:'column'}}>
+          {conEncabezadoDia && <div style={{display:'flex',fontSize:30,fontWeight:700}}>{fechaEncabezado(d.fecha)}</div>}
+          {d.filas.map(f=><div key={f.id} style={{display:'flex',alignItems:'center',background:'#E5EAF0',borderRadius:22,marginBottom:10,minHeight:100}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',textAlign:'center',width:240,alignSelf:'stretch',padding:10,background:f.categoria.includes('Naranja')?'#D95A00':f.categoria.includes('Verde')?'#238345':'#073575',color:'white',fontFamily:TITULOS,fontSize:30,fontWeight:800,borderRadius:22}}>{f.categoria.toUpperCase()}</div>
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',width:155,fontWeight:700,fontSize:29}}>{f.hora}<div style={{display:'flex',background:'#FFDA00',borderRadius:18,padding:'2px 12px'}}>{f.cancha}</div></div>
+            <div style={{display:'flex',flex:1,alignItems:'center',justifyContent:'space-between',padding:10,fontFamily:TITULOS,fontSize:30,fontWeight:800}}>
+              <div style={{display:'flex',width:200,textAlign:'center',justifyContent:'center'}}>{f.a.texto}</div><div style={{display:'flex',background:'#FFDA00',borderRadius:30,padding:8,fontSize:25}}>{f.marcador || 'VS'}</div><div style={{display:'flex',width:200,textAlign:'center',justifyContent:'center'}}>{f.b.texto}</div>
+            </div>
+          </div>)}
+        </div>)}
+      </div>
+      <div style={{display:'flex',justifyContent:'center',textAlign:'center',background:'#073575',color:'white',padding:'24px 30px',fontSize:36,fontFamily:TITULOS,fontWeight:800,borderTop:'8px solid #FFDA00'}}>¡Acompáñanos y apoya el talento de nuestros niños!</div>
+    </div>
+  )
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: AZUL_MARINO, fontFamily: 'Inter', color: BLANCO }}>
       <div style={{ display: 'flex', height: 12, background: DORADO, flexShrink: 0 }} />
