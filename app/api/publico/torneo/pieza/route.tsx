@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     }
 
     const [partidos, patrocinantes, fonts, logoHgv, logoCopa, logoComision] = await Promise.all([
-      cargarPartidosDifusion(supabaseServer()),
+      cargarPartidosDifusion(supabaseServer(), q.get('segmento') ?? 'todos', q.get('categoria') ?? ''),
       cargarPatrocinantes(),
       fuentes(),
       leer('public', 'logo-hgv-escudo.png'),
@@ -67,6 +67,7 @@ export async function GET(request: Request) {
 
     return new ImageResponse(
       <Pieza
+        infantil={q.get('segmento') === 'infantil'}
         formato={formato}
         encabezado={encabezado}
         detalle={detalle}
