@@ -43,11 +43,31 @@ export type DatosReporte = {
   retiradaInscripcionId: string | null
 }
 
+export function validarSetInfantil(sets: unknown, limite: number, retiro: boolean): string | null {
+  if (!Array.isArray(sets) || sets.length !== 1) return 'Carga un único set'
+  const s = sets[0] as SetJugado
+  if (!s || s.numero !== 1 || s.es_super_tiebreak) return 'Set inválido'
+  const a = s.games_j1, b = s.games_j2
+  if (![a,b].every(n => Number.isInteger(n) && n >= 0 && n <= limite+1)) return 'Games inválidos'
+  const x = s.tiebreak_retador, y = s.tiebreak_retado
+  const tb = Math.max(a,b) === limite+1 && Math.min(a,b) === limite
+  const directo = Math.max(a,b) === limite && Math.min(a,b) < limite
+  if (tb) {
+    if (typeof x !== 'number' || typeof y !== 'number' || ![x,y].every(n=>Number.isInteger(n)&&n>=0) || Math.max(x,y)!==Math.max(7,Math.min(x,y)+2) || (a>b)!==(x>y) || !s.completo) return 'Tie-break a 7 con diferencia de 2 y ganador correcto'
+    return null
+  }
+  if (x != null || y != null) return 'Tie-break solo al empatar el set'
+  if (directo && s.completo) return null
+  if (retiro && !s.completo && a<=limite && b<=limite && !directo) return null
+  return 'Marcador incompleto o inválido'
+}
+
 // Valida el reporte contra el partido y devuelve el ganador. Retiro: gana
 // la otra inscripción, con lo jugado (SPEC §7, aprobado 20-oct-2026).
 export function evaluarReporte(
   partido: Pick<PartidoAvance, 'equipo_a' | 'equipo_b' | 'estado' | 'validado'>,
   d: DatosReporte,
+  limite?: number,
 ): { ok: false; error: string } | { ok: true; ganador: string } {
   const { equipo_a: a, equipo_b: b } = partido
   if (!a || !b) return { ok: false, error: 'Todavía no se conocen los dos rivales de este partido' }
@@ -55,7 +75,7 @@ export function evaluarReporte(
   if (partido.estado === 'wo' || partido.estado === 'doble_wo') return { ok: false, error: 'Este partido se cerró por WO' }
   if (d.tipoResultado !== 'normal' && d.tipoResultado !== 'retiro') return { ok: false, error: 'Tipo de resultado no válido' }
 
-  const error = validarMarcadorTorneo(d.sets, d.tipoResultado)
+  const error = limite ? validarSetInfantil(d.sets, limite, d.tipoResultado === 'retiro') : validarMarcadorTorneo(d.sets, d.tipoResultado)
   if (error) return { ok: false, error }
   const sets = d.sets as SetJugado[]
 
@@ -66,8 +86,8 @@ export function evaluarReporte(
   if (d.retiradaInscripcionId) return { ok: false, error: 'Solo un retiro lleva quién se retiró' }
 
   const ganados = (j: 1 | 2) => sets.filter((s) => s.completo && (j === 1 ? s.games_j1 > s.games_j2 : s.games_j2 > s.games_j1)).length
-  if (ganados(1) === 2) return { ok: true, ganador: a }
-  if (ganados(2) === 2) return { ok: true, ganador: b }
+  if (ganados(1) === (limite ? 1 : 2)) return { ok: true, ganador: a }
+  if (ganados(2) === (limite ? 1 : 2)) return { ok: true, ganador: b }
   return { ok: false, error: 'El marcador no tiene un ganador: alguien tiene que ganar 2 sets (o 1-1 y el Super Tiebreak)' }
 }
 
@@ -205,9 +225,12 @@ export function avanceLlave(partido: PartidoAvance, llave: PartidoAvance[]): Res
   const cambios: CambioAvance[] = []
   for (const p of llave) {
     for (const lado of lados) {
-      if (origenDe(p, lado) !== `G:${codigo}`) continue
-      if (partido.ganador_equipo_id && inscripcionDe(p, lado) !== partido.ganador_equipo_id) {
-        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: partido.ganador_equipo_id })
+      const origen = origenDe(p, lado)
+      if (origen !== `G:${codigo}` && origen !== `P:${codigo}`) continue
+      const ganador = partido.ganador_equipo_id
+      const clasificado = origen === `G:${codigo}` ? ganador : ganador ? (ganador === partido.equipo_a ? partido.equipo_b : partido.equipo_a) : null
+      if (clasificado && inscripcionDe(p, lado) !== clasificado) {
+        cambios.push({ tipo: 'asignar', partidoId: p.id, lado, inscripcionId: clasificado })
       }
     }
   }
