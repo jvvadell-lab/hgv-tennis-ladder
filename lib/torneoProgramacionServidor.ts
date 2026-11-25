@@ -247,7 +247,8 @@ export async function avisarProgramacion(
   tipo: TipoAvisoProgramacion,
 ): Promise<void> {
   const porPersona = new Map<string, string[]>()
-  for (const p of partidos) {
+  // Pausa temporal de avisos de programación infantil (correo y campana).
+  for (const p of partidos.filter((p) => !p.esInfantil)) {
     const h = horarios.get(p.id)
     const rival = p.nombre_a && p.nombre_b ? `${p.nombre_a} vs ${p.nombre_b}` : 'rival por definir'
     const linea = h
