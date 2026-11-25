@@ -44,16 +44,16 @@ function Lado({ lado, prefijo, resaltar, fuente = 32 }: { lado: LadoFila; prefij
   )
 }
 
-function Fila({ f }: { f: FilaDifusion }) {
+function Fila({ f, infantil }: { f: FilaDifusion; infantil?: boolean }) {
   const conResultado = f.estado === 'jugado' || f.estado === 'wo'
   return (
-    <div style={{ display: 'flex', height: ALTO_FILA - 12, marginBottom: 12, background: 'rgba(255,255,255,0.06)', borderLeft: `6px solid ${f.estado === 'programado' ? AZUL : DORADO}` }}>
+    <div style={{ display: 'flex', height: ALTO_FILA - 12, marginBottom: 12, background: 'rgba(255,255,255,0.06)', borderLeft: `6px solid ${infantil ? (f.categoria.includes('Naranja') ? '#FF8500' : f.categoria.includes('Verde') ? '#55C878' : '#FFDA00') : f.estado === 'programado' ? AZUL : DORADO}` }}>
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: 150, flexShrink: 0 }}>
         <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: 52, color: BLANCO, lineHeight: 1 }}>{f.hora}</div>
         <div style={{ display: 'flex', fontSize: 22, fontWeight: 500, color: TENUE, marginTop: 6 }}>{f.cancha}</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', flexGrow: 1, flexShrink: 1, minWidth: 0, paddingRight: 20 }}>
-        <div style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: TITULOS, fontWeight: 700, fontSize: 27, letterSpacing: 1, color: DORADO, marginBottom: 2 }}>
+        <div style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: TITULOS, fontWeight: 700, fontSize: 27, letterSpacing: 1, color: infantil ? '#FFDA00' : DORADO, marginBottom: 2 }}>
           {`${f.categoria} · ${f.etapa}`.toUpperCase()}
         </div>
         <Lado lado={f.a} prefijo={false} resaltar={conResultado && !f.a.ganador} />
@@ -69,10 +69,10 @@ function Fila({ f }: { f: FilaDifusion }) {
 }
 
 // Fila de la Historia de un día: la hora arriba deja todo el ancho a los nombres.
-function FilaGrande({ f, fuente }: { f: FilaDifusion; fuente: number }) {
+function FilaGrande({ f, fuente, infantil }: { f: FilaDifusion; fuente: number; infantil?: boolean }) {
   const conResultado = f.estado === 'jugado' || f.estado === 'wo'
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 20, padding: '18px 28px', background: 'rgba(255,255,255,0.06)', borderLeft: `6px solid ${f.estado === 'programado' ? AZUL : DORADO}` }}>
+    <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 20, padding: '18px 28px', background: 'rgba(255,255,255,0.06)', borderLeft: `6px solid ${infantil ? (f.categoria.includes('Naranja') ? '#FF8500' : f.categoria.includes('Verde') ? '#55C878' : '#FFDA00') : f.estado === 'programado' ? AZUL : DORADO}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: 64, color: BLANCO, lineHeight: 1 }}>{f.hora}</div>
@@ -80,7 +80,7 @@ function FilaGrande({ f, fuente }: { f: FilaDifusion; fuente: number }) {
         </div>
         {f.marcador && <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: 48, color: BLANCO, lineHeight: 1 }}>{f.marcador}</div>}
       </div>
-      <div style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: TITULOS, fontWeight: 700, fontSize: 32, letterSpacing: 1, color: DORADO, marginTop: 4, marginBottom: 2 }}>
+      <div style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: TITULOS, fontWeight: 700, fontSize: 32, letterSpacing: 1, color: infantil ? '#FFDA00' : DORADO, marginTop: 4, marginBottom: 2 }}>
         {`${f.categoria} · ${f.etapa}`.toUpperCase()}
       </div>
       <Lado lado={f.a} prefijo={false} resaltar={conResultado && !f.a.ganador} fuente={fuente} />
@@ -109,40 +109,10 @@ export default function Pieza({ infantil, formato, encabezado, detalle, dias, co
   const filas = dias.flatMap((d) => d.filas)
   const grande = historia && !conEncabezadoDia && !vacio && filas.length <= MAX_FILAS_GRANDES
   const fuente = grande ? fuenteNombresGrande(filas) : 32
-  if (infantil) return (
-    <div style={{display:'flex',flexDirection:'column',width:'100%',height:'100%',background:'#F5F7FA',fontFamily:'Inter',color:'#082453'}}>
-      <div style={{display:'flex',background:'#073575',padding:'24px 32px',alignItems:'center',justifyContent:'space-between',borderBottom:'10px solid #FFDA00'}}>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',color:'white'}}><img src={logoComision} width={130} height={100} style={{objectFit:'contain'}}/><div style={{display:'flex',fontSize:20}}>COMISIÓN DE TENIS</div></div>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',color:'white',fontFamily:TITULOS,fontWeight:800,fontSize:60}}><div style={{display:'flex'}}>COPA NAVIDAD <span style={{color:'#FFDA00',marginLeft:12}}>2026</span></div><div style={{display:'flex',background:'#D71030',padding:'6px 20px',fontSize:30,borderRadius:10}}>NIÑOS Y JUVENILES</div></div>
-        <img src={logoCopa} width={140} height={140} style={{objectFit:'contain'}}/>
-      </div>
-      <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'22px 20px',fontFamily:TITULOS,fontWeight:800}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:20}}>
-          <svg width="130" height="124" viewBox="0 0 130 124"><circle cx="70" cy="77" r="43" fill="#D9ED19" stroke="#A7BC10" strokeWidth="3"/><path d="M37 51 Q78 67 49 114 M101 48 Q75 80 111 97" fill="none" stroke="#FFFFFF" strokeWidth="5"/><path d="M24 53 Q25 12 68 8 Q91 4 109 46 L87 51 Q73 27 58 35 L47 58 Z" fill="#D71030"/><path d="M24 54 Q65 38 109 46 L113 61 Q68 52 29 69 Z" fill="#FFFFFF"/><circle cx="23" cy="66" r="13" fill="#FFFFFF"/></svg>
-          <div style={{display:'flex',background:'#073575',color:'#FFDA00',borderRadius:24,padding:'8px 36px',fontSize:encabezado.length>20?48:64}}>{encabezado}</div>
-        </div>
-        <div style={{display:'flex',fontSize:42,marginTop:12}}>{detalle}{paginas>1 ? ' · '+pagina+'/'+paginas : ''}</div>
-      </div>
-      <div style={{display:'flex',flexDirection:'column',flexGrow:1,padding:'12px 30px',justifyContent:'flex-start'}}>
-        {vacio && <div style={{display:'flex',fontSize:36}}>Sin partidos programados</div>}
-        {dias.map(d=><div key={d.fecha} style={{display:'flex',flexDirection:'column'}}>
-          {conEncabezadoDia && <div style={{display:'flex',fontSize:30,fontWeight:700}}>{fechaEncabezado(d.fecha)}</div>}
-          {d.filas.map(f=><div key={f.id} style={{display:'flex',alignItems:'center',background:'#E5EAF0',borderRadius:22,marginBottom:10,minHeight:historia?125:100}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'center',textAlign:'center',width:240,alignSelf:'stretch',padding:10,background:f.categoria.includes('Naranja')?'#D95A00':f.categoria.includes('Verde')?'#238345':'#073575',color:'white',fontFamily:TITULOS,fontSize:30,fontWeight:800,borderRadius:22}}>{f.categoria.toUpperCase()}</div>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',width:155,flexShrink:0,fontWeight:700,fontSize:25}}>{f.hora.replace(/^(\d{2}):(\d{2})$/, (_,h,m)=>`${Number(h)%12||12}:${m} ${Number(h)>=12?'PM':'AM'}`)}<div style={{display:'flex',background:'#FFDA00',borderRadius:18,padding:'2px 12px',whiteSpace:'nowrap'}}>{f.cancha.replace('Cancha ','HGV')}</div></div>
-            <div style={{display:'flex',flex:1,alignItems:'center',justifyContent:'space-between',padding:10,fontFamily:'Inter',fontSize:26,fontWeight:700}}>
-              <div style={{display:'flex',width:200,textAlign:'center',justifyContent:'center'}}>{f.a.texto}</div><div style={{display:'flex',background:'#FFDA00',borderRadius:30,padding:8,fontSize:25}}>{f.marcador || 'VS'}</div><div style={{display:'flex',width:200,textAlign:'center',justifyContent:'center'}}>{f.b.texto}</div>
-            </div>
-          </div>)}
-        </div>)}
-      </div>
-      <div style={{display:'flex',justifyContent:'center',textAlign:'center',background:'#073575',color:'white',padding:'12px 20px',fontSize:32,fontFamily:TITULOS,fontWeight:800,borderTop:'8px solid #FFDA00'}}>¡Acompáñanos y apoya el talento de nuestros niños!</div>
-      <div style={{display:'flex',flexDirection:'column',alignItems:'center',background:'white',padding:'4px 12px 8px'}}><div style={{display:'flex',fontFamily:TITULOS,fontWeight:700,fontSize:20,letterSpacing:4}}>PATROCINAN</div><div style={{display:'flex',flexWrap:'wrap',justifyContent:'center'}}>{patrocinantes.map(p=><Logo key={p.nombre} p={p} ancho={100} alto={48}/>)}</div></div>
-    </div>
-  )
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: AZUL_MARINO, fontFamily: 'Inter', color: BLANCO }}>
-      <div style={{ display: 'flex', height: 12, background: DORADO, flexShrink: 0 }} />
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: infantil ? '#073575' : AZUL_MARINO, fontFamily: 'Inter', color: BLANCO }}>
+      <div style={{ display: 'flex', height: 12, background: infantil ? '#FFDA00' : DORADO, flexShrink: 0 }} />
 
       {/* Los tres logos como en el flyer: la Copa al centro y más grande. */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: historia ? '28px 48px 0' : '16px 48px 0', flexShrink: 0 }}>
@@ -155,12 +125,13 @@ export default function Pieza({ infantil, formato, encabezado, detalle, dias, co
           <img src={logoComision} width={logo} height={logo} style={{ objectFit: 'contain' }} alt="" />
         </div>
         <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 700, fontSize: 24, letterSpacing: 3, color: TENUE, marginTop: 6, lineHeight: 1.1 }}>COMISIÓN DE TENIS · HERMANDAD GALLEGA DE VALENCIA</div>
+        {infantil && <div style={{display:'flex',background:'#D71030',color:BLANCO,padding:'4px 22px',borderRadius:8,fontFamily:TITULOS,fontWeight:800,fontSize:30,marginTop:8}}>NIÑOS Y JUVENILES</div>}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: historia ? '18px 48px 26px' : '12px 48px 12px', flexShrink: 0 }}>
         <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: encabezado.length > 20 ? 84 : historia ? 92 : 76, lineHeight: 1, textAlign: 'center', whiteSpace: 'nowrap' }}>{encabezado}</div>
         <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
-          <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: historia ? 76 : 62, lineHeight: 1, color: DORADO }}>{detalle}</div>
+          <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 800, fontSize: historia ? 76 : 62, lineHeight: 1, color: infantil ? '#FFDA00' : DORADO }}>{detalle}</div>
           {paginas > 1 && <div style={{ display: 'flex', fontFamily: TITULOS, fontWeight: 700, fontSize: 40, color: TENUE, marginLeft: 24 }}>{`${pagina}/${paginas}`}</div>}
         </div>
       </div>
@@ -172,14 +143,14 @@ export default function Pieza({ infantil, formato, encabezado, detalle, dias, co
             {conEncabezadoDia && (
               <div style={{ display: 'flex', alignItems: 'center', height: ALTO_DIA, fontFamily: TITULOS, fontWeight: 800, fontSize: 40, letterSpacing: 2, color: BLANCO }}>{fechaEncabezado(d.fecha)}</div>
             )}
-            {d.filas.map((f) => grande ? <FilaGrande key={f.id} f={f} fuente={fuente} /> : <Fila key={f.id} f={f} />)}
+            {d.filas.map((f) => grande ? <FilaGrande key={f.id} f={f} fuente={fuente} infantil={infantil} /> : <Fila key={f.id} f={f} infantil={infantil} />)}
           </div>
         ))}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <div style={{ display: 'flex', height: 6, background: DORADO }} />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: historia ? 66 : 54, background: AZUL, fontFamily: TITULOS, fontWeight: 700, fontSize: 30, letterSpacing: 4 }}>
+        <div style={{ display: 'flex', height: 6, background: infantil ? '#FFDA00' : DORADO }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: historia ? 66 : 54, background: infantil ? '#0759A6' : AZUL, fontFamily: TITULOS, fontWeight: 700, fontSize: 30, letterSpacing: 4 }}>
           COPA NAVIDAD HGV 2026
         </div>
         <div style={{ display: 'flex', height: 8, background: ROJO }} />
