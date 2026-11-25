@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { validarSetInfantil } from '@/lib/torneoResultados'
 import { construirSets, pideTiebreak, type CampoSet } from '@/lib/resultados'
 
 // Formulario del marcador de un partido de torneo (2 sets + Super Tiebreak
@@ -12,7 +13,8 @@ const vacio = (): CampoSet => ({ golesRetador: '', golesRetado: '', tbRetador: '
 
 const num: React.CSSProperties = { width: '48px', padding: '6px', fontSize: '15px', textAlign: 'center', border: '1px solid #ccc', borderRadius: '4px' }
 
-export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, inscripcionB, textoBoton, onEnviar, onCancelar }: {
+export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, inscripcionB, textoBoton, onEnviar, onCancelar, limiteInfantil }: {
+  limiteInfantil?: number
   nombreA: string
   nombreB: string
   inscripcionA: string
@@ -32,8 +34,16 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const r = construirSets({ set1, set2, st, retiro })
-    if ('error' in r) return setError(r.error)
+    const r = limiteInfantil ? (() => {
+      const a = Number(set1.golesRetador), b = Number(set1.golesRetado)
+      if (!set1.golesRetador.trim() || !set1.golesRetado.trim()) return { error: 'Introduce ambos games' }
+      const tb = Math.max(a,b) === limiteInfantil+1 && Math.min(a,b) === limiteInfantil
+      const sets = [{ numero: 1, games_j1: a, games_j2: b, completo: tb || (Math.max(a,b) === limiteInfantil && Math.min(a,b) < limiteInfantil), ...(tb ? { tiebreak_retador: Number(set1.tbRetador), tiebreak_retado: Number(set1.tbRetado) } : {}) }]
+      if (tb && (!set1.tbRetador.trim() || !set1.tbRetado.trim())) return { error: 'Introduce ambos puntos del tie-break' }
+      const error = validarSetInfantil(sets, limiteInfantil, retiro)
+      return error ? { error } : { sets }
+    })() : construirSets({ set1, set2, st, retiro })
+    if ('error' in r) return setError(r.error ?? 'Marcador inválido')
     if (retiro && !retirada) return setError('Indica quién se retiró')
     setEnviando(true)
     try {
@@ -50,7 +60,7 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
       <td style={{ paddingRight: '10px', fontSize: '13px', fontWeight: 600 }}>{titulo}</td>
       <td><input inputMode="numeric" aria-label={`${titulo} ${nombreA}`} value={c.golesRetador} onChange={(e) => set({ ...c, golesRetador: e.target.value })} style={num} /></td>
       <td><input inputMode="numeric" aria-label={`${titulo} ${nombreB}`} value={c.golesRetado} onChange={(e) => set({ ...c, golesRetado: e.target.value })} style={num} /></td>
-      {conTb && pideTiebreak(c.golesRetador, c.golesRetado) && (
+      {conTb && (limiteInfantil ? Math.max(Number(c.golesRetador),Number(c.golesRetado)) === limiteInfantil+1 && Math.min(Number(c.golesRetador),Number(c.golesRetado)) === limiteInfantil : pideTiebreak(c.golesRetador, c.golesRetado)) && (
         <td style={{ fontSize: '12px', paddingLeft: '8px' }}>
           TB <input inputMode="numeric" aria-label={`Tie-break ${titulo} ${nombreA}`} value={c.tbRetador} onChange={(e) => set({ ...c, tbRetador: e.target.value })} style={{ ...num, width: '40px' }} />
           {' '}<input inputMode="numeric" aria-label={`Tie-break ${titulo} ${nombreB}`} value={c.tbRetado} onChange={(e) => set({ ...c, tbRetado: e.target.value })} style={{ ...num, width: '40px' }} />
@@ -71,11 +81,11 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
         </thead>
         <tbody>
           {fila('Set 1', set1, setSet1, true)}
-          {fila('Set 2', set2, setSet2, true)}
-          {fila('Super TB', st, setSt, false)}
+          {!limiteInfantil && fila('Set 2', set2, setSet2, true)}
+          {!limiteInfantil && fila('Super TB', st, setSt, false)}
         </tbody>
       </table>
-      <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 8px 0' }}>El Super Tiebreak (a 10) solo si quedan 1 set a 1. Si un set termina 7-6, carga también su tie-break (ej. 7-6 con TB 7-4).</p>
+      <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 8px 0' }}>{limiteInfantil ? `Set a ${limiteInfantil} games, punto de oro. En ${limiteInfantil}-${limiteInfantil}, TB a 7 con diferencia de 2; registra ${limiteInfantil+1}-${limiteInfantil} o al revés.` : 'El Super Tiebreak (a 10) solo si quedan 1 set a 1. Si un set termina 7-6, carga también su tie-break (ej. 7-6 con TB 7-4).'}</p>
       <label style={{ fontSize: '13px', display: 'flex', gap: '6px', alignItems: 'center' }}>
         <input type="checkbox" checked={retiro} onChange={(e) => setRetiro(e.target.checked)} /> Hubo un retiro (carga lo jugado hasta ese momento)
       </label>
