@@ -43,6 +43,35 @@ export type DatosReporte = {
   retiradaInscripcionId: string | null
 }
 
+
+export function validarShortSets(sets: unknown, retiro: boolean): string | null {
+  if (!Array.isArray(sets) || sets.length < 1 || sets.length > 3) return 'Carga dos Short Sets y Super TB si corresponde'
+  let a = 0, b = 0
+  for (let i = 0; i < sets.length; i++) {
+    const s = sets[i] as SetJugado
+    if (!s || s.numero !== i+1 || a === 2 || b === 2) return 'Set inválido o partido ya terminado'
+    const x = s.games_j1, y = s.games_j2
+    if (![x,y].every(n => Number.isInteger(n) && n >= 0)) return 'Marcador inválido'
+    const hi = Math.max(x,y), lo = Math.min(x,y)
+    const ultimoRetiro = retiro && i === sets.length-1 && !s.completo
+    if (i === 2) {
+      if (a !== 1 || b !== 1 || !s.es_super_tiebreak) return 'Super TB solo con empate 1-1'
+      const completo = hi === Math.max(10,lo+2)
+      if (s.completo ? !completo : !ultimoRetiro || completo || hi > Math.max(10,lo+2)) return 'Super TB a 10 con diferencia de 2'
+    } else {
+      if (s.es_super_tiebreak) return 'Short Set inválido'
+      const tb = hi === 5 && lo === 4
+      const directo = (hi === 4 && lo <= 2) || (hi === 5 && lo === 3)
+      if (tb) {
+        const u = s.tiebreak_retador, v = s.tiebreak_retado
+        if (typeof u !== 'number' || typeof v !== 'number' || ![u,v].every(n=>Number.isInteger(n)&&n>=0) || Math.max(u,v)!==Math.max(7,Math.min(u,v)+2) || (x>y)!==(u>v) || !s.completo) return 'Tie-break a 7 con diferencia de 2'
+      } else if (s.tiebreak_retador != null || s.tiebreak_retado != null || (s.completo ? !directo : !ultimoRetiro || directo || hi > 4)) return 'Short Set inválido'
+    }
+    if (s.completo) { if (x>y) a++; else b++ }
+  }
+  return retiro || a===2 || b===2 ? null : 'Falta completar el partido'
+}
+
 export function validarSetInfantil(sets: unknown, limite: number, retiro: boolean): string | null {
   if (!Array.isArray(sets) || sets.length !== 1) return 'Carga un único set'
   const s = sets[0] as SetJugado
@@ -75,7 +104,7 @@ export function evaluarReporte(
   if (partido.estado === 'wo' || partido.estado === 'doble_wo') return { ok: false, error: 'Este partido se cerró por WO' }
   if (d.tipoResultado !== 'normal' && d.tipoResultado !== 'retiro') return { ok: false, error: 'Tipo de resultado no válido' }
 
-  const error = limite ? validarSetInfantil(d.sets, limite, d.tipoResultado === 'retiro') : validarMarcadorTorneo(d.sets, d.tipoResultado)
+  const error = limite === -4 ? validarShortSets(d.sets, d.tipoResultado === 'retiro') : limite ? validarSetInfantil(d.sets, limite, d.tipoResultado === 'retiro') : validarMarcadorTorneo(d.sets, d.tipoResultado)
   if (error) return { ok: false, error }
   const sets = d.sets as SetJugado[]
 
@@ -86,8 +115,8 @@ export function evaluarReporte(
   if (d.retiradaInscripcionId) return { ok: false, error: 'Solo un retiro lleva quién se retiró' }
 
   const ganados = (j: 1 | 2) => sets.filter((s) => s.completo && (j === 1 ? s.games_j1 > s.games_j2 : s.games_j2 > s.games_j1)).length
-  if (ganados(1) === (limite ? 1 : 2)) return { ok: true, ganador: a }
-  if (ganados(2) === (limite ? 1 : 2)) return { ok: true, ganador: b }
+  if (ganados(1) === (limite && limite !== -4 ? 1 : 2)) return { ok: true, ganador: a }
+  if (ganados(2) === (limite && limite !== -4 ? 1 : 2)) return { ok: true, ganador: b }
   return { ok: false, error: 'El marcador no tiene un ganador: alguien tiene que ganar 2 sets (o 1-1 y el Super Tiebreak)' }
 }
 
