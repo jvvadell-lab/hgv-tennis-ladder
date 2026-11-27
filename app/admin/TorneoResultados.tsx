@@ -183,7 +183,7 @@ export default function TorneoResultados() {
                 </div>
                 <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                   {p.validado ? (
-                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e6b34' }}>{ETIQUETA_ESTADO_PARTIDO[p.estado]} · validado</span>
+                    <><span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e6b34' }}>{ETIQUETA_ESTADO_PARTIDO[p.estado]} · validado</span>{conRivales && <button disabled={!!ocupado} onClick={() => setCargando(cargando === p.id ? null : p.id)} style={btn('var(--color-court)')}>Corregir resultado</button>}</>
                   ) : conRivales && (
                     <>
                       {porValidar(p) && <button disabled={!!ocupado} onClick={() => post('validar', { partidoId: p.id }, 'Resultado validado').catch(() => {})} style={btn('#1e6b34', true)}>Validar</button>}
@@ -237,9 +237,11 @@ export default function TorneoResultados() {
                   nombreB={p.nombre_b ?? 'B'}
                   inscripcionA={p.equipo_a!}
                   inscripcionB={p.equipo_b!}
-                  textoBoton="Guardar y validar"
+                  textoBoton={p.validado ? "Guardar corrección" : "Guardar y validar"}
+                  setsIniciales={p.validado ? p.sets : undefined}
                   onEnviar={async (d) => {
-                    await post('cargar', { partidoId: p.id, ...d }, 'Resultado cargado y validado')
+                    if (p.validado && !confirm('¿Confirmas la corrección del resultado validado?')) return
+                    await post('cargar', { partidoId: p.id, corregir: p.validado, ...d }, p.validado ? 'Resultado corregido y validado' : 'Resultado cargado y validado')
                     setCargando(null)
                   }}
                   onCancelar={() => setCargando(null)}

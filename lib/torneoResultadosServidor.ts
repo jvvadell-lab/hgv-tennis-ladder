@@ -168,6 +168,32 @@ export async function validarResultado(
 }
 
 // El admin carga el resultado y lo valida de una vez.
+
+export async function corregirResultado(db: SupabaseClient, p: { partidoId: string; adminId: string; datos: DatosReporte }): Promise<Resultado<{ avisos: string[] }>> {
+  const c = await cargarPartido(db, p.partidoId)
+  if (!c) return { ok: false, error: 'Partido no encontrado', status: 404 }
+  const partido = c.partido
+  if (!partido.validado) return { ok: false, error: 'El partido no está validado', status: 400 }
+  const r = evaluarReporte({ ...partido, validado: false, estado: 'jugado' }, p.datos, c.limite)
+  if (!r.ok) return { ok: false, error: r.error, status: 400 }
+  // Conservador: no modificar cruces que ya tienen resultados.
+  if (partido.fase === 'grupo' || r.ganador !== partido.ganador_equipo_id) {
+    const { data, error } = await db.from('torneo_partidos').select('id, validado, reportado_at').eq('categoria_id', partido.categoria_id).neq('fase', 'grupo').neq('id', partido.id)
+    if (error) throw error
+    if (data?.some(x => x.validado || x.reportado_at)) return { ok: false, error: 'Hay resultados en la llave de esta categoría. Revisa los cruces antes de corregir este partido.', status: 409 }
+  }
+  const { data, error } = await db.from('torneo_partidos').update({
+    estado: 'jugado', sets: p.datos.sets, tipo_resultado: p.datos.tipoResultado,
+    retirada_equipo_id: p.datos.tipoResultado === 'retiro' ? p.datos.retiradaInscripcionId : null,
+    ganador_equipo_id: r.ganador, wo_ausente_equipo_id: null,
+    validado_at: ahora().toISOString(), validado_por: p.adminId
+  }).eq('id', partido.id).eq('validado', true).select('id').maybeSingle()
+  if (error) throw error
+  if (!data) return { ok: false, error: 'El resultado cambió; vuelve a cargarlo', status: 409 }
+  const avance = await avanzarCategoria(db, partido.categoria_id, p.adminId)
+  return { ok: true, avisos: avance.avisos }
+}
+
 export async function cargarYValidar(
   db: SupabaseClient,
   p: { partidoId: string; adminId: string; datos: DatosReporte },

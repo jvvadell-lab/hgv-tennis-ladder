@@ -13,7 +13,8 @@ const vacio = (): CampoSet => ({ golesRetador: '', golesRetado: '', tbRetador: '
 
 const num: React.CSSProperties = { width: '48px', padding: '6px', fontSize: '15px', textAlign: 'center', border: '1px solid #ccc', borderRadius: '4px' }
 
-export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, inscripcionB, textoBoton, onEnviar, onCancelar, limiteInfantil }: {
+export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, inscripcionB, textoBoton, onEnviar, onCancelar, limiteInfantil, setsIniciales }: {
+  setsIniciales?: SetJugado[] | null
   limiteInfantil?: number
   nombreA: string
   nombreB: string
@@ -23,9 +24,13 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
   onEnviar: (datos: { sets: unknown; tipoResultado: 'normal' | 'retiro'; retiradaInscripcionId: string | null }) => Promise<void>
   onCancelar: () => void
 }) {
-  const [set1, setSet1] = useState(vacio)
-  const [set2, setSet2] = useState(vacio)
-  const [st, setSt] = useState(vacio)
+  const inicial = (n: number): CampoSet => {
+    const s = setsIniciales?.find(x => x.numero === n)
+    return s ? { golesRetador: String(s.games_j1), golesRetado: String(s.games_j2), tbRetador: String(s.tiebreak_retador ?? ''), tbRetado: String(s.tiebreak_retado ?? '') } : vacio()
+  }
+  const [set1, setSet1] = useState(() => inicial(1))
+  const [set2, setSet2] = useState(() => inicial(2))
+  const [st, setSt] = useState(() => inicial(3))
   const [retiro, setRetiro] = useState(false)
   const [retirada, setRetirada] = useState('')
   const [enviando, setEnviando] = useState(false)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { esAdminCompleto, getSession } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabaseServer'
-import { cargarYValidar } from '@/lib/torneoResultadosServidor'
+import { cargarYValidar, corregirResultado } from '@/lib/torneoResultadosServidor'
 
 // El admin carga el resultado de un partido y lo valida de una vez (por
 // ejemplo, si nadie lo reportó). Corre el avance automático.
@@ -9,10 +9,10 @@ export async function POST(request: Request) {
   try {
     const session = await getSession()
     if (!esAdminCompleto(session)) return NextResponse.json({ error: 'Solo un administrador puede hacer esto' }, { status: 403 })
-    const { partidoId, sets, tipoResultado, retiradaInscripcionId } = await request.json()
+    const { partidoId, sets, tipoResultado, retiradaInscripcionId, corregir } = await request.json()
     if (typeof partidoId !== 'string' || !partidoId) return NextResponse.json({ error: 'Falta el partido' }, { status: 400 })
 
-    const r = await cargarYValidar(supabaseServer(), {
+    const r = await (corregir === true ? corregirResultado : cargarYValidar)(supabaseServer(), {
       partidoId,
       adminId: session!.id,
       datos: { sets, tipoResultado, retiradaInscripcionId: retiradaInscripcionId ?? null },
