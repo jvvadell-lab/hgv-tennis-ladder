@@ -60,7 +60,7 @@ async function cargarPartido(db: SupabaseClient, partidoId: string) {
   const cat = data.torneo_categorias as unknown as { nombre: string; torneo_id: string; es_infantil: boolean; formato_llave?: FormatoLlave; torneos: { id: string; nombre: string; estado: EstadoTorneo } }
   const partido = data as unknown as PartidoFila
   const grupoLetra = (data.torneo_grupos as unknown as { letra: string } | null)?.letra ?? null
-  return { partido, limite: cat.es_infantil ? (/^Pelota (Naranja|Verde)/i.test(cat.nombre) ? -4 : cat.nombre.startsWith('12 años') ? 8 : 4) : undefined, partidoNombre: nombrePartido({ ...partido, grupoLetra, formato: cat.formato_llave }, cat.nombre), torneo: cat.torneos }
+  return { partido, limite: cat.es_infantil ? (/^Pelota Verde Intermedio$/i.test(cat.nombre.trim()) ? 8 : /^Pelota (Naranja|Verde)/i.test(cat.nombre) ? -4 : cat.nombre.startsWith('12 años') ? 8 : 4) : undefined, partidoNombre: nombrePartido({ ...partido, grupoLetra, formato: cat.formato_llave }, cat.nombre), torneo: cat.torneos }
 }
 
 // Personas de cada equipo (los ids de partidos y grupos son equipos): sus
@@ -511,7 +511,7 @@ export async function listarPartidos(db: SupabaseClient, torneoId: string, soloI
     .map((p) => ({
       ...p,
       categoria_nombre: catPorId.get(p.categoria_id)!.nombre,
-      limite_infantil: catPorId.get(p.categoria_id)!.es_infantil ? (/^Pelota (Naranja|Verde)/i.test(catPorId.get(p.categoria_id)!.nombre) ? -4 : catPorId.get(p.categoria_id)!.nombre.startsWith('12 años') ? 8 : 4) : undefined,
+      limite_infantil: catPorId.get(p.categoria_id)!.es_infantil ? (/^Pelota Verde Intermedio$/i.test(catPorId.get(p.categoria_id)!.nombre.trim()) ? 8 : /^Pelota (Naranja|Verde)/i.test(catPorId.get(p.categoria_id)!.nombre) ? -4 : catPorId.get(p.categoria_id)!.nombre.startsWith('12 años') ? 8 : 4) : undefined,
       categoria_orden: catPorId.get(p.categoria_id)!.orden,
       formato_llave: (catPorId.get(p.categoria_id)!.formato_llave ?? 'normal') as FormatoLlave,
       grupo_letra: p.grupo_id ? letra.get(p.grupo_id) ?? null : null,
