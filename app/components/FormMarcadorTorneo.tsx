@@ -43,7 +43,7 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
         const a=Number(c.golesRetador), b=Number(c.golesRetado), hi=Math.max(a,b), lo=Math.min(a,b)
         const tb=i<2 && hi===5 && lo===4
         if (tb && (!c.tbRetador?.trim() || !c.tbRetado?.trim())) return { error: 'Introduce ambos puntos del tie-break' }
-        sets.push({numero:i+1,games_j1:a,games_j2:b,completo:i===2 ? hi===Math.max(10,lo+2) : tb || (hi===4 && lo<=2) || (hi===5 && lo===3), ...(i===2 ? {es_super_tiebreak:true} : {}), ...(tb ? {tiebreak_retador:Number(c.tbRetador),tiebreak_retado:Number(c.tbRetado)} : {})})
+        sets.push({numero:i+1,games_j1:a,games_j2:b,completo:i===2 ? hi===Math.max(7,lo+2) : tb || (hi===4 && lo<=2) || (hi===5 && lo===3), ...(i===2 ? {es_super_tiebreak:true} : {}), ...(tb ? {tiebreak_retador:Number(c.tbRetador),tiebreak_retado:Number(c.tbRetado)} : {})})
       }
       const error=validarShortSets(sets,retiro)
       return error ? {error} : {sets}
@@ -95,10 +95,10 @@ export default function FormMarcadorTorneo({ nombreA, nombreB, inscripcionA, ins
         <tbody>
           {fila('Set 1', set1, setSet1, true)}
           {(corto || !limiteInfantil) && fila('Set 2', set2, setSet2, true)}
-          {(corto || !limiteInfantil) && fila('Super TB', st, setSt, false)}
+          {(corto || !limiteInfantil) && fila(corto ? 'TB decisivo' : 'Super TB', st, setSt, false)}
         </tbody>
       </table>
-      <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 8px 0' }}>{corto ? 'Dos Short Sets a 4, punto de oro. 5-3 válido; en 4-4 TB a 7 (registra 5-4). En 1-1 Super TB a 10, diferencia de 2.' : limiteInfantil ? `Set a ${limiteInfantil} games, punto de oro. En ${limiteInfantil}-${limiteInfantil}, TB a 7 con diferencia de 2; registra ${limiteInfantil+1}-${limiteInfantil} o al revés.` : 'El Super Tiebreak (a 10) solo si quedan 1 set a 1. Si un set termina 7-6, carga también su tie-break (ej. 7-6 con TB 7-4).'}</p>
+      <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 8px 0' }}>{corto ? 'Dos Short Sets a 4, punto de oro. 5-3 válido; en 4-4 TB a 7 (registra 5-4). En 1-1 TB decisivo a 7, diferencia de 2.' : limiteInfantil ? `Set a ${limiteInfantil} games, punto de oro. En ${limiteInfantil}-${limiteInfantil}, TB a 7 con diferencia de 2; registra ${limiteInfantil+1}-${limiteInfantil} o al revés.` : 'El Super Tiebreak (a 10) solo si quedan 1 set a 1. Si un set termina 7-6, carga también su tie-break (ej. 7-6 con TB 7-4).'}</p>
       <label style={{ fontSize: '13px', display: 'flex', gap: '6px', alignItems: 'center' }}>
         <input type="checkbox" checked={retiro} onChange={(e) => setRetiro(e.target.checked)} /> Hubo un retiro (carga lo jugado hasta ese momento)
       </label>

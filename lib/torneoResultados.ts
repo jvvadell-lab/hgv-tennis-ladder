@@ -45,7 +45,7 @@ export type DatosReporte = {
 
 
 export function validarShortSets(sets: unknown, retiro: boolean): string | null {
-  if (!Array.isArray(sets) || sets.length < 1 || sets.length > 3) return 'Carga dos Short Sets y Super TB si corresponde'
+  if (!Array.isArray(sets) || sets.length < 1 || sets.length > 3) return 'Carga dos Short Sets y Tie-break decisivo si corresponde'
   let a = 0, b = 0
   for (let i = 0; i < sets.length; i++) {
     const s = sets[i] as SetJugado
@@ -55,9 +55,9 @@ export function validarShortSets(sets: unknown, retiro: boolean): string | null 
     const hi = Math.max(x,y), lo = Math.min(x,y)
     const ultimoRetiro = retiro && i === sets.length-1 && !s.completo
     if (i === 2) {
-      if (a !== 1 || b !== 1 || !s.es_super_tiebreak) return 'Super TB solo con empate 1-1'
-      const completo = hi === Math.max(10,lo+2)
-      if (s.completo ? !completo : !ultimoRetiro || completo || hi > Math.max(10,lo+2)) return 'Super TB a 10 con diferencia de 2'
+      if (a !== 1 || b !== 1 || !s.es_super_tiebreak) return 'Tie-break decisivo solo con empate 1-1'
+      const completo = hi === Math.max(7,lo+2)
+      if (s.completo ? !completo : !ultimoRetiro || completo || hi > Math.max(7,lo+2)) return 'Tie-break decisivo a 7 con diferencia de 2'
     } else {
       if (s.es_super_tiebreak) return 'Short Set inválido'
       const tb = hi === 5 && lo === 4
